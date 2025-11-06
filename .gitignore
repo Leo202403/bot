@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+.pytest_cache/
+.coverage
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 环境配置（包含密钥）
+.env
+
+# 交易数据（运行时生成）
+ds/trading_data/
+*.csv
+*.json
+*.log
+
+# 临时文件
+*.bak
+*.tmp
+nohup.out
+
+
