@@ -78,6 +78,11 @@ echo "  → 3.9 替换模型为qwen3-max..."
 sed -i '' 's/"qwen-max"/"qwen3-max"/g' qwen_多币种智能版.py
 sed -i '' "s/'qwen-max'/'qwen3-max'/g" qwen_多币种智能版.py
 
+# 3.10 替换max_tokens限制（qwen专用，限制8192）
+echo "  → 3.10 替换max_tokens限制..."
+sed -i '' 's/max_tokens=16000/max_tokens=8000/g' qwen_多币种智能版.py
+sed -i '' 's/max_tokens=16384/max_tokens=8000/g' qwen_多币种智能版.py
+
 echo "✅ 配置替换完成"
 echo ""
 
@@ -101,8 +106,11 @@ grep -c "通义千问" qwen_多币种智能版.py || echo "0"
 echo "【验证5】.env.qwen配置:"
 grep -c "\.env\.qwen" qwen_多币种智能版.py || echo "0"
 
+echo "【验证6】max_tokens限制（应<=8192）:"
+grep "max_tokens=" qwen_多币种智能版.py | grep -v "^#" | head -3
+
 echo ""
-echo "【验证6】检查残留的deepseek（应为0或很少）:"
+echo "【验证7】检查残留的deepseek（应为0或很少）:"
 grep -i "deepseek" qwen_多币种智能版.py | grep -v "^#" | grep -v "# " | grep -v "说明" | grep -v "注释" | wc -l
 
 echo ""
