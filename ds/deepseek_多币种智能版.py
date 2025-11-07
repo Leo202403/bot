@@ -14774,15 +14774,31 @@ def _execute_single_open_action_v55(
     except Exception as e:
         print(f"⚠️ 经验阶段检查失败: {e}")
 
-    # 检查信号得分是否满足币种要求
+    # 【V8.3.14修复】先确定signal_type，再应用对应参数
+    signal_type = signal_classification['signal_type']
+    
+    # 根据signal_type覆盖symbol_config中的关键参数
+    # 确保scalping和swing使用各自优化的参数
+    if signal_type == 'scalping':
+        type_params = learning_config.get('scalping_params', {})
+    else:
+        type_params = learning_config.get('swing_params', {})
+    
+    if type_params:
+        for key in ['min_risk_reward', 'min_signal_score', 'min_indicator_consensus']:
+            if key in type_params:
+                symbol_config[key] = type_params[key]
+        print(f"✓ 已应用{signal_type}专属参数: min_rr={symbol_config.get('min_risk_reward', 'N/A')}, min_score={symbol_config.get('min_signal_score', 'N/A')}")
+
+    # 检查信号得分是否满足币种要求（现在使用了signal_type对应的参数）
     # 【V7.8关键修复】默认值从80降到55，与get_default_config()保持一致
     min_signal_score = symbol_config.get("min_signal_score", 55)
     if score < min_signal_score:
-        print(f"❌ 信号得分{score} < 最低要求{min_signal_score}，拒绝开仓")
+        print(f"❌ {signal_type}信号得分{score} < 最低要求{min_signal_score}，拒绝开仓")
         return
 
     # 2. 智能仓位计算（【V7.9】分Scalping/Swing独立计算）
-    signal_type = signal_classification['signal_type']
+    
     planned_position = calculate_position_size_smart(
         symbol, score, total_assets, learning_config, signal_type
     )
