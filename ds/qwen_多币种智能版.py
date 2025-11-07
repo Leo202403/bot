@@ -16891,6 +16891,442 @@ def _simulate_trade_with_params(entry_price, direction, atr, future_data,
     return {'can_entry': True, 'profit': profit_pct, 'exit_type': 'holding'}
 
 
+# ============================================================================
+# 【V8.3.12】Separated Strategy Optimization - 分离策略优化
+# ============================================================================
+
+def analyze_separated_opportunities(market_snapshots, old_config):
+    """
+    【V8.3.12】分析超短线和波段的分离机会
+    
+    核心思路：
+    1. 从历史快照中识别客观机会（实际达到利润目标的点位）
+    2. 按信号类型分类为scalping/swing
+    3. 统计各自的表现（利润、time_exit率等）
+    
+    返回：
+    {
+        'scalping': {
+            'total_opportunities': int,
+            'profitable_count': int,
+            'avg_profit': float,
+            'time_exit_rate': float,
+            'opportunities': [...]
+        },
+        'swing': {...}
+    }
+    """
+    try:
+        import pandas as pd
+        
+        scalping_opps = []
+        swing_opps = []
+        
+        # 获取当前参数
+        scalping_params = old_config.get('scalping_params', {})
+        swing_params = old_config.get('swing_params', {})
+        
+        print(f"  📊 分析历史快照: {len(market_snapshots)}条记录")
+        
+        # 按币种分组
+        for coin in market_snapshots['coin'].unique():
+            coin_data = market_snapshots[market_snapshots['coin'] == coin].sort_values('time')
+            coin_data = coin_data.reset_index(drop=True)
+            
+            # 遍历每个点位
+            for idx in range(len(coin_data) - 96):  # 至少需要96根K线（24小时）
+                current = coin_data.iloc[idx]
+                
+                # 安全获取数据
+                try:
+                    timestamp = str(current.get('time', ''))
+                    entry_price = float(current.get('close', 0))
+                    if entry_price <= 0:
+                        entry_price = float(current.get('price', 0))
+                    if entry_price <= 0:
+                        continue
+                    
+                    consensus = int(float(current.get('indicator_consensus', 0)))
+                    risk_reward = float(current.get('risk_reward', 0))
+                    atr = float(current.get('atr', 0))
+                    
+                    # 获取信号分类信息
+                    signal_type = str(current.get('signal_type', 'swing')).lower()
+                    signal_name = str(current.get('signal_name', ''))
+                    
+                    # 获取方向
+                    direction = 'long'
+                    if 'macd_signal' in current:
+                        macd_sig = str(current.get('macd_signal', '')).lower()
+                        if 'short' in macd_sig or 'bear' in macd_sig:
+                            direction = 'short'
+                    
+                    # 获取后续24小时数据
+                    later_24h = coin_data.iloc[idx+1:idx+97].copy()
+                    if later_24h.empty:
+                        continue
+                    
+                    # 计算客观利润（24小时内能达到的最大利润）
+                    if direction == 'long':
+                        max_price_24h = float(later_24h['high'].max())
+                        objective_profit = (max_price_24h - entry_price) / entry_price * 100 if entry_price > 0 else 0
+                    else:
+                        min_price_24h = float(later_24h['low'].min())
+                        objective_profit = (entry_price - min_price_24h) / entry_price * 100 if entry_price > 0 else 0
+                    
+                    # 只关注有利润的机会
+                    if objective_profit < 1.0:  # 至少1%利润
+                        continue
+                    
+                    # 根据信号类型分类
+                    opp_data = {
+                        'coin': coin,
+                        'timestamp': timestamp,
+                        'entry_price': entry_price,
+                        'direction': direction,
+                        'consensus': consensus,
+                        'risk_reward': risk_reward,
+                        'atr': atr,
+                        'signal_type': signal_type,
+                        'signal_name': signal_name,
+                        'objective_profit': objective_profit,
+                        'future_data': later_24h
+                    }
+                    
+                    if signal_type == 'scalping':
+                        scalping_opps.append(opp_data)
+                    else:  # swing
+                        swing_opps.append(opp_data)
+                
+                except (ValueError, TypeError, KeyError) as e:
+                    continue
+        
+        print(f"  ⚡ 超短线机会: {len(scalping_opps)}个")
+        print(f"  🌊 波段机会: {len(swing_opps)}个")
+        
+        # 分析超短线表现
+        scalping_analysis = {
+            'total_opportunities': len(scalping_opps),
+            'profitable_count': 0,
+            'avg_profit': 0,
+            'time_exit_rate': 0,
+            'opportunities': scalping_opps
+        }
+        
+        # 分析波段表现
+        swing_analysis = {
+            'total_opportunities': len(swing_opps),
+            'profitable_count': 0,
+            'avg_profit': 0,
+            'time_exit_rate': 0,
+            'opportunities': swing_opps
+        }
+        
+        return {
+            'scalping': scalping_analysis,
+            'swing': swing_analysis
+        }
+    
+    except Exception as e:
+        print(f"⚠️ 分离机会分析失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            'scalping': {'total_opportunities': 0, 'opportunities': []},
+            'swing': {'total_opportunities': 0, 'opportunities': []}
+        }
+
+
+def simulate_params_on_opportunities(opportunities, params):
+    """
+    【V8.3.12】用指定参数模拟交易机会
+    
+    参数:
+        opportunities: 机会列表
+        params: 参数字典 {
+            'min_signal_score': int,
+            'min_indicator_consensus': int,
+            'min_risk_reward': float,
+            'atr_stop_multiplier': float,
+            'atr_tp_multiplier': float,
+            'max_holding_hours': float
+        }
+    
+    返回:
+        {
+            'total_opportunities': int,
+            'captured_count': int,
+            'total_profit': float,
+            'avg_profit': float,
+            'time_exit_count': int,
+            'take_profit_count': int,
+            'stop_loss_count': int
+        }
+    """
+    captured_count = 0
+    total_profit = 0
+    time_exit_count = 0
+    take_profit_count = 0
+    stop_loss_count = 0
+    
+    for opp in opportunities:
+        # 模拟这个机会
+        sim_result = _simulate_trade_with_params(
+            entry_price=opp['entry_price'],
+            direction=opp['direction'],
+            atr=opp['atr'],
+            future_data=opp['future_data'],
+            signal_score=70,  # 假设满足信号分数要求
+            consensus=opp['consensus'],
+            risk_reward=opp['risk_reward'],
+            min_signal_score=params.get('min_signal_score', 60),
+            min_consensus=params.get('min_indicator_consensus', 2),
+            min_risk_reward=params.get('min_risk_reward', 1.5),
+            atr_stop_multiplier=params.get('atr_stop_multiplier', 1.5),
+            atr_tp_multiplier=params.get('atr_tp_multiplier', 3.0),
+            max_holding_hours=params.get('max_holding_hours', 24)
+        )
+        
+        if sim_result['can_entry']:
+            captured_count += 1
+            total_profit += sim_result['profit']
+            
+            exit_type = sim_result.get('exit_type', '')
+            if exit_type == 'time_exit':
+                time_exit_count += 1
+            elif exit_type == 'take_profit':
+                take_profit_count += 1
+            elif exit_type == 'stop_loss':
+                stop_loss_count += 1
+    
+    return {
+        'total_opportunities': len(opportunities),
+        'captured_count': captured_count,
+        'total_profit': total_profit,
+        'avg_profit': total_profit / captured_count if captured_count > 0 else 0,
+        'time_exit_count': time_exit_count,
+        'take_profit_count': take_profit_count,
+        'stop_loss_count': stop_loss_count,
+        'capture_rate': captured_count / len(opportunities) if len(opportunities) > 0 else 0
+    }
+
+
+def calculate_scalping_score(sim_result):
+    """
+    【V8.3.12】超短线评分函数
+    
+    优先级：
+    1. time_exit率越低越好（权重60%）
+    2. 平均利润越高越好（权重30%）
+    3. 捕获率越高越好（权重10%）
+    """
+    if sim_result['captured_count'] == 0:
+        return -1.0  # 无法捕获任何机会，最低分
+    
+    # 计算各项指标
+    time_exit_rate = sim_result['time_exit_count'] / sim_result['captured_count']
+    avg_profit = sim_result['avg_profit']
+    capture_rate = sim_result['capture_rate']
+    
+    # 归一化并加权
+    time_exit_score = max(0, 1 - time_exit_rate) * 0.6  # 低time_exit高分
+    profit_score = min(1, max(0, (avg_profit + 5) / 10)) * 0.3  # -5%~+5%映射到0~1
+    capture_score = capture_rate * 0.1
+    
+    total_score = time_exit_score + profit_score + capture_score
+    
+    return total_score
+
+
+def calculate_swing_score(sim_result):
+    """
+    【V8.3.12】波段评分函数
+    
+    优先级：
+    1. 平均利润越高越好（权重50%）
+    2. 捕获率越高越好（权重30%）
+    3. time_exit率越低越好（权重20%）
+    """
+    if sim_result['captured_count'] == 0:
+        return -1.0
+    
+    # 计算各项指标
+    time_exit_rate = sim_result['time_exit_count'] / sim_result['captured_count']
+    avg_profit = sim_result['avg_profit']
+    capture_rate = sim_result['capture_rate']
+    
+    # 归一化并加权
+    profit_score = min(1, max(0, avg_profit / 20)) * 0.5  # 0~20%映射到0~1
+    capture_score = capture_rate * 0.3
+    time_exit_score = max(0, 1 - time_exit_rate) * 0.2
+    
+    total_score = profit_score + capture_score + time_exit_score
+    
+    return total_score
+
+
+def optimize_scalping_params(scalping_data, current_params):
+    """
+    【V8.3.12】超短线参数优化
+    
+    目标：降低time_exit率，提高平均利润
+    
+    参数搜索空间：
+    - max_holding_hours: [0.5, 1.0, 1.5, 2.0]
+    - atr_tp_multiplier: [1.0, 1.2, 1.5, 2.0]
+    - atr_stop_multiplier: [0.8, 1.0, 1.2]
+    - min_risk_reward: [1.2, 1.3, 1.5]
+    """
+    opportunities = scalping_data['opportunities']
+    
+    if len(opportunities) < 10:
+        print("  ⚠️  超短线机会不足10个，跳过优化")
+        return {
+            'optimized_params': current_params,
+            'improvement': None
+        }
+    
+    print(f"  🔧 开始超短线参数优化（{len(opportunities)}个机会）...")
+    
+    # 定义搜索空间
+    param_grid = {
+        'max_holding_hours': [0.5, 1.0, 1.5, 2.0],
+        'atr_tp_multiplier': [1.0, 1.2, 1.5, 2.0],
+        'atr_stop_multiplier': [0.8, 1.0, 1.2],
+        'min_risk_reward': [1.2, 1.3, 1.5]
+    }
+    
+    best_score = -float('inf')
+    best_params = current_params.copy()
+    best_result = None
+    
+    # 计算基准表现
+    baseline_params = current_params.copy()
+    baseline_result = simulate_params_on_opportunities(opportunities, baseline_params)
+    baseline_score = calculate_scalping_score(baseline_result)
+    
+    print(f"  📊 基准表现: time_exit率={baseline_result['time_exit_count']/baseline_result['captured_count']*100:.0f}%, 平均利润={baseline_result['avg_profit']:.1f}%")
+    
+    tested_count = 0
+    # Grid Search
+    for max_hours in param_grid['max_holding_hours']:
+        for tp_mult in param_grid['atr_tp_multiplier']:
+            for sl_mult in param_grid['atr_stop_multiplier']:
+                for min_rr in param_grid['min_risk_reward']:
+                    tested_count += 1
+                    
+                    test_params = current_params.copy()
+                    test_params.update({
+                        'max_holding_hours': max_hours,
+                        'atr_tp_multiplier': tp_mult,
+                        'atr_stop_multiplier': sl_mult,
+                        'min_risk_reward': min_rr
+                    })
+                    
+                    # 模拟
+                    result = simulate_params_on_opportunities(opportunities, test_params)
+                    score = calculate_scalping_score(result)
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_params = test_params
+                        best_result = result
+    
+    print(f"  ✅ 测试{tested_count}组参数，找到最优配置")
+    print(f"  📈 优化后: time_exit率={best_result['time_exit_count']/best_result['captured_count']*100:.0f}%, 平均利润={best_result['avg_profit']:.1f}%")
+    
+    return {
+        'optimized_params': best_params,
+        'old_result': baseline_result,
+        'new_result': best_result,
+        'old_time_exit_rate': baseline_result['time_exit_count']/baseline_result['captured_count'] if baseline_result['captured_count'] > 0 else 0,
+        'new_time_exit_rate': best_result['time_exit_count']/best_result['captured_count'] if best_result['captured_count'] > 0 else 0,
+        'old_avg_profit': baseline_result['avg_profit'],
+        'new_avg_profit': best_result['avg_profit']
+    }
+
+
+def optimize_swing_params(swing_data, current_params):
+    """
+    【V8.3.12】波段参数优化
+    
+    目标：提高平均利润，保持捕获率
+    
+    参数搜索空间：
+    - max_holding_hours: [24, 36, 48]
+    - atr_tp_multiplier: [4.0, 6.0, 8.0]
+    - atr_stop_multiplier: [1.5, 2.0, 2.5]
+    - min_risk_reward: [2.0, 2.5, 3.0]
+    """
+    opportunities = swing_data['opportunities']
+    
+    if len(opportunities) < 10:
+        print("  ⚠️  波段机会不足10个，跳过优化")
+        return {
+            'optimized_params': current_params,
+            'improvement': None
+        }
+    
+    print(f"  🔧 开始波段参数优化（{len(opportunities)}个机会）...")
+    
+    # 定义搜索空间
+    param_grid = {
+        'max_holding_hours': [24, 36, 48],
+        'atr_tp_multiplier': [4.0, 6.0, 8.0],
+        'atr_stop_multiplier': [1.5, 2.0, 2.5],
+        'min_risk_reward': [2.0, 2.5, 3.0]
+    }
+    
+    best_score = -float('inf')
+    best_params = current_params.copy()
+    best_result = None
+    
+    # 计算基准表现
+    baseline_params = current_params.copy()
+    baseline_result = simulate_params_on_opportunities(opportunities, baseline_params)
+    baseline_score = calculate_swing_score(baseline_result)
+    
+    print(f"  📊 基准表现: 平均利润={baseline_result['avg_profit']:.1f}%, 捕获率={baseline_result['capture_rate']*100:.0f}%")
+    
+    tested_count = 0
+    # Grid Search
+    for max_hours in param_grid['max_holding_hours']:
+        for tp_mult in param_grid['atr_tp_multiplier']:
+            for sl_mult in param_grid['atr_stop_multiplier']:
+                for min_rr in param_grid['min_risk_reward']:
+                    tested_count += 1
+                    
+                    test_params = current_params.copy()
+                    test_params.update({
+                        'max_holding_hours': max_hours,
+                        'atr_tp_multiplier': tp_mult,
+                        'atr_stop_multiplier': sl_mult,
+                        'min_risk_reward': min_rr
+                    })
+                    
+                    # 模拟
+                    result = simulate_params_on_opportunities(opportunities, test_params)
+                    score = calculate_swing_score(result)
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_params = test_params
+                        best_result = result
+    
+    print(f"  ✅ 测试{tested_count}组参数，找到最优配置")
+    print(f"  📈 优化后: 平均利润={best_result['avg_profit']:.1f}%, 捕获率={best_result['capture_rate']*100:.0f}%")
+    
+    return {
+        'optimized_params': best_params,
+        'old_result': baseline_result,
+        'new_result': best_result,
+        'old_avg_profit': baseline_result['avg_profit'],
+        'new_avg_profit': best_result['avg_profit'],
+        'old_capture_rate': baseline_result['capture_rate'],
+        'new_capture_rate': best_result['capture_rate']
+    }
+
+
 def analyze_missed_opportunities(trends, actual_trades, config):
     """
     分析错过的交易机会（V6.5：添加三层趋势分析）
