@@ -5420,13 +5420,14 @@ def quick_global_search_v8316(data_summary, current_config):
     
     print(f"\n  🔍 测试7组战略采样...")
     for i, test_params in enumerate(test_points):
-        result = backtest_parameters_v760(
-            data_summary=data_summary,
-            min_risk_reward=test_params['min_risk_reward'],
-            min_indicator_consensus=test_params['min_indicator_consensus'],
-            atr_stop_multiplier=test_params['atr_stop_multiplier'],
-            days=days
-        )
+        # 【V8.3.16.2】组装config_variant参数，调用backtest_parameters
+        config_variant = {
+            'min_risk_reward': test_params['min_risk_reward'],
+            'min_indicator_consensus': test_params['min_indicator_consensus'],
+            'atr_stop_multiplier': test_params['atr_stop_multiplier'],
+            'min_signal_score': current_config.get('global', {}).get('min_signal_score', 55)
+        }
+        result = backtest_parameters(config_variant, days=days, verbose=False)
         
         if result['total_profit'] > best_profit:
             best_profit = result['total_profit']
