@@ -5450,7 +5450,16 @@ def quick_global_search_v8316(data_summary, current_config):
     print(f"     最优参数: R:R={best_params['min_risk_reward']}, 共识={best_params['min_indicator_consensus']}, ATR={best_params['atr_stop_multiplier']:.2f}")
     print(f"     盈利状态: {'✅ 找到盈利' if found_profitable else '⚠️ 未找到盈利（使用最优亏损点）'}")
     
-    return best_params
+    # 【V8.3.16.3】兼容后续代码：构建iterative_result格式
+    return {
+        'final_params': best_params,
+        'best_config': best_params,  # 兼容Line 7081
+        'best_round_num': 1,  # 快速探索视为第1轮
+        'best_metric': 0.0,  # 快速探索不计算综合指标
+        'baseline_metric': 0.0,
+        'quick_search_mode': True,
+        'found_profitable': found_profitable
+    }
 
 
 def iterative_parameter_optimization_v770(data_summary, current_config, original_stats):
@@ -7213,8 +7222,15 @@ def analyze_and_adjust_params():
                 )
                 
                 # 【V8.3.16】技术债1修复：使用V7.7.0快速探索的结果作为初始参数
-                initial_params_for_scalping = global_initial_params if global_initial_params else {}
-                initial_params_for_swing = global_initial_params if global_initial_params else {}
+                # 【V8.3.16.3】修复：从iterative_result中提取final_params
+                if global_initial_params and isinstance(global_initial_params, dict):
+                    # 优先使用final_params，如果不存在则直接使用global_initial_params（兼容旧版本）
+                    base_params = global_initial_params.get('final_params', global_initial_params)
+                else:
+                    base_params = {}
+                
+                initial_params_for_scalping = base_params.copy() if base_params else {}
+                initial_params_for_swing = base_params.copy() if base_params else {}
                 
                 # 合并当前配置中的策略特定参数
                 scalping_current = config.get('scalping_params', {})
@@ -7226,8 +7242,8 @@ def analyze_and_adjust_params():
                 # 分别优化超短线参数
                 if separated_analysis['scalping']['total_opportunities'] > 20:
                     print(f"\n  ⚡ 优化超短线参数...")
-                    if global_initial_params:
-                        print(f"     ℹ️  使用V7.7.0初始参数: R:R={global_initial_params.get('min_risk_reward', 'N/A')}, 共识={global_initial_params.get('min_indicator_consensus', 'N/A')}")
+                    if base_params:
+                        print(f"     ℹ️  使用V7.7.0初始参数: R:R={base_params.get('min_risk_reward', 'N/A')}, 共识={base_params.get('min_indicator_consensus', 'N/A')}")
                     scalping_optimization = optimize_scalping_params(
                         scalping_data=separated_analysis['scalping'],
                         current_params=scalping_current,
@@ -7254,8 +7270,8 @@ def analyze_and_adjust_params():
                 # 分别优化波段参数
                 if separated_analysis['swing']['total_opportunities'] > 20:
                     print(f"\n  🌊 优化波段参数...")
-                    if global_initial_params:
-                        print(f"     ℹ️  使用V7.7.0初始参数: R:R={global_initial_params.get('min_risk_reward', 'N/A')}, 共识={global_initial_params.get('min_indicator_consensus', 'N/A')}")
+                    if base_params:
+                        print(f"     ℹ️  使用V7.7.0初始参数: R:R={base_params.get('min_risk_reward', 'N/A')}, 共识={base_params.get('min_indicator_consensus', 'N/A')}")
                     swing_optimization = optimize_swing_params(
                         swing_data=separated_analysis['swing'],
                         current_params=swing_current,
