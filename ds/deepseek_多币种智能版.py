@@ -17175,6 +17175,290 @@ def simulate_params_on_opportunities(opportunities, params):
     }
 
 
+def simulate_params_on_opportunities_with_details(opportunities, params):
+    """
+    【V8.3.12.1】增强版：记录详细的exit信息，用于AI分析
+    
+    返回：
+    {
+        'summary': {...},  # 基本统计
+        'exit_details': [...]  # 详细的exit记录
+    }
+    """
+    captured_count = 0
+    total_profit = 0
+    time_exit_count = 0
+    take_profit_count = 0
+    stop_loss_count = 0
+    
+    exit_details = []
+    
+    for opp in opportunities:
+        # 模拟这个机会
+        sim_result = _simulate_trade_with_params(
+            entry_price=opp['entry_price'],
+            direction=opp['direction'],
+            atr=opp['atr'],
+            future_data=opp['future_data'],
+            signal_score=70,
+            consensus=opp['consensus'],
+            risk_reward=opp['risk_reward'],
+            min_signal_score=params.get('min_signal_score', 60),
+            min_consensus=params.get('min_indicator_consensus', 2),
+            min_risk_reward=params.get('min_risk_reward', 1.5),
+            atr_stop_multiplier=params.get('atr_stop_multiplier', 1.5),
+            atr_tp_multiplier=params.get('atr_tp_multiplier', 3.0),
+            max_holding_hours=params.get('max_holding_hours', 24),
+            signal_type=opp.get('signal_type', 'swing'),
+            market_data=None  # 暂不传入完整market_data
+        )
+        
+        if sim_result['can_entry']:
+            captured_count += 1
+            captured_profit = sim_result['profit']
+            total_profit += captured_profit
+            
+            exit_type = sim_result.get('exit_type', '')
+            if exit_type == 'time_exit':
+                time_exit_count += 1
+            elif exit_type == 'take_profit':
+                take_profit_count += 1
+            elif exit_type == 'stop_loss':
+                stop_loss_count += 1
+            
+            # 记录详细信息
+            exit_detail = {
+                'coin': opp['coin'],
+                'timestamp': opp.get('timestamp', ''),
+                'entry_price': opp['entry_price'],
+                'direction': opp['direction'],
+                'exit_type': exit_type,
+                'captured_profit': captured_profit,
+                'objective_profit': opp['objective_profit'],
+                'missed_profit': opp['objective_profit'] - captured_profit,
+                'atr': opp['atr'],
+                'atr_pct': opp['atr'] / opp['entry_price'] * 100 if opp['entry_price'] > 0 else 0
+            }
+            exit_details.append(exit_detail)
+    
+    summary = {
+        'total_opportunities': len(opportunities),
+        'captured_count': captured_count,
+        'total_profit': total_profit,
+        'avg_profit': total_profit / captured_count if captured_count > 0 else 0,
+        'time_exit_count': time_exit_count,
+        'take_profit_count': take_profit_count,
+        'stop_loss_count': stop_loss_count,
+        'capture_rate': captured_count / len(opportunities) if len(opportunities) > 0 else 0
+    }
+    
+    return {
+        'summary': summary,
+        'exit_details': exit_details
+    }
+
+
+def analyze_exit_patterns(exit_details):
+    """
+    【V8.3.12.1】分析exit模式，找出问题所在
+    
+    核心分析：
+    1. Time Exit：哪些本该盈利更多却提前平仓
+    2. Stop Loss：哪些止损过紧，错过后续上涨
+    3. Take Profit：哪些过早止盈
+    """
+    if not exit_details:
+        return None
+    
+    # 1. Time Exit分析
+    time_exits = [d for d in exit_details if d['exit_type'] == 'time_exit']
+    time_exit_missed = [d for d in time_exits if d['missed_profit'] > 2.0]  # 错过>2%
+    time_exit_avg_missed = sum(d['missed_profit'] for d in time_exits) / len(time_exits) if time_exits else 0
+    
+    # 2. Stop Loss分析
+    stop_losses = [d for d in exit_details if d['exit_type'] == 'stop_loss']
+    tight_sl = [d for d in stop_losses if d['missed_profit'] > 5.0]  # 止损后涨>5%
+    sl_loss_avg = sum(d['captured_profit'] for d in stop_losses) / len(stop_losses) if stop_losses else 0
+    
+    # 3. Take Profit分析
+    take_profits = [d for d in exit_details if d['exit_type'] == 'take_profit']
+    early_tp = [d for d in take_profits if d['missed_profit'] > 3.0]  # 止盈后又涨>3%
+    tp_profit_avg = sum(d['captured_profit'] for d in take_profits) / len(take_profits) if take_profits else 0
+    
+    analysis = {
+        'time_exit': {
+            'count': len(time_exits),
+            'rate': len(time_exits) / len(exit_details) * 100,
+            'avg_missed_profit': time_exit_avg_missed,
+            'significant_missed_count': len(time_exit_missed),
+            'examples': sorted(time_exit_missed, key=lambda x: x['missed_profit'], reverse=True)[:5]
+        },
+        'stop_loss': {
+            'count': len(stop_losses),
+            'rate': len(stop_losses) / len(exit_details) * 100,
+            'avg_loss': sl_loss_avg,
+            'tight_count': len(tight_sl),
+            'examples': sorted(tight_sl, key=lambda x: x['missed_profit'], reverse=True)[:5]
+        },
+        'take_profit': {
+            'count': len(take_profits),
+            'rate': len(take_profits) / len(exit_details) * 100,
+            'avg_profit': tp_profit_avg,
+            'early_count': len(early_tp),
+            'examples': sorted(early_tp, key=lambda x: x['missed_profit'], reverse=True)[:5]
+        },
+        'total_count': len(exit_details)
+    }
+    
+    return analysis
+
+
+def generate_ai_strategy_prompt(exit_analysis, current_params, signal_type):
+    """
+    【V8.3.12.1】生成AI分析prompt
+    
+    让AI分析exit模式并给出策略调整建议
+    """
+    if not exit_analysis:
+        return None
+    
+    te = exit_analysis['time_exit']
+    sl = exit_analysis['stop_loss']
+    tp = exit_analysis['take_profit']
+    
+    # 构建典型案例描述
+    te_cases = "\n".join([
+        f"  - {ex['coin']}: 入场{ex['entry_price']:.2f}, {ex['exit_type']}, 获利{ex['captured_profit']:.1f}%, 客观利润{ex['objective_profit']:.1f}%, 错过{ex['missed_profit']:.1f}%"
+        for ex in te['examples'][:3]
+    ]) if te['examples'] else "  （无案例）"
+    
+    sl_cases = "\n".join([
+        f"  - {ex['coin']}: 入场{ex['entry_price']:.2f}, {ex['exit_type']}, 亏损{ex['captured_profit']:.1f}%, 后续涨幅{ex['objective_profit']:.1f}%, 错过{ex['missed_profit']:.1f}%"
+        for ex in sl['examples'][:3]
+    ]) if sl['examples'] else "  （无案例）"
+    
+    tp_cases = "\n".join([
+        f"  - {ex['coin']}: 入场{ex['entry_price']:.2f}, {ex['exit_type']}, 获利{ex['captured_profit']:.1f}%, 后续涨幅{ex['objective_profit']:.1f}%, 错过{ex['missed_profit']:.1f}%"
+        for ex in tp['examples'][:3]
+    ]) if tp['examples'] else "  （无案例）"
+    
+    strategy_context = ""
+    if signal_type == 'scalping':
+        strategy_context = """
+【超短线特点】
+- 持仓时间短（目标0.5-2小时）
+- 依赖形态突破、Pin Bar等快速信号
+- 需要快速止盈，避免回撤
+- 止损应该适度，防止假突破
+"""
+    else:  # swing
+        strategy_context = """
+【波段特点】
+- 持仓时间长（目标24-48小时）
+- 依赖支撑阻力位、趋势线
+- 需要给利润留出空间
+- 止损应该放宽，容忍正常回调
+"""
+    
+    prompt = f"""You are a professional quantitative trading strategy optimizer. Analyze the exit patterns and provide specific parameter adjustment recommendations.
+
+【{signal_type.upper()} Exit Analysis】
+{strategy_context}
+
+Current Parameters:
+- atr_tp_multiplier: {current_params.get('atr_tp_multiplier', 'N/A')}
+- atr_stop_multiplier: {current_params.get('atr_stop_multiplier', 'N/A')}
+- max_holding_hours: {current_params.get('max_holding_hours', 'N/A')}
+- min_risk_reward: {current_params.get('min_risk_reward', 'N/A')}
+
+Exit Distribution:
+- Time Exit: {te['count']} ({te['rate']:.0f}%) | Avg Missed: {te['avg_missed_profit']:.1f}% | Significant: {te['significant_missed_count']}
+- Stop Loss: {sl['count']} ({sl['rate']:.0f}%) | Avg Loss: {sl['avg_loss']:.1f}% | Too Tight: {sl['tight_count']}
+- Take Profit: {tp['count']} ({tp['rate']:.0f}%) | Avg Profit: {tp['avg_profit']:.1f}% | Too Early: {tp['early_count']}
+
+Time Exit Examples (Missed Profit):
+{te_cases}
+
+Stop Loss Examples (Too Tight):
+{sl_cases}
+
+Take Profit Examples (Too Early):
+{tp_cases}
+
+ANALYSIS REQUIREMENTS:
+
+1. Root Cause Analysis:
+   - Why is Time Exit rate {te['rate']:.0f}%? Is it because:
+     * TP target too high (atr_tp_multiplier too large)?
+     * Holding time too long (max_holding_hours)?
+     * Market volatility issue?
+   
+   - Are Stop Losses too tight? Evidence:
+     * {sl['tight_count']} trades hit SL then rallied 5%+
+     * Avg loss: {sl['avg_loss']:.1f}%
+   
+   - Are Take Profits too early? Evidence:
+     * {tp['early_count']} trades closed then rallied 3%+
+     * Avg missed profit: {tp_profit_avg:.1f}% on TP trades
+
+2. Parameter Recommendations:
+   Based on the data, recommend:
+   - atr_tp_multiplier: Should it be INCREASED or DECREASED? By how much? Why?
+   - atr_stop_multiplier: Should it be INCREASED or DECREASED? By how much? Why?
+   - max_holding_hours: Should it be INCREASED or DECREASED? Why?
+   
+   CRITICAL: For {signal_type}:
+   {"- Focus on REDUCING atr_tp_multiplier to capture quick profits" if signal_type == 'scalping' else "- Consider INCREASING atr_tp_multiplier to capture larger moves"}
+   - Time Exit > 80% is BAD - means we're holding too long or TP is too far
+   - Stop Loss > 30% is BAD - means SL is too tight
+
+3. Strategy Notes:
+   - For {signal_type}, should we use Support/Resistance levels instead of pure ATR?
+   - Any special considerations for TP/SL calculation?
+
+OUTPUT JSON:
+{{
+    "diagnosis": "Brief diagnosis in Chinese",
+    "root_causes": [
+        "Time Exit high because...",
+        "Stop Loss issue because...",
+        "Take Profit problem because..."
+    ],
+    "recommendations": {{
+        "atr_tp_multiplier": {{
+            "current": {current_params.get('atr_tp_multiplier', 0)},
+            "recommended": 1.5,
+            "change": "DECREASE",
+            "reason": "Why this change will help"
+        }},
+        "atr_stop_multiplier": {{
+            "current": {current_params.get('atr_stop_multiplier', 0)},
+            "recommended": 1.0,
+            "change": "ADJUST",
+            "reason": "Why this change will help"
+        }},
+        "max_holding_hours": {{
+            "current": {current_params.get('max_holding_hours', 0)},
+            "recommended": 1.5,
+            "change": "DECREASE",
+            "reason": "Why this change will help"
+        }},
+        "min_risk_reward": {{
+            "current": {current_params.get('min_risk_reward', 0)},
+            "recommended": 1.3,
+            "reason": "Why this change will help"
+        }}
+    }},
+    "strategy_notes": "Additional considerations for {signal_type} TP/SL strategy",
+    "expected_improvement": "What metrics should improve and by how much"
+}}
+
+IMPORTANT: Be aggressive in recommendations. If Time Exit > 50%, TP is definitely too far!
+"""
+    
+    return prompt
+
+
 def calculate_scalping_score(sim_result):
     """
     【V8.3.12】超短线评分函数
