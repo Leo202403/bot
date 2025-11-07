@@ -5403,7 +5403,20 @@ def quick_global_search_v8316(data_summary, current_config):
     best_profit = -float('inf')
     found_profitable = False
     
-    test_points = generate_strategic_samples_v770(sampling_range)
+    # 生成7个战略采样点（直接实现，不调用外部函数）
+    rr_min, rr_max = sampling_range['min_risk_reward']
+    consensus_min, consensus_max = sampling_range['min_indicator_consensus']
+    atr_min, atr_max = sampling_range['atr_stop_multiplier']
+    
+    test_points = [
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': atr_min, 'name': '极宽松'},
+        {'min_risk_reward': (rr_min + rr_max * 2) / 3, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'name': '偏宽松'},
+        {'min_risk_reward': (rr_min + rr_max) / 2, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'name': '标准'},
+        {'min_risk_reward': (rr_min * 2 + rr_max) / 3, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'name': '偏严格'},
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'name': '严格'},
+        {'min_risk_reward': rr_max * 1.2, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'name': '超严格'},
+        {'min_risk_reward': rr_max * 1.4, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'name': '极严格'},
+    ]
     
     print(f"\n  🔍 测试7组战略采样...")
     for i, test_params in enumerate(test_points):

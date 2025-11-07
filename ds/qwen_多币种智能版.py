@@ -710,8 +710,8 @@ SYMBOL_PROFILES = {
     }
 }
 
-# 数据存储路径（DeepSeek专用目录）
-DATA_DIR = Path(__file__).parent / "trading_data" / "deepseek"
+# 数据存储路径（Qwen专用目录）
+DATA_DIR = Path(__file__).parent / "trading_data" / "qwen"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 TRADES_FILE = DATA_DIR / "trades_history.csv"
 POSITIONS_FILE = DATA_DIR / "current_positions.csv"
@@ -775,7 +775,7 @@ def send_bark_notification(title, content):
                 encoded_content = quote(content)
 
                 # 添加group参数，将推送归类到"DeepSeek"文件夹
-                url = f"https://api.day.app/{bark_key}/{encoded_title}/{encoded_content}?group=DeepSeek"
+                url = f"https://api.day.app/{bark_key}/{encoded_title}/{encoded_content}?group=Qwen"
                 
                 # 🔧 V7.7.0.16: 检查URL长度
                 if len(url) > 1800:  # 预留一些安全余量
@@ -5403,7 +5403,20 @@ def quick_global_search_v8316(data_summary, current_config):
     best_profit = -float('inf')
     found_profitable = False
     
-    test_points = generate_strategic_samples_v770(sampling_range)
+    # 生成7个战略采样点（直接实现，不调用外部函数）
+    rr_min, rr_max = sampling_range['min_risk_reward']
+    consensus_min, consensus_max = sampling_range['min_indicator_consensus']
+    atr_min, atr_max = sampling_range['atr_stop_multiplier']
+    
+    test_points = [
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': atr_min, 'name': '极宽松'},
+        {'min_risk_reward': (rr_min + rr_max * 2) / 3, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'name': '偏宽松'},
+        {'min_risk_reward': (rr_min + rr_max) / 2, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'name': '标准'},
+        {'min_risk_reward': (rr_min * 2 + rr_max) / 3, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'name': '偏严格'},
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'name': '严格'},
+        {'min_risk_reward': rr_max * 1.2, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'name': '超严格'},
+        {'min_risk_reward': rr_max * 1.4, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'name': '极严格'},
+    ]
     
     print(f"\n  🔍 测试7组战略采样...")
     for i, test_params in enumerate(test_points):
