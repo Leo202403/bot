@@ -17597,6 +17597,7 @@ def analyze_exit_patterns(exit_details):
     take_profits = [d for d in exit_details if d['exit_type'] == 'take_profit']
     early_tp = [d for d in take_profits if d['missed_profit'] > 3.0]  # 止盈后又涨>3%
     tp_profit_avg = sum(d['captured_profit'] for d in take_profits) / len(take_profits) if take_profits else 0
+    tp_missed_avg = sum(d['missed_profit'] for d in take_profits) / len(take_profits) if take_profits else 0
     
     analysis = {
         'time_exit': {
@@ -17617,6 +17618,7 @@ def analyze_exit_patterns(exit_details):
             'count': len(take_profits),
             'rate': len(take_profits) / len(exit_details) * 100,
             'avg_profit': tp_profit_avg,
+            'avg_missed_profit': tp_missed_avg,
             'early_count': len(early_tp),
             'examples': sorted(early_tp, key=lambda x: x['missed_profit'], reverse=True)[:5]
         },
