@@ -12858,8 +12858,25 @@ def calculate_signal_score(market_data):
         
     except Exception as e:
         print(f"⚠️ 信号评分路由失败: {e}")
+        # 【V8.3.14.2】增强错误诊断
+        print(f"  调试信息: market_data类型={type(market_data)}")
+        if isinstance(market_data, dict):
+            print(f"  market_data keys: {list(market_data.keys())[:10]}")  # 只显示前10个
+        import traceback
+        traceback.print_exc()
+        
         # Fallback：返回默认值
-        signal_classification = classify_signal_type(market_data)
+        try:
+            signal_classification = classify_signal_type(market_data)
+        except:
+            # 如果classify_signal_type也失败，使用完全默认值
+            signal_classification = {
+                'signal_type': 'swing',
+                'signal_name': 'DEFAULT',
+                'expected_holding_minutes': 120,
+                'reason': '评分失败，默认波段'
+            }
+        
         signal_type = signal_classification.get('signal_type', 'swing')
         
         # 根据信号类型返回默认值
