@@ -17114,14 +17114,17 @@ def _simulate_trade_with_params(entry_price, direction, atr, future_data,
                                  signal_score, consensus, risk_reward,
                                  min_signal_score, min_consensus, min_risk_reward, 
                                  atr_stop_multiplier, atr_tp_multiplier=None,
-                                 max_holding_hours=None):
+                                 max_holding_hours=None,
+                                 signal_type=None, market_data=None):
     """
-    【V8.0→V8.1】模拟用给定参数交易一个机会 - 支持独立止盈倍数 + 时间限制
+    【V8.0→V8.1→V8.3.8】模拟用给定参数交易一个机会 - 支持独立止盈倍数 + 时间限制 + 波段SR优先
     
     Args:
         atr_stop_multiplier: 止损ATR倍数
         atr_tp_multiplier: 止盈ATR倍数（可选，默认使用min_risk_reward计算）
         max_holding_hours: 最长持仓小时数（可选，超时强制平仓）【V8.1新增】
+        signal_type: 信号类型 'scalping' 或 'swing'【V8.3.8新增】
+        market_data: 市场数据（用于获取SR级别）【V8.3.8新增】
     
     返回:
         dict: {
@@ -17144,20 +17147,47 @@ def _simulate_trade_with_params(entry_price, direction, atr, future_data,
     if atr <= 0:
         atr = entry_price * 0.02  # 默认2%
     
-    stop_loss_distance = atr * atr_stop_multiplier
+    # 【V8.3.8】波段交易优先使用SR级别
+    use_sr = False
+    if signal_type == 'swing' and market_data and isinstance(market_data, dict):
+        support_levels = market_data.get('support_levels', [])
+        resistance_levels = market_data.get('resistance_levels', [])
+        
+        if direction == 'long' and support_levels and resistance_levels:
+            # 多单：止损=最近支撑位下方，止盈=最近阻力位
+            nearest_support = max([s for s in support_levels if s < entry_price], default=None)
+            nearest_resistance = min([r for r in resistance_levels if r > entry_price], default=None)
+            
+            if nearest_support and nearest_resistance:
+                stop_loss = nearest_support * 0.995  # 支撑位下方0.5%
+                take_profit = nearest_resistance * 0.995  # 阻力位下方0.5%（保守）
+                use_sr = True
+        elif direction == 'short' and support_levels and resistance_levels:
+            # 空单：止损=最近阻力位上方，止盈=最近支撑位
+            nearest_resistance = min([r for r in resistance_levels if r > entry_price], default=None)
+            nearest_support = max([s for s in support_levels if s < entry_price], default=None)
+            
+            if nearest_resistance and nearest_support:
+                stop_loss = nearest_resistance * 1.005  # 阻力位上方0.5%
+                take_profit = nearest_support * 1.005  # 支撑位上方0.5%（保守）
+                use_sr = True
     
-    # 【V8.0】支持独立止盈倍数
-    if atr_tp_multiplier is not None:
-        take_profit_distance = atr * atr_tp_multiplier
-    else:
-        take_profit_distance = stop_loss_distance * min_risk_reward
-    
-    if direction == 'long':
-        stop_loss = entry_price - stop_loss_distance
-        take_profit = entry_price + take_profit_distance
-    else:  # short
-        stop_loss = entry_price + stop_loss_distance
-        take_profit = entry_price - take_profit_distance
+    # Fallback: 使用ATR计算
+    if not use_sr:
+        stop_loss_distance = atr * atr_stop_multiplier
+        
+        # 【V8.0】支持独立止盈倍数
+        if atr_tp_multiplier is not None:
+            take_profit_distance = atr * atr_tp_multiplier
+        else:
+            take_profit_distance = stop_loss_distance * min_risk_reward
+        
+        if direction == 'long':
+            stop_loss = entry_price - stop_loss_distance
+            take_profit = entry_price + take_profit_distance
+        else:  # short
+            stop_loss = entry_price + stop_loss_distance
+            take_profit = entry_price - take_profit_distance
     
     # 3. 模拟交易：遍历后续价格，看哪个先触及
     if future_data.empty:
