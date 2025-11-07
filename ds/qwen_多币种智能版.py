@@ -21,7 +21,7 @@ from typing import Dict, List, Any, Optional
 import re  # 🔧 V7.6.7: 用于AI响应解析
 from urllib.parse import urlencode
 
-# 🔧 明确指定 .env 文件路径
+# 🔧 明确指定 .env.qwen 文件路径
 _env_file = Path(__file__).parent / '.env.qwen'
 if not _env_file.exists():
     raise FileNotFoundError(f"❌ 找不到 .env.qwen 文件: {_env_file}")
@@ -31,10 +31,10 @@ load_dotenv(_env_file, override=True)
 
 def extract_json_from_ai_response(ai_content: str) -> dict:
     """
-    从AI响应中提取JSON对象（鲁棒版本，支持通义千问 Reasoner）
+    从AI响应中提取JSON对象（鲁棒版本，支持DeepSeek Reasoner）
     
     尝试顺序：
-    1. 跳过通义千问 Reasoner的推理标签 (<think>...</think>)
+    1. 跳过DeepSeek Reasoner的推理标签 (<think>...</think>)
     2. 提取Markdown代码块中的JSON (```json ... ```)
     3. 提取第一个完整的JSON对象（非贪婪匹配）
     4. 尝试解析整个内容为JSON
@@ -50,8 +50,8 @@ def extract_json_from_ai_response(ai_content: str) -> dict:
     """
     ai_content = ai_content.strip()
     
-    # 方法0: 移除通义千问 Reasoner的推理标签（如果存在）
-    # 通义千问 Reasoner可能返回：<think>推理过程</think>\n{JSON}
+    # 方法0: 移除DeepSeek Reasoner的推理标签（如果存在）
+    # DeepSeek Reasoner可能返回：<think>推理过程</think>\n{JSON}
     think_match = re.search(r'<think>.*?</think>\s*', ai_content, re.DOTALL)
     if think_match:
         ai_content = ai_content[think_match.end():].strip()
@@ -319,7 +319,7 @@ class AICallOptimizer:
         time_passed = (datetime.now() - self.last_portfolio_call_time).seconds // 60 if self.last_portfolio_call_time else 0
         
         # 记录详情 + 估算节省成本
-        cost_per_call = 0.014  # 通义千问 API平均成本（元/次，reasoner模式约0.01-0.02）
+        cost_per_call = 0.014  # DeepSeek API平均成本（元/次，reasoner模式约0.01-0.02）
         self.daily_details['saved_cost_estimate'] += cost_per_call
         self.daily_details['skip_reasons'].append({
             'time': datetime.now().strftime('%H:%M:%S'),
@@ -368,7 +368,7 @@ class AICallOptimizer:
             'api_calls': self.call_stats['forced'] + (self.call_stats['total'] - self.call_stats['saved'] - self.call_stats['forced']),
             'calls_saved': self.call_stats['saved'],
             'save_rate': f"{saved_rate:.1f}%",
-            'cost_reduction': f"约{saved_rate * 0.8:.0f}%",  # 考虑通义千问自身缓存
+            'cost_reduction': f"约{saved_rate * 0.8:.0f}%",  # 考虑Qwen自身缓存
         }
     
     def reset_stats(self):
@@ -529,7 +529,7 @@ ai_optimizer = AICallOptimizer()
 
 # ==================== AI调用优化器结束 ====================
 
-# 初始化通义千问客户端
+# 初始化Qwen客户端
 qwen_api_key = os.getenv("QWEN_API_KEY")
 if not qwen_api_key:
     raise ValueError("❌ QWEN_API_KEY 环境变量未设置，请检查 .env 文件")
@@ -703,7 +703,7 @@ SYMBOL_PROFILES = {
     }
 }
 
-# 数据存储路径（通义千问专用目录）
+# 数据存储路径（Qwen专用目录）
 DATA_DIR = Path(__file__).parent / "trading_data" / "qwen"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 TRADES_FILE = DATA_DIR / "trades_history.csv"
@@ -720,7 +720,7 @@ signal_history = {}  # 每个币种的信号历史
 
 
 def send_bark_notification(title, content):
-    """发送Bark推送通知（支持多个地址 + 通义千问分组）"""
+    """发送Bark推送通知（支持多个地址 + Qwen分组）"""
     try:
         from urllib.parse import quote
 
@@ -767,8 +767,8 @@ def send_bark_notification(title, content):
                 encoded_title = quote(title)
                 encoded_content = quote(content)
 
-                # 添加group参数，将推送归类到"通义千问"文件夹
-                url = f"https://api.day.app/{bark_key}/{encoded_title}/{encoded_content}?group=通义千问"
+                # 添加group参数，将推送归类到"Qwen"文件夹
+                url = f"https://api.day.app/{bark_key}/{encoded_title}/{encoded_content}?group=Qwen"
                 
                 # 🔧 V7.7.0.16: 检查URL长度
                 if len(url) > 1800:  # 预留一些安全余量
@@ -822,7 +822,7 @@ def send_bark_notification(title, content):
         traceback.print_exc()
 
 
-def send_email_notification(subject, body_html, model_name="通义千问"):
+def send_email_notification(subject, body_html, model_name="Qwen"):
     """发送邮件通知（用于AI参数优化详细报告）"""
     try:
         # 邮件配置
@@ -2081,7 +2081,7 @@ def should_pause_trading_v7(config):
             
             # 发送盈利恢复通知
             send_recovery_notification_v7(
-                model_name=os.getenv("MODEL_NAME", "通义千问"),
+                model_name=os.getenv("MODEL_NAME", "Qwen"),
                 recovery_type="profit_exit",
                 pause_level=pause_level,
                 new_pause_level=new_pause_level
@@ -2106,7 +2106,7 @@ def should_pause_trading_v7(config):
             
             # 发送恢复通知
             send_recovery_notification_v7(
-                model_name=os.getenv("MODEL_NAME", "通义千问"),
+                model_name=os.getenv("MODEL_NAME", "Qwen"),
                 recovery_type="time_based",
                 pause_level=pause_level,
                 new_pause_level=0
@@ -2802,7 +2802,7 @@ def daily_review_with_kline_v7():
                                 review_lines.append(
                                     f"    {row['coin']}: {row['time']} 共振{row['indicator_consensus']}/5 "
                                     f"价格{row['price']:.0f} 分{row.get('signal_score', 0):.0f}"
-                        )
+                                )
         
         return "\n".join(review_lines)
         
@@ -3047,7 +3047,7 @@ def calculate_position_size_smart(symbol, signal_quality, total_assets, config, 
             type_params = config.get('global', {}).get('scalping_params', {})
         else:
             type_params = config.get('global', {}).get('swing_params', {})
-        
+
         # 2. 基础仓位（使用分类型参数）
         base_ratio = type_params.get("base_position_ratio", 0.20)
         base_position = total_assets * base_ratio
@@ -3563,7 +3563,7 @@ You are a professional quantitative trading parameter optimization expert. Analy
 
         # 调用AI分析
         response = qwen_client.chat.completions.create(
-            model="qwen3-max",
+            model="qwen-max",
             messages=[
                 {
                     "role": "system",
@@ -3772,7 +3772,7 @@ def backtest_parameters(config_variant, days=7, verbose=False):
             # 按币种和时间分组
             for coin in history_df['coin'].unique():
                 coin_data = history_df[history_df['coin'] == coin].sort_values('time')
-            
+                
                 for idx, row in coin_data.iterrows():
                     # 模拟信号质量检查
                     indicator_consensus = row.get('indicator_consensus', 3)
@@ -4308,7 +4308,7 @@ This metric balances three dimensions:
 """
 
         response = qwen_client.chat.completions.create(
-            model="qwen3-max",
+            model="qwen-max",
             messages=[
                 {
                     "role": "system",
@@ -4489,7 +4489,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
             # 调用AI（直接使用全局qwen_client）
             try:
                 response = qwen_client.chat.completions.create(
-                    model="q wen",
+                    model="qwen-max",
                     messages=[{"role": "user", "content": ai_prompt}],
                     temperature=0.7,
                     max_tokens=4000  # 🔧 V7.7.0.12: 增加到4000，避免JSON被截断
@@ -4603,7 +4603,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
             
             try:
                 response = qwen_client.chat.completions.create(
-                    model="qwen3-max",
+                    model="qwen-max",
                     messages=[{"role": "user", "content": ai_deep_prompt}],
                     temperature=0.8,  # 更高温度鼓励创新
                     max_tokens=2000
@@ -4677,7 +4677,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
             
             try:
                 response = qwen_client.chat.completions.create(
-                    model="qwen3-max",
+                    model="qwen-max",
                     messages=[{"role": "user", "content": emergency_prompt}],
                     temperature=0.9,  # 最高温度，最大创新
                     max_tokens=2000
@@ -5052,7 +5052,7 @@ JSON (4 test points):
     
     try:
         response = qwen_client.chat.completions.create(
-            model="qwen3-max",
+            model="qwen-max",
             messages=[{"role": "user", "content": ai_fine_tune_prompt}],
             temperature=0.3,
             max_tokens=8000  # 🔧 V7.7.0.14: 增至8000（充分放宽，避免截断）
@@ -5757,7 +5757,7 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
             try:
                 # 调用AI
                 ai_response = qwen_client.chat.completions.create(
-                    model="qwen3-max",
+                    model="qwen-max",
                     messages=[
                         {"role": "system", "content": "You are a professional quantitative trading analyst specializing in parameter optimization and profitability discovery. Respond in Chinese for designated fields."},
                             {"role": "user", "content": profit_discovery_prompt}
@@ -5964,7 +5964,7 @@ Based on the results above, design a BETTER 5-point sampling strategy.
             import re
             
             response = qwen_client.chat.completions.create(
-                model="qwen3-max",
+                model="qwen-max",
                 messages=[{"role": "user", "content": resample_prompt}],
                 temperature=0.1
             )
@@ -6109,7 +6109,7 @@ Based on the 5 strategic sampling points above:
     # 调用AI分析（使用已有的qwen_client）
     try:
         response = qwen_client.chat.completions.create(
-            model="qwen3-max",
+            model="qwen-max",
             messages=[{"role": "user", "content": ai_analysis_prompt}],
             temperature=0.1
         )
@@ -6668,11 +6668,11 @@ def analyze_and_adjust_params():
     # 初始化复盘数据
     trade_analyses = []
     missed_opportunities = []
-    
+
     if not TRADES_FILE.exists():
         print("交易记录不存在，跳过学习")
         return
-    
+
     try:
         df = pd.read_csv(TRADES_FILE)
         df = df[df["平仓时间"].notna()]  # 只看已平仓交易
@@ -6881,7 +6881,7 @@ def analyze_and_adjust_params():
             original_stats=original_stats,
             max_rounds=5
         )
-
+        
         if not iterative_result:
             print("⚠️ 多轮迭代优化失败，使用备用规则引擎")
             # 备用：简单规则
@@ -7087,12 +7087,51 @@ def analyze_and_adjust_params():
                 print(f"⚠️ 分离策略优化失败: {e}")
                 import traceback
                 traceback.print_exc()
+        
+        # ========== 【V8.3.13.3】第4.7步：Per-Symbol优化 ==========
+        print("\n【第4.7步：Per-Symbol优化（V8.3.13.3）】")
+        per_symbol_optimization = None
+        
+        if kline_snapshots is not None and not kline_snapshots.empty:
+            try:
+                # 分析每个币种的机会
+                per_symbol_data = analyze_per_symbol_opportunities(
+                    market_snapshots=kline_snapshots,
+                    old_config=config,
+                    symbols=['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'LTC']
+                )
+                
+                if per_symbol_data:
+                    # 优化每个币种的参数
+                    per_symbol_params = optimize_per_symbol_params(
+                        per_symbol_data=per_symbol_data,
+                        global_config=config
+                    )
+                    
+                    # 保存到config
+                    if per_symbol_params:
+                        if 'per_symbol_params' not in config:
+                            config['per_symbol_params'] = {}
+                        
+                        for symbol, params in per_symbol_params.items():
+                            config['per_symbol_params'][symbol] = {
+                                'scalping_params': params.get('scalping_params', {}),
+                                'swing_params': params.get('swing_params', {})
+                            }
+                        
+                        print(f"  ✅ 已优化{len(per_symbol_params)}个币种的参数")
+                        per_symbol_optimization = per_symbol_params
+                
+            except Exception as e:
+                print(f"⚠️ Per-Symbol优化失败: {e}")
+                import traceback
+                traceback.print_exc()
 
         # ========== 第5步：保存并通知 ==========
         current_config = json.dumps(config, ensure_ascii=False, default=str)
         if current_config != original_config:
             save_learning_config(config)
-            
+
             adjusted_count = len(adjustments.get("global", {})) + len(
                 adjustments.get("per_symbol", {})
             )
@@ -7129,7 +7168,7 @@ def analyze_and_adjust_params():
             
             # 🆕 发送邮件通知（详细版）
             try:
-                model_name = os.getenv("MODEL_NAME", "通义千问")
+                model_name = os.getenv("MODEL_NAME", "Qwen")
                 
                 # 构建参数调整详情（HTML格式）- 只显示有变化的参数
                 param_changes_html = ""
@@ -7884,7 +7923,7 @@ def analyze_and_adjust_params():
         </p>
     </div>
 """
-                
+                    
                     # 🔧 直接追加详细表格，不使用replace（避免重复问题）
                     exit_timing_html += table_header + ''.join(table_rows) + table_footer
                 else:
@@ -8240,10 +8279,10 @@ def analyze_and_adjust_params():
         except Exception as e:
             print(f"⚠️ 保存压缩洞察失败: {e}")
 
-
+    
         # 保存配置（包含market_regime状态）
         save_learning_config(config)
-        
+
     except Exception as e:
         print(f"✗ AI参数优化失败: {e}")
         import traceback
@@ -8271,7 +8310,7 @@ def chat_with_ai(user_message, context=None):
 """
         
         response = qwen_client.chat.completions.create(
-            model="qwen3-max",  # 通义千问模型
+            model="qwen-max",  # Qwen模型
             messages=[
                 {
                     "role": "system",
@@ -8386,7 +8425,7 @@ def setup_exchange(is_manual_backtest=False):
             send_bark_notification(
                 f"[通义千问]启动{mode_emoji}",
                 f"余额{usdt_balance:.0f}U{stage_detail}",
-            )
+        )
         
         # 为每个币种设置杠杆
         for symbol in TRADE_CONFIG["symbols"]:
@@ -8467,64 +8506,6 @@ def detect_engulfing(prev_ohlc, curr_ohlc):
         return None
     except:
         return None
-
-
-def get_pattern_based_tp_sl(entry_price, direction, pattern_type, pattern_data, atr):
-    """
-    【V8.3.13.2】根据形态类型返回推荐的TP/SL
-    
-    参数:
-        entry_price: 入场价格
-        direction: 'long' or 'short'
-        pattern_type: 'bullish_pin', 'bearish_pin', 'bullish_engulfing', 'bearish_engulfing'
-        pattern_data: dict包含形态数据 {'high': xx, 'low': xx, 'open': xx, 'close': xx}
-        atr: ATR值
-    
-    返回:
-        {'stop_loss': xx, 'take_profit': xx} or None
-    """
-    try:
-        if not pattern_data or not isinstance(pattern_data, dict):
-            return None
-        
-        high = pattern_data.get('high', entry_price)
-        low = pattern_data.get('low', entry_price)
-        
-        if high <= 0 or low <= 0 or high <= low:
-            return None
-        
-        # Pin Bar策略
-        if pattern_type == 'bullish_pin' and direction == 'long':
-            # 多头Pin Bar: SL = Pin低点 - 0.2*ATR, TP = Pin高点 + 0.5*ATR
-            stop_loss = low - atr * 0.2
-            take_profit = high + atr * 0.5
-            return {'stop_loss': stop_loss, 'take_profit': take_profit}
-        
-        elif pattern_type == 'bearish_pin' and direction == 'short':
-            # 空头Pin Bar: SL = Pin高点 + 0.2*ATR, TP = Pin低点 - 0.5*ATR
-            stop_loss = high + atr * 0.2
-            take_profit = low - atr * 0.5
-            return {'stop_loss': stop_loss, 'take_profit': take_profit}
-        
-        # Engulfing策略
-        elif pattern_type == 'bullish_engulfing' and direction == 'long':
-            # 多头吞没: SL = 吞没K线低点 - 0.3*ATR, TP = 吞没K线高点 + 1.0*ATR
-            stop_loss = low - atr * 0.3
-            take_profit = high + atr * 1.0
-            return {'stop_loss': stop_loss, 'take_profit': take_profit}
-        
-        elif pattern_type == 'bearish_engulfing' and direction == 'short':
-            # 空头吞没: SL = 吞没K线高点 + 0.3*ATR, TP = 吞没K线低点 - 1.0*ATR
-            stop_loss = high + atr * 0.3
-            take_profit = low - atr * 1.0
-            return {'stop_loss': stop_loss, 'take_profit': take_profit}
-        
-        else:
-            return None
-            
-    except Exception as e:
-        return None
-
 
 
 def get_pattern_based_tp_sl(entry_price, direction, pattern_type, pattern_data, atr):
@@ -10123,7 +10104,7 @@ def calculate_unified_risk_reward(entry_price, side, sr_levels, atr_14, min_rr=N
         if min_rr is None:
             min_rr = config["min_risk_reward"]
         atr_multiplier = config["atr_stop_multiplier"]
-        
+
         if side == "long":
             # === 多单 ===
             nearest_support = sr_levels["nearest_support"]
@@ -10208,7 +10189,7 @@ def calculate_unified_risk_reward(entry_price, side, sr_levels, atr_14, min_rr=N
                 stop_loss = resistance_price + buffer
             else:
                 stop_loss = entry_price + (atr_14 * atr_multiplier)
-            
+
             nearest_support = sr_levels["nearest_support"]
             if nearest_support and nearest_support["price"] < entry_price:
                 support_price = nearest_support["price"]
@@ -10924,7 +10905,7 @@ Output JSON only:
     try:
         print(f"正在请求AI评估仓位调整...")
         response = qwen_client.chat.completions.create(
-            model="qwen3-max",
+            model="qwen-max",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=2000,  # 增加token限制，为reasoner思考过程预留空间
             temperature=0.3
@@ -10984,7 +10965,7 @@ def ai_portfolio_decision(
         "多头吞没（看涨）": "Bull Engulf",
         "空头吞没（看跌）": "Bear Engulf",
     }
-    
+
     # 加载学习参数
     learning_config = load_learning_config()
     
@@ -12044,7 +12025,7 @@ While code executes as single position, AI should plan multi-part management:
         }
     
     try:
-        # 🔧 优化System Prompt结构（利于通义千问后端缓存）
+        # 🔧 优化System Prompt结构（利于Qwen后端缓存）
         optimized_system_prompt = """You are a professional quantitative portfolio manager AI specializing in multi-asset analysis and capital allocation.
 
 Your core principles:
@@ -12055,7 +12036,7 @@ Your core principles:
 - Always respond in Chinese (中文)"""
         
         response = qwen_client.chat.completions.create(
-            model="qwen3-max",  # 通义千问模型（思考模式，提升复杂策略分析能力）
+            model="qwen-max",  # Qwen模型（思考模式，提升复杂策略分析能力）
             messages=[
                 {
                     "role": "system",
@@ -12845,7 +12826,7 @@ def calculate_signal_score_components(market_data, signal_type='scalping'):
 def calculate_signal_score(market_data):
     """
     【V8.0 重构】信号质量评分路由函数
-
+    
     根据信号类型，路由到不同的评分函数：
     - scalping → calculate_scalping_score()
     - swing → calculate_swing_score()
@@ -12895,7 +12876,7 @@ def _calculate_signal_score_v79_legacy(market_data):
         score = 50
         pa = market_data["price_action"]
         lt = market_data["long_term"]
-
+        
         # 1. 趋势发起（最高优先级）
         if pa.get("trend_initiation"):
             if (
@@ -13412,7 +13393,7 @@ Return JSON (reason MUST be in Chinese):
         
         # 调用AI
         response = qwen_client.chat.completions.create(
-            model="qwen3-max",
+            model="qwen-max",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=300,
             temperature=0.7
@@ -13533,7 +13514,7 @@ Return JSON:
         
         # 调用AI
         response = qwen_client.chat.completions.create(
-            model="qwen3-max",
+            model="qwen-max",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=400,
             temperature=0.7
@@ -15581,7 +15562,7 @@ def execute_portfolio_actions(
             # 加载学习参数
             learning_config = load_learning_config()
             min_rr_required = learning_config["global"]["min_risk_reward"]
-            
+
             ticker = exchange.fetch_ticker(symbol)
             entry_price = ticker["last"]
             stop_loss = action.get("stop_loss_price", 0)
@@ -15596,7 +15577,7 @@ def execute_portfolio_actions(
             print(f"止损价: ${stop_loss:,.2f}")
             print(f"止盈价: ${take_profit:,.2f}")
             print(f"盈亏比: {risk_reward:.2f}:1 (要求≥{min_rr_required:.1f}:1)")
-            
+
             if risk_reward < min_rr_required:
                 # 判断是开多还是开空
                 direction = "开多" if operation == "OPEN_LONG" else "开空"
@@ -17080,123 +17061,6 @@ def _simulate_trade_with_params_enhanced(entry_price, direction, atr, future_dat
     return {'can_entry': True, 'profit': profit_pct, 'exit_type': 'holding'}
 
 
-
-
-def _simulate_trade_with_params_enhanced(entry_price, direction, atr, future_data, 
-                                          signal_score, consensus, risk_reward,
-                                          min_signal_score, min_consensus, min_risk_reward, 
-                                          atr_stop_multiplier, atr_tp_multiplier=None,
-                                          max_holding_hours=None, signal_type='scalping',
-                                          support=None, resistance=None, pattern_type=None,
-                                          pattern_data=None):
-    """
-    【V8.3.13.1】增强版模拟函数 - 支持SR Levels + 形态识别
-    
-    新增功能:
-    - signal_type: 'scalping' or 'swing'
-    - support/resistance: SR levels for swing trades
-    - pattern_type: 形态类型 ('bullish_pin', 'bearish_pin', etc.)
-    - pattern_data: 形态数据 (high, low, etc.)
-    
-    优先级:
-    1. 形态识别 (scalping优先)
-    2. SR Levels (swing优先)
-    3. ATR-based (默认)
-    """
-    # 1. 判断是否会入场
-    can_entry = (
-        signal_score >= min_signal_score and
-        consensus >= min_consensus and
-        risk_reward >= min_risk_reward
-    )
-    
-    if not can_entry:
-        return {'can_entry': False, 'profit': 0, 'exit_type': 'no_entry'}
-    
-    # 2. 计算TP/SL
-    if atr <= 0:
-        atr = entry_price * 0.02
-    
-    # 优先级1: 形态识别 (scalping)
-    if pattern_type and pattern_data and signal_type == 'scalping':
-        tp_sl = get_pattern_based_tp_sl(entry_price, direction, pattern_type, pattern_data, atr)
-        if tp_sl:
-            stop_loss = tp_sl['stop_loss']
-            take_profit = tp_sl['take_profit']
-        else:
-            # Fallback
-            stop_loss_distance = atr * atr_stop_multiplier
-            take_profit_distance = atr * (atr_tp_multiplier or atr_stop_multiplier * min_risk_reward)
-            stop_loss = entry_price - stop_loss_distance if direction == 'long' else entry_price + stop_loss_distance
-            take_profit = entry_price + take_profit_distance if direction == 'long' else entry_price - take_profit_distance
-    
-    # 优先级2: SR Levels (swing)
-    elif signal_type == 'swing' and support and resistance:
-        sr_margin = atr * 0.3
-        if direction == 'long':
-            stop_loss = (support - sr_margin) if support > 0 else (entry_price - atr * atr_stop_multiplier)
-            take_profit = (resistance + sr_margin) if resistance > 0 else (entry_price + atr * (atr_tp_multiplier or 6.0))
-            
-            # 验证合理性
-            if (entry_price - stop_loss) <= 0 or (take_profit - entry_price) <= 0 or ((take_profit - entry_price) / (entry_price - stop_loss)) < 1.5:
-                stop_loss = entry_price - atr * atr_stop_multiplier
-                take_profit = entry_price + atr * (atr_tp_multiplier or 6.0)
-        else:
-            stop_loss = (resistance + sr_margin) if resistance > 0 else (entry_price + atr * atr_stop_multiplier)
-            take_profit = (support - sr_margin) if support > 0 else (entry_price - atr * (atr_tp_multiplier or 6.0))
-            
-            if (stop_loss - entry_price) <= 0 or (entry_price - take_profit) <= 0 or ((entry_price - take_profit) / (stop_loss - entry_price)) < 1.5:
-                stop_loss = entry_price + atr * atr_stop_multiplier
-                take_profit = entry_price - atr * (atr_tp_multiplier or 6.0)
-    
-    # 优先级3: ATR-based
-    else:
-        stop_loss_distance = atr * atr_stop_multiplier
-        take_profit_distance = atr * (atr_tp_multiplier or atr_stop_multiplier * min_risk_reward)
-        
-        if direction == 'long':
-            stop_loss = entry_price - stop_loss_distance
-            take_profit = entry_price + take_profit_distance
-        else:
-            stop_loss = entry_price + stop_loss_distance
-            take_profit = entry_price - take_profit_distance
-    
-    # 3. 模拟交易
-    if future_data.empty:
-        return {'can_entry': True, 'profit': 0, 'exit_type': 'no_data'}
-    
-    max_candles = None
-    if max_holding_hours:
-        max_candles = int(max_holding_hours * 4)
-    
-    for idx, row in future_data.iterrows():
-        if max_candles and idx >= max_candles:
-            close_price = float(row.get('close', entry_price))
-            profit_pct = (close_price - entry_price) / entry_price * 100 if direction == 'long' else (entry_price - close_price) / entry_price * 100
-            return {'can_entry': True, 'profit': profit_pct, 'exit_type': 'time_exit'}
-        
-        high = float(row.get('high', row.get('close', 0)))
-        low = float(row.get('low', row.get('close', 0)))
-        
-        if high <= 0 or low <= 0:
-            continue
-        
-        if direction == 'long':
-            if low <= stop_loss:
-                return {'can_entry': True, 'profit': (stop_loss - entry_price) / entry_price * 100, 'exit_type': 'stop_loss'}
-            if high >= take_profit:
-                return {'can_entry': True, 'profit': (take_profit - entry_price) / entry_price * 100, 'exit_type': 'take_profit'}
-        else:
-            if high >= stop_loss:
-                return {'can_entry': True, 'profit': (entry_price - stop_loss) / entry_price * 100, 'exit_type': 'stop_loss'}
-            if low <= take_profit:
-                return {'can_entry': True, 'profit': (entry_price - take_profit) / entry_price * 100, 'exit_type': 'take_profit'}
-    
-    last_close = float(future_data.iloc[-1].get('close', entry_price))
-    profit_pct = (last_close - entry_price) / entry_price * 100 if direction == 'long' else (entry_price - last_close) / entry_price * 100
-    return {'can_entry': True, 'profit': profit_pct, 'exit_type': 'holding'}
-
-
 def _simulate_trade_with_params(entry_price, direction, atr, future_data, 
                                  signal_score, consensus, risk_reward,
                                  min_signal_score, min_consensus, min_risk_reward, 
@@ -17573,7 +17437,17 @@ def simulate_params_on_opportunities_with_details(opportunities, params):
             elif exit_type == 'stop_loss':
                 stop_loss_count += 1
             
-            # 记录详细信息
+            # 【V8.3.13.4】记录详细信息（包含holding_hours）
+            # 计算持仓时间（基于max_holding_hours和exit_type）
+            holding_hours = 0
+            if exit_type == 'time_exit':
+                holding_hours = params.get('max_holding_hours', 24)
+            elif exit_type in ['take_profit', 'stop_loss']:
+                # 估算实际持仓时间（假设平均在max_holding_hours的50%触发）
+                holding_hours = params.get('max_holding_hours', 24) * 0.5
+            elif exit_type == 'holding':
+                holding_hours = params.get('max_holding_hours', 24)
+            
             exit_detail = {
                 'coin': opp['coin'],
                 'timestamp': opp.get('timestamp', ''),
@@ -17584,7 +17458,8 @@ def simulate_params_on_opportunities_with_details(opportunities, params):
                 'objective_profit': opp['objective_profit'],
                 'missed_profit': opp['objective_profit'] - captured_profit,
                 'atr': opp['atr'],
-                'atr_pct': opp['atr'] / opp['entry_price'] * 100 if opp['entry_price'] > 0 else 0
+                'atr_pct': opp['atr'] / opp['entry_price'] * 100 if opp['entry_price'] > 0 else 0,
+                'holding_hours': holding_hours  # 【V8.3.13.4新增】
             }
             exit_details.append(exit_detail)
     
@@ -17806,7 +17681,7 @@ IMPORTANT: Be aggressive in recommendations. If Time Exit > 50%, TP is definitel
     return prompt
 
 
-def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_name='deepseek'):
+def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_name='qwen'):
     """
     【V8.3.12.1】调用AI分析exit patterns并给出策略建议
     
@@ -17828,8 +17703,8 @@ def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_
         print(f"  🤖 调用AI分析{signal_type} exit patterns...")
         
         # 调用AI
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",
+        response = qwen_client.chat.completions.create(
+            model="qwen-max",
             messages=[
                 {
                     "role": "system",
@@ -17921,7 +17796,6 @@ def apply_ai_suggestions(base_params, ai_suggestions, apply_aggressiveness=0.8):
             print(f"       理由: {suggestion.get('reason', 'N/A')[:60]}...")
     
     return adjusted_params
-
 
 
 def calculate_scalping_score(sim_result):
@@ -18061,6 +17935,27 @@ def optimize_scalping_params(scalping_data, current_params):
         print(f"     Stop Loss: {sl['count']}笔 ({sl['rate']:.0f}%) | {sl['tight_count']}笔过紧")
         print(f"     Take Profit: {tp['count']}笔 ({tp['rate']:.0f}%) | {tp['early_count']}笔过早")
     
+    # ========== 【V8.3.13.4】多时间框架分析 ==========
+    print(f"\n  📊 【V8.3.13.4】多时间框架分析")
+    timeframe_analysis = analyze_multi_timeframe_exits(
+        exit_details=detailed_result['exit_details'],
+        timeframes=['1H', '4H']
+    )
+    
+    if timeframe_analysis:
+        for tf, stats in timeframe_analysis.items():
+            print(f"     {tf}: {stats['total_count']}笔, Time Exit率{stats['time_exit_rate']*100:.0f}%, 平均持仓{stats['avg_holding_time']:.1f}h")
+        
+        # 生成建议
+        tf_recommendations = generate_timeframe_recommendations(
+            timeframe_analysis=timeframe_analysis,
+            signal_type='scalping'
+        )
+        
+        if tf_recommendations:
+            print(f"     💡 建议: {tf_recommendations['recommended_timeframe']}时间框架")
+            print(f"        {tf_recommendations['reason']}")
+    
     # ========== 阶段3: AI分析 ==========
     print(f"\n  🤖 阶段3: AI策略分析")
     ai_suggestions = call_ai_for_exit_analysis(exit_analysis, best_params, 'scalping')
@@ -18184,6 +18079,27 @@ def optimize_swing_params(swing_data, current_params):
         print(f"     Stop Loss: {sl['count']}笔 ({sl['rate']:.0f}%) | {sl['tight_count']}笔过紧")
         print(f"     Take Profit: {tp['count']}笔 ({tp['rate']:.0f}%) | {tp['early_count']}笔过早")
     
+    # ========== 【V8.3.13.4】多时间框架分析 ==========
+    print(f"\n  📊 【V8.3.13.4】多时间框架分析")
+    timeframe_analysis = analyze_multi_timeframe_exits(
+        exit_details=detailed_result['exit_details'],
+        timeframes=['1H', '4H']
+    )
+    
+    if timeframe_analysis:
+        for tf, stats in timeframe_analysis.items():
+            print(f"     {tf}: {stats['total_count']}笔, Time Exit率{stats['time_exit_rate']*100:.0f}%, 平均持仓{stats['avg_holding_time']:.1f}h")
+        
+        # 生成建议
+        tf_recommendations = generate_timeframe_recommendations(
+            timeframe_analysis=timeframe_analysis,
+            signal_type='swing'
+        )
+        
+        if tf_recommendations:
+            print(f"     💡 建议: {tf_recommendations['recommended_timeframe']}时间框架")
+            print(f"        {tf_recommendations['reason']}")
+    
     # ========== 阶段3: AI分析 ==========
     print(f"\n  🤖 阶段3: AI策略分析")
     ai_suggestions = call_ai_for_exit_analysis(exit_analysis, best_params, 'swing')
@@ -18224,325 +18140,6 @@ def optimize_swing_params(swing_data, current_params):
     }
 
 
-
-# ==================================================
-# 【V8.3.13.3】Per-Symbol优化
-# ==================================================
-
-def analyze_per_symbol_opportunities(market_snapshots, old_config, symbols=None):
-    """
-    【V8.3.13.3】分析每个币种的分离机会
-    
-    返回:
-    {
-        'BTC': {
-            'scalping': {...},
-            'swing': {...}
-        },
-        ...
-    }
-    """
-    try:
-        import pandas as pd
-        
-        if symbols is None:
-            symbols = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'LTC']
-        
-        per_symbol_data = {}
-        
-        print(f"  🔍 【V8.3.13.3】Per-Symbol分析")
-        
-        for symbol in symbols:
-            symbol_data = market_snapshots[market_snapshots['coin'] == symbol]
-            
-            if len(symbol_data) < 100:
-                print(f"    ⚠️  {symbol}: 数据不足（{len(symbol_data)}条）")
-                continue
-            
-            # 复用V8.3.12的函数
-            separated = analyze_separated_opportunities(symbol_data, old_config)
-            per_symbol_data[symbol] = separated
-            
-            scalping_count = separated['scalping']['total_opportunities']
-            swing_count = separated['swing']['total_opportunities']
-            print(f"    📊 {symbol}: ⚡{scalping_count}个scalping, 🌊{swing_count}个swing")
-        
-        return per_symbol_data
-        
-    except Exception as e:
-        print(f"⚠️ Per-symbol分析失败: {e}")
-        import traceback
-        traceback.print_exc()
-        return {}
-
-
-
-
-def optimize_per_symbol_params(per_symbol_data, global_config):
-    """
-    【V8.3.13.3】为每个币种优化参数
-    """
-    try:
-        optimized_params = {}
-        
-        for symbol, data in per_symbol_data.items():
-            print(f"\n  🔧 优化{symbol}参数...")
-            
-            symbol_result = {
-                'scalping_params': {},
-                'swing_params': {},
-                'improvement': {}
-            }
-            
-            # 优化scalping
-            if data['scalping']['total_opportunities'] >= 20:
-                scalping_opt = optimize_scalping_params(
-                    scalping_data=data['scalping'],
-                    current_params=global_config.get('scalping_params', {})
-                )
-                symbol_result['scalping_params'] = scalping_opt['optimized_params']
-                symbol_result['improvement']['scalping'] = scalping_opt.get('improvement')
-                
-                old_te = scalping_opt['old_time_exit_rate']
-                new_te = scalping_opt['new_time_exit_rate']
-                print(f"    ⚡ Scalping: time_exit {old_te*100:.0f}% → {new_te*100:.0f}%")
-            
-            # 优化swing
-            if data['swing']['total_opportunities'] >= 20:
-                swing_opt = optimize_swing_params(
-                    swing_data=data['swing'],
-                    current_params=global_config.get('swing_params', {})
-                )
-                symbol_result['swing_params'] = swing_opt['optimized_params']
-                symbol_result['improvement']['swing'] = swing_opt.get('improvement')
-                
-                old_profit = swing_opt['old_avg_profit']
-                new_profit = swing_opt['new_avg_profit']
-                print(f"    🌊 Swing: 利润 {old_profit:.1f}% → {new_profit:.1f}%")
-            
-            optimized_params[symbol] = symbol_result
-        
-        return optimized_params
-        
-    except Exception as e:
-        print(f"⚠️ Per-symbol优化失败: {e}")
-        import traceback
-        traceback.print_exc()
-        return {}
-
-
-
-
-def get_per_symbol_params(symbol, signal_type, learning_config):
-    """
-    【V8.3.13.3】获取币种专属参数
-    
-    优先级:
-    1. per_symbol_params[symbol][signal_type]
-    2. signal_type_params
-    3. global params
-    """
-    try:
-        # 优先级1
-        per_symbol = learning_config.get('per_symbol_params', {}).get(symbol, {})
-        key = 'scalping_params' if signal_type == 'scalping' else 'swing_params'
-        params = per_symbol.get(key, {})
-        if params:
-            return params
-        
-        # 优先级2
-        if signal_type == 'scalping':
-            return learning_config.get('scalping_params', {})
-        else:
-            return learning_config.get('swing_params', {})
-            
-    except:
-        return learning_config.get('global', {})
-
-
-# ==================================================
-# 【V8.3.13.4】多时间框架分析
-# ==================================================
-
-
-
-def analyze_multi_timeframe_exits(exit_details, timeframes=['1H', '4H']):
-    """
-    【V8.3.13.4】分析不同时间框架的exit patterns
-    """
-    try:
-        if not exit_details:
-            return None
-        
-        analysis = {}
-        
-        for tf in timeframes:
-            # 根据时间框架过滤
-            if tf == '1H':
-                filtered = [d for d in exit_details if d.get('holding_hours', 0) < 2]
-            elif tf == '4H':
-                filtered = [d for d in exit_details if d.get('holding_hours', 0) >= 2]
-            else:
-                filtered = exit_details
-            
-            if not filtered:
-                continue
-            
-            time_exits = [d for d in filtered if d['exit_type'] == 'time_exit']
-            take_profits = [d for d in filtered if d['exit_type'] == 'take_profit']
-            
-            analysis[tf] = {
-                'total_count': len(filtered),
-                'time_exit_rate': len(time_exits) / len(filtered) if filtered else 0,
-                'avg_missed_profit': sum(d.get('missed_profit', 0) for d in time_exits) / len(time_exits) if time_exits else 0,
-                'avg_holding_time': sum(d.get('holding_hours', 0) for d in filtered) / len(filtered) if filtered else 0,
-                'tp_avg_time': sum(d.get('holding_hours', 0) for d in take_profits) / len(take_profits) if take_profits else 0
-            }
-        
-        return analysis
-        
-    except Exception as e:
-        print(f"⚠️ 多时间框架分析失败: {e}")
-        return None
-
-
-
-
-def generate_timeframe_recommendations(timeframe_analysis, signal_type):
-    """
-    【V8.3.13.4】生成时间框架优化建议
-    """
-    try:
-        if not timeframe_analysis:
-            return None
-        
-        recommendations = {
-            'recommended_timeframe': None,
-            'recommended_holding_hours': None,
-            'reason': '',
-            'expected_improvement': ''
-        }
-        
-        # 超短线：选择Time Exit率低的
-        if signal_type == 'scalping':
-            tf_1h = timeframe_analysis.get('1H', {})
-            tf_4h = timeframe_analysis.get('4H', {})
-            
-            if tf_1h and tf_4h:
-                if tf_1h['time_exit_rate'] < tf_4h['time_exit_rate']:
-                    recommendations['recommended_timeframe'] = '1H'
-                    recommendations['recommended_holding_hours'] = tf_1h['tp_avg_time']
-                    recommendations['reason'] = f"1H时间框架Time Exit率更低（{tf_1h['time_exit_rate']*100:.0f}% vs {tf_4h['time_exit_rate']*100:.0f}%）"
-                else:
-                    recommendations['recommended_timeframe'] = '4H'
-                    recommendations['recommended_holding_hours'] = tf_4h['tp_avg_time']
-                    recommendations['reason'] = f"4H时间框架Time Exit率更低"
-        
-        # 波段：选择4H
-        else:
-            tf_4h = timeframe_analysis.get('4H', {})
-            if tf_4h:
-                recommendations['recommended_timeframe'] = '4H'
-                recommendations['recommended_holding_hours'] = tf_4h.get('avg_holding_time', 24)
-                recommendations['reason'] = "波段交易适合4H时间框架"
-        
-        recommendations['expected_improvement'] = f"预计Time Exit率降低5-10%"
-        
-        return recommendations
-        
-    except Exception as e:
-        print(f"⚠️ 时间框架建议生成失败: {e}")
-        return None
-
-
-# ==================================================
-# 【V8.3.13.6】实时策略切换增强
-# ==================================================
-
-
-
-def select_strategy_by_market_state(atr_pct, signal_type, current_params):
-    """
-    【V8.3.13.6】根据市场状态动态选择策略
-    """
-    try:
-        adjusted_params = current_params.copy()
-        
-        # 高波动
-        if atr_pct > 2.5:
-            if signal_type == 'scalping':
-                adjusted_params['atr_stop_multiplier'] = current_params.get('atr_stop_multiplier', 1.0) * 1.3
-                adjusted_params['max_holding_hours'] = current_params.get('max_holding_hours', 1.5) * 0.8
-                strategy_note = "高波动：扩大止损30%，缩短持仓20%"
-            else:
-                adjusted_params['use_sr_levels'] = False
-                adjusted_params['atr_stop_multiplier'] = current_params.get('atr_stop_multiplier', 2.0) * 1.2
-                strategy_note = "高波动：使用ATR止损"
-        
-        # 低波动
-        elif atr_pct < 1.0:
-            if signal_type == 'scalping':
-                adjusted_params['atr_tp_multiplier'] = current_params.get('atr_tp_multiplier', 1.5) * 0.8
-                adjusted_params['max_holding_hours'] = current_params.get('max_holding_hours', 1.5) * 1.2
-                strategy_note = "低波动：缩小止盈20%，延长持仓20%"
-            else:
-                adjusted_params['use_sr_levels'] = True
-                adjusted_params['atr_tp_multiplier'] = current_params.get('atr_tp_multiplier', 6.0) * 0.9
-                strategy_note = "低波动：优先SR levels"
-        
-        # 正常波动
-        else:
-            strategy_note = "正常波动：标准参数"
-        
-        return adjusted_params, strategy_note
-        
-    except Exception as e:
-        print(f"⚠️ 策略选择失败: {e}")
-        return current_params, "默认参数"
-
-
-# ==================================================
-# 【V8.3.13.5】RL框架设计（仅框架）
-# ==================================================
-
-
-
-class TradingEnvironment:
-    """【V8.3.13.5】交易环境 - RL框架（框架设计，暂不实现）"""
-    def __init__(self, historical_data):
-        self.data = historical_data
-        self.current_step = 0
-        self.current_params = {}
-    
-    def reset(self):
-        """重置环境"""
-        self.current_step = 0
-        return {}
-    
-    def step(self, action):
-        """执行动作，返回(state, reward, done, info)"""
-        return {}, 0, False, {}
-
-
-
-
-class ParameterAgent:
-    """【V8.3.13.5】参数优化智能体 - RL框架（框架设计，暂不实现）"""
-    def __init__(self):
-        self.policy_network = None
-        self.value_network = None
-    
-    def select_params(self, state):
-        """选择参数"""
-        return {}
-    
-    def update(self, experience):
-        """更新策略"""
-        pass
-
-
-
-
 # ==================================================
 # 【V8.3.13.3】Per-Symbol优化
 # ==================================================
@@ -18843,6 +18440,7 @@ class ParameterAgent:
     def update(self, experience):
         """更新策略"""
         pass
+
 
 def analyze_missed_opportunities(trends, actual_trades, config):
     """
