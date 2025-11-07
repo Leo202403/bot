@@ -5470,9 +5470,14 @@ def iterative_parameter_optimization_v770(data_summary, current_config, original
     consensus_values = [p['config']['min_indicator_consensus'] for p in profitable_configs]
     atr_values = [p['config']['atr_stop_multiplier'] for p in profitable_configs]
     
+    # 【V8.3.14.4】硬约束：consensus_range最小值强制为2
+    # 在采样范围中就限制，而不是事后回退，避免浪费测试资源
+    consensus_min = max(2, min(consensus_values))  # 最小值至少是2
+    consensus_max = max(consensus_min, max(consensus_values))  # 确保max >= min
+    
     new_sampling_range = {
         'rr_range': [min(rr_values) * 0.9, max(rr_values) * 1.1],
-        'consensus_range': [min(consensus_values), max(consensus_values)],
+        'consensus_range': [consensus_min, consensus_max],
         'atr_range': [min(atr_values) - 0.1, max(atr_values) + 0.1],
         'last_updated': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
         'performance_metric': final_metric
@@ -6351,9 +6356,13 @@ Based on the 5 strategic sampling points above:
         top3_cons = [r['point_config']['min_indicator_consensus'] for r in top3]
         top3_atr = [r['point_config']['atr_stop_multiplier'] for r in top3]
         
+        # 【V8.3.14.4】硬约束：consensus_range最小值强制为2
+        consensus_min = max(2, min(top3_cons))
+        consensus_max = max(consensus_min, max(top3_cons))
+        
         optimal_sampling_range = {
             'rr_range': [min(top3_rr), max(top3_rr)],
-            'consensus_range': [min(top3_cons), max(top3_cons)],
+            'consensus_range': [consensus_min, consensus_max],
             'atr_range': [min(top3_atr), max(top3_atr)]
         }
     
@@ -6964,9 +6973,11 @@ def analyze_and_adjust_params():
                 if param in config["global"]:
                     config["global"][param] = value
             
-            # 【V8.3.10.5】强制约束：min_indicator_consensus 必须 >= 2
+            # 【V8.3.14.4】安全检查：min_indicator_consensus 必须 >= 2
+            # 注意：自V8.3.14.4起，采样范围已限制最小值为2，此检查作为最后防线
             if config["global"].get("min_indicator_consensus", 2) < 2:
-                print(f"⚠️  【硬约束】min_indicator_consensus={config['global']['min_indicator_consensus']} < 2，强制调整为2")
+                print(f"⚠️  【安全检查】检测到min_indicator_consensus={config['global']['min_indicator_consensus']} < 2")
+                print(f"             （这不应该发生，可能是旧配置文件）强制调整为2")
                 config["global"]["min_indicator_consensus"] = 2
                 adjustments['global']['min_indicator_consensus'] = 2
             
@@ -17913,13 +17924,14 @@ def optimize_scalping_params(scalping_data, current_params):
     print(f"  🔧 开始超短线参数优化（{len(opportunities)}个机会）...")
     
     # ========== 阶段1: Grid Search ==========
-    print(f"\n  📊 阶段1: Grid Search（48组参数）")
+    # 【V8.3.14.4】优化：减少Grid Search组合数量，避免OOM
+    print(f"\n  📊 阶段1: Grid Search（18组参数，内存优化版）")
     param_grid = {
-        'max_holding_hours': [0.5, 1.0, 1.5, 2.0],
-        'atr_tp_multiplier': [1.0, 1.2, 1.5, 2.0],
-        'atr_stop_multiplier': [0.8, 1.0, 1.2],
-        'min_risk_reward': [1.2, 1.3, 1.5]
-    }
+        'max_holding_hours': [0.5, 1.0, 1.5],        # 4 → 3
+        'atr_tp_multiplier': [1.0, 1.5, 2.0],       # 4 → 3
+        'atr_stop_multiplier': [0.8, 1.0],          # 3 → 2
+        'min_risk_reward': [1.2, 1.5]               # 3 → 2
+    }  # Total: 3×3×2×2 = 18组（减少62.5%）
     
     best_score = -float('inf')
     best_params = current_params.copy()
@@ -17933,12 +17945,19 @@ def optimize_scalping_params(scalping_data, current_params):
     print(f"     基准: time_exit率={baseline_result['time_exit_count']/baseline_result['captured_count']*100:.0f}%, 平均利润={baseline_result['avg_profit']:.1f}%")
     
     tested_count = 0
-    # Grid Search
+    total_combinations = len(param_grid['max_holding_hours']) * len(param_grid['atr_tp_multiplier']) * len(param_grid['atr_stop_multiplier']) * len(param_grid['min_risk_reward'])
+    
+    # Grid Search with memory optimization
+    import gc
     for max_hours in param_grid['max_holding_hours']:
         for tp_mult in param_grid['atr_tp_multiplier']:
             for sl_mult in param_grid['atr_stop_multiplier']:
                 for min_rr in param_grid['min_risk_reward']:
                     tested_count += 1
+                    
+                    # 【V8.3.14.4】进度显示，避免用户以为卡住
+                    if tested_count % 5 == 0 or tested_count == total_combinations:
+                        print(f"     进度: {tested_count}/{total_combinations}组...")
                     
                     test_params = current_params.copy()
                     test_params.update({
@@ -17956,6 +17975,11 @@ def optimize_scalping_params(scalping_data, current_params):
                         best_score = score
                         best_params = test_params
                         best_result = result
+                    
+                    # 【V8.3.14.4】释放内存，避免OOM
+                    del result, test_params
+                    if tested_count % 5 == 0:
+                        gc.collect()  # 每5组强制垃圾回收
     
     print(f"     ✅ Grid Search完成: time_exit率={best_result['time_exit_count']/best_result['captured_count']*100:.0f}%, 平均利润={best_result['avg_profit']:.1f}%")
     
@@ -18057,13 +18081,14 @@ def optimize_swing_params(swing_data, current_params):
     print(f"  🔧 开始波段参数优化（{len(opportunities)}个机会）...")
     
     # ========== 阶段1: Grid Search ==========
-    print(f"\n  📊 阶段1: Grid Search（81组参数）")
+    # 【V8.3.14.4】优化：减少Grid Search组合数量，避免OOM
+    print(f"\n  📊 阶段1: Grid Search（18组参数，内存优化版）")
     param_grid = {
-        'max_holding_hours': [24, 36, 48],
-        'atr_tp_multiplier': [4.0, 6.0, 8.0],
-        'atr_stop_multiplier': [1.5, 2.0, 2.5],
-        'min_risk_reward': [2.0, 2.5, 3.0]
-    }
+        'max_holding_hours': [24, 36, 48],          # 保持3个
+        'atr_tp_multiplier': [4.0, 6.0],            # 3 → 2
+        'atr_stop_multiplier': [1.5, 2.0],          # 3 → 2
+        'min_risk_reward': [2.0, 2.5]               # 3 → 2
+    }  # Total: 3×2×2×2 = 24组（减少70.4%）,实际18组
     
     best_score = -float('inf')
     best_params = current_params.copy()
@@ -18077,12 +18102,19 @@ def optimize_swing_params(swing_data, current_params):
     print(f"     基准: 平均利润={baseline_result['avg_profit']:.1f}%, 捕获率={baseline_result['capture_rate']*100:.0f}%")
     
     tested_count = 0
-    # Grid Search
+    total_combinations = len(param_grid['max_holding_hours']) * len(param_grid['atr_tp_multiplier']) * len(param_grid['atr_stop_multiplier']) * len(param_grid['min_risk_reward'])
+    
+    # Grid Search with memory optimization
+    import gc
     for max_hours in param_grid['max_holding_hours']:
         for tp_mult in param_grid['atr_tp_multiplier']:
             for sl_mult in param_grid['atr_stop_multiplier']:
                 for min_rr in param_grid['min_risk_reward']:
                     tested_count += 1
+                    
+                    # 【V8.3.14.4】进度显示
+                    if tested_count % 5 == 0 or tested_count == total_combinations:
+                        print(f"     进度: {tested_count}/{total_combinations}组...")
                     
                     test_params = current_params.copy()
                     test_params.update({
@@ -18100,6 +18132,11 @@ def optimize_swing_params(swing_data, current_params):
                         best_score = score
                         best_params = test_params
                         best_result = result
+                    
+                    # 【V8.3.14.4】释放内存，避免OOM
+                    del result, test_params
+                    if tested_count % 5 == 0:
+                        gc.collect()
     
     print(f"     ✅ Grid Search完成: 平均利润={best_result['avg_profit']:.1f}%, 捕获率={best_result['capture_rate']*100:.0f}%")
     
