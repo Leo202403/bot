@@ -8469,6 +8469,63 @@ def detect_engulfing(prev_ohlc, curr_ohlc):
         return None
 
 
+def get_pattern_based_tp_sl(entry_price, direction, pattern_type, pattern_data, atr):
+    """
+    【V8.3.13.2】根据形态类型返回推荐的TP/SL
+    
+    参数:
+        entry_price: 入场价格
+        direction: 'long' or 'short'
+        pattern_type: 'bullish_pin', 'bearish_pin', 'bullish_engulfing', 'bearish_engulfing'
+        pattern_data: dict包含形态数据 {'high': xx, 'low': xx, 'open': xx, 'close': xx}
+        atr: ATR值
+    
+    返回:
+        {'stop_loss': xx, 'take_profit': xx} or None
+    """
+    try:
+        if not pattern_data or not isinstance(pattern_data, dict):
+            return None
+        
+        high = pattern_data.get('high', entry_price)
+        low = pattern_data.get('low', entry_price)
+        
+        if high <= 0 or low <= 0 or high <= low:
+            return None
+        
+        # Pin Bar策略
+        if pattern_type == 'bullish_pin' and direction == 'long':
+            # 多头Pin Bar: SL = Pin低点 - 0.2*ATR, TP = Pin高点 + 0.5*ATR
+            stop_loss = low - atr * 0.2
+            take_profit = high + atr * 0.5
+            return {'stop_loss': stop_loss, 'take_profit': take_profit}
+        
+        elif pattern_type == 'bearish_pin' and direction == 'short':
+            # 空头Pin Bar: SL = Pin高点 + 0.2*ATR, TP = Pin低点 - 0.5*ATR
+            stop_loss = high + atr * 0.2
+            take_profit = low - atr * 0.5
+            return {'stop_loss': stop_loss, 'take_profit': take_profit}
+        
+        # Engulfing策略
+        elif pattern_type == 'bullish_engulfing' and direction == 'long':
+            # 多头吞没: SL = 吞没K线低点 - 0.3*ATR, TP = 吞没K线高点 + 1.0*ATR
+            stop_loss = low - atr * 0.3
+            take_profit = high + atr * 1.0
+            return {'stop_loss': stop_loss, 'take_profit': take_profit}
+        
+        elif pattern_type == 'bearish_engulfing' and direction == 'short':
+            # 空头吞没: SL = 吞没K线高点 + 0.3*ATR, TP = 吞没K线低点 - 1.0*ATR
+            stop_loss = high + atr * 0.3
+            take_profit = low - atr * 1.0
+            return {'stop_loss': stop_loss, 'take_profit': take_profit}
+        
+        else:
+            return None
+            
+    except Exception as e:
+        return None
+
+
 def detect_breakout_candle(curr_ohlc, prev_high, avg_volume):
     """识别突破性大阳线（Breakout Candle）"""
     try:
@@ -16850,6 +16907,121 @@ def analyze_opportunities_with_new_params(market_snapshots, actual_trades, new_c
     }
 
 
+def _simulate_trade_with_params_enhanced(entry_price, direction, atr, future_data, 
+                                          signal_score, consensus, risk_reward,
+                                          min_signal_score, min_consensus, min_risk_reward, 
+                                          atr_stop_multiplier, atr_tp_multiplier=None,
+                                          max_holding_hours=None, signal_type='scalping',
+                                          support=None, resistance=None, pattern_type=None,
+                                          pattern_data=None):
+    """
+    【V8.3.13.1】增强版模拟函数 - 支持SR Levels + 形态识别
+    
+    新增功能:
+    - signal_type: 'scalping' or 'swing'
+    - support/resistance: SR levels for swing trades
+    - pattern_type: 形态类型 ('bullish_pin', 'bearish_pin', etc.)
+    - pattern_data: 形态数据 (high, low, etc.)
+    
+    优先级:
+    1. 形态识别 (scalping优先)
+    2. SR Levels (swing优先)
+    3. ATR-based (默认)
+    """
+    # 1. 判断是否会入场
+    can_entry = (
+        signal_score >= min_signal_score and
+        consensus >= min_consensus and
+        risk_reward >= min_risk_reward
+    )
+    
+    if not can_entry:
+        return {'can_entry': False, 'profit': 0, 'exit_type': 'no_entry'}
+    
+    # 2. 计算TP/SL
+    if atr <= 0:
+        atr = entry_price * 0.02
+    
+    # 优先级1: 形态识别 (scalping)
+    if pattern_type and pattern_data and signal_type == 'scalping':
+        tp_sl = get_pattern_based_tp_sl(entry_price, direction, pattern_type, pattern_data, atr)
+        if tp_sl:
+            stop_loss = tp_sl['stop_loss']
+            take_profit = tp_sl['take_profit']
+        else:
+            # Fallback
+            stop_loss_distance = atr * atr_stop_multiplier
+            take_profit_distance = atr * (atr_tp_multiplier or atr_stop_multiplier * min_risk_reward)
+            stop_loss = entry_price - stop_loss_distance if direction == 'long' else entry_price + stop_loss_distance
+            take_profit = entry_price + take_profit_distance if direction == 'long' else entry_price - take_profit_distance
+    
+    # 优先级2: SR Levels (swing)
+    elif signal_type == 'swing' and support and resistance:
+        sr_margin = atr * 0.3
+        if direction == 'long':
+            stop_loss = (support - sr_margin) if support > 0 else (entry_price - atr * atr_stop_multiplier)
+            take_profit = (resistance + sr_margin) if resistance > 0 else (entry_price + atr * (atr_tp_multiplier or 6.0))
+            
+            # 验证合理性
+            if (entry_price - stop_loss) <= 0 or (take_profit - entry_price) <= 0 or ((take_profit - entry_price) / (entry_price - stop_loss)) < 1.5:
+                stop_loss = entry_price - atr * atr_stop_multiplier
+                take_profit = entry_price + atr * (atr_tp_multiplier or 6.0)
+        else:
+            stop_loss = (resistance + sr_margin) if resistance > 0 else (entry_price + atr * atr_stop_multiplier)
+            take_profit = (support - sr_margin) if support > 0 else (entry_price - atr * (atr_tp_multiplier or 6.0))
+            
+            if (stop_loss - entry_price) <= 0 or (entry_price - take_profit) <= 0 or ((entry_price - take_profit) / (stop_loss - entry_price)) < 1.5:
+                stop_loss = entry_price + atr * atr_stop_multiplier
+                take_profit = entry_price - atr * (atr_tp_multiplier or 6.0)
+    
+    # 优先级3: ATR-based
+    else:
+        stop_loss_distance = atr * atr_stop_multiplier
+        take_profit_distance = atr * (atr_tp_multiplier or atr_stop_multiplier * min_risk_reward)
+        
+        if direction == 'long':
+            stop_loss = entry_price - stop_loss_distance
+            take_profit = entry_price + take_profit_distance
+        else:
+            stop_loss = entry_price + stop_loss_distance
+            take_profit = entry_price - take_profit_distance
+    
+    # 3. 模拟交易
+    if future_data.empty:
+        return {'can_entry': True, 'profit': 0, 'exit_type': 'no_data'}
+    
+    max_candles = None
+    if max_holding_hours:
+        max_candles = int(max_holding_hours * 4)
+    
+    for idx, row in future_data.iterrows():
+        if max_candles and idx >= max_candles:
+            close_price = float(row.get('close', entry_price))
+            profit_pct = (close_price - entry_price) / entry_price * 100 if direction == 'long' else (entry_price - close_price) / entry_price * 100
+            return {'can_entry': True, 'profit': profit_pct, 'exit_type': 'time_exit'}
+        
+        high = float(row.get('high', row.get('close', 0)))
+        low = float(row.get('low', row.get('close', 0)))
+        
+        if high <= 0 or low <= 0:
+            continue
+        
+        if direction == 'long':
+            if low <= stop_loss:
+                return {'can_entry': True, 'profit': (stop_loss - entry_price) / entry_price * 100, 'exit_type': 'stop_loss'}
+            if high >= take_profit:
+                return {'can_entry': True, 'profit': (take_profit - entry_price) / entry_price * 100, 'exit_type': 'take_profit'}
+        else:
+            if high >= stop_loss:
+                return {'can_entry': True, 'profit': (entry_price - stop_loss) / entry_price * 100, 'exit_type': 'stop_loss'}
+            if low <= take_profit:
+                return {'can_entry': True, 'profit': (entry_price - take_profit) / entry_price * 100, 'exit_type': 'take_profit'}
+    
+    last_close = float(future_data.iloc[-1].get('close', entry_price))
+    profit_pct = (last_close - entry_price) / entry_price * 100 if direction == 'long' else (entry_price - last_close) / entry_price * 100
+    return {'can_entry': True, 'profit': profit_pct, 'exit_type': 'holding'}
+
+
 def _simulate_trade_with_params(entry_price, direction, atr, future_data, 
                                  signal_score, consensus, risk_reward,
                                  min_signal_score, min_consensus, min_risk_reward, 
@@ -17874,6 +18046,308 @@ def optimize_swing_params(swing_data, current_params):
         'ai_suggestions': ai_suggestions,
         'improvement': 'with_ai' if ai_suggestions else 'grid_only'
     }
+
+
+# ==================================================
+# 【V8.3.13.3】Per-Symbol优化
+# ==================================================
+
+def analyze_per_symbol_opportunities(market_snapshots, old_config, symbols=None):
+    """
+    【V8.3.13.3】分析每个币种的分离机会
+    
+    返回:
+    {
+        'BTC': {
+            'scalping': {...},
+            'swing': {...}
+        },
+        ...
+    }
+    """
+    try:
+        import pandas as pd
+        
+        if symbols is None:
+            symbols = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'LTC']
+        
+        per_symbol_data = {}
+        
+        print(f"  🔍 【V8.3.13.3】Per-Symbol分析")
+        
+        for symbol in symbols:
+            symbol_data = market_snapshots[market_snapshots['coin'] == symbol]
+            
+            if len(symbol_data) < 100:
+                print(f"    ⚠️  {symbol}: 数据不足（{len(symbol_data)}条）")
+                continue
+            
+            # 复用V8.3.12的函数
+            separated = analyze_separated_opportunities(symbol_data, old_config)
+            per_symbol_data[symbol] = separated
+            
+            scalping_count = separated['scalping']['total_opportunities']
+            swing_count = separated['swing']['total_opportunities']
+            print(f"    📊 {symbol}: ⚡{scalping_count}个scalping, 🌊{swing_count}个swing")
+        
+        return per_symbol_data
+        
+    except Exception as e:
+        print(f"⚠️ Per-symbol分析失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return {}
+
+
+def optimize_per_symbol_params(per_symbol_data, global_config):
+    """
+    【V8.3.13.3】为每个币种优化参数
+    """
+    try:
+        optimized_params = {}
+        
+        for symbol, data in per_symbol_data.items():
+            print(f"\n  🔧 优化{symbol}参数...")
+            
+            symbol_result = {
+                'scalping_params': {},
+                'swing_params': {},
+                'improvement': {}
+            }
+            
+            # 优化scalping
+            if data['scalping']['total_opportunities'] >= 20:
+                scalping_opt = optimize_scalping_params(
+                    scalping_data=data['scalping'],
+                    current_params=global_config.get('scalping_params', {})
+                )
+                symbol_result['scalping_params'] = scalping_opt['optimized_params']
+                symbol_result['improvement']['scalping'] = scalping_opt.get('improvement')
+                
+                old_te = scalping_opt['old_time_exit_rate']
+                new_te = scalping_opt['new_time_exit_rate']
+                print(f"    ⚡ Scalping: time_exit {old_te*100:.0f}% → {new_te*100:.0f}%")
+            
+            # 优化swing
+            if data['swing']['total_opportunities'] >= 20:
+                swing_opt = optimize_swing_params(
+                    swing_data=data['swing'],
+                    current_params=global_config.get('swing_params', {})
+                )
+                symbol_result['swing_params'] = swing_opt['optimized_params']
+                symbol_result['improvement']['swing'] = swing_opt.get('improvement')
+                
+                old_profit = swing_opt['old_avg_profit']
+                new_profit = swing_opt['new_avg_profit']
+                print(f"    🌊 Swing: 利润 {old_profit:.1f}% → {new_profit:.1f}%")
+            
+            optimized_params[symbol] = symbol_result
+        
+        return optimized_params
+        
+    except Exception as e:
+        print(f"⚠️ Per-symbol优化失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return {}
+
+
+def get_per_symbol_params(symbol, signal_type, learning_config):
+    """
+    【V8.3.13.3】获取币种专属参数
+    
+    优先级:
+    1. per_symbol_params[symbol][signal_type]
+    2. signal_type_params
+    3. global params
+    """
+    try:
+        # 优先级1
+        per_symbol = learning_config.get('per_symbol_params', {}).get(symbol, {})
+        key = 'scalping_params' if signal_type == 'scalping' else 'swing_params'
+        params = per_symbol.get(key, {})
+        if params:
+            return params
+        
+        # 优先级2
+        if signal_type == 'scalping':
+            return learning_config.get('scalping_params', {})
+        else:
+            return learning_config.get('swing_params', {})
+            
+    except:
+        return learning_config.get('global', {})
+
+
+# ==================================================
+# 【V8.3.13.4】多时间框架分析
+# ==================================================
+
+def analyze_multi_timeframe_exits(exit_details, timeframes=['1H', '4H']):
+    """
+    【V8.3.13.4】分析不同时间框架的exit patterns
+    """
+    try:
+        if not exit_details:
+            return None
+        
+        analysis = {}
+        
+        for tf in timeframes:
+            # 根据时间框架过滤
+            if tf == '1H':
+                filtered = [d for d in exit_details if d.get('holding_hours', 0) < 2]
+            elif tf == '4H':
+                filtered = [d for d in exit_details if d.get('holding_hours', 0) >= 2]
+            else:
+                filtered = exit_details
+            
+            if not filtered:
+                continue
+            
+            time_exits = [d for d in filtered if d['exit_type'] == 'time_exit']
+            take_profits = [d for d in filtered if d['exit_type'] == 'take_profit']
+            
+            analysis[tf] = {
+                'total_count': len(filtered),
+                'time_exit_rate': len(time_exits) / len(filtered) if filtered else 0,
+                'avg_missed_profit': sum(d.get('missed_profit', 0) for d in time_exits) / len(time_exits) if time_exits else 0,
+                'avg_holding_time': sum(d.get('holding_hours', 0) for d in filtered) / len(filtered) if filtered else 0,
+                'tp_avg_time': sum(d.get('holding_hours', 0) for d in take_profits) / len(take_profits) if take_profits else 0
+            }
+        
+        return analysis
+        
+    except Exception as e:
+        print(f"⚠️ 多时间框架分析失败: {e}")
+        return None
+
+
+def generate_timeframe_recommendations(timeframe_analysis, signal_type):
+    """
+    【V8.3.13.4】生成时间框架优化建议
+    """
+    try:
+        if not timeframe_analysis:
+            return None
+        
+        recommendations = {
+            'recommended_timeframe': None,
+            'recommended_holding_hours': None,
+            'reason': '',
+            'expected_improvement': ''
+        }
+        
+        # 超短线：选择Time Exit率低的
+        if signal_type == 'scalping':
+            tf_1h = timeframe_analysis.get('1H', {})
+            tf_4h = timeframe_analysis.get('4H', {})
+            
+            if tf_1h and tf_4h:
+                if tf_1h['time_exit_rate'] < tf_4h['time_exit_rate']:
+                    recommendations['recommended_timeframe'] = '1H'
+                    recommendations['recommended_holding_hours'] = tf_1h['tp_avg_time']
+                    recommendations['reason'] = f"1H时间框架Time Exit率更低（{tf_1h['time_exit_rate']*100:.0f}% vs {tf_4h['time_exit_rate']*100:.0f}%）"
+                else:
+                    recommendations['recommended_timeframe'] = '4H'
+                    recommendations['recommended_holding_hours'] = tf_4h['tp_avg_time']
+                    recommendations['reason'] = f"4H时间框架Time Exit率更低"
+        
+        # 波段：选择4H
+        else:
+            tf_4h = timeframe_analysis.get('4H', {})
+            if tf_4h:
+                recommendations['recommended_timeframe'] = '4H'
+                recommendations['recommended_holding_hours'] = tf_4h.get('avg_holding_time', 24)
+                recommendations['reason'] = "波段交易适合4H时间框架"
+        
+        recommendations['expected_improvement'] = f"预计Time Exit率降低5-10%"
+        
+        return recommendations
+        
+    except Exception as e:
+        print(f"⚠️ 时间框架建议生成失败: {e}")
+        return None
+
+
+# ==================================================
+# 【V8.3.13.6】实时策略切换增强
+# ==================================================
+
+def select_strategy_by_market_state(atr_pct, signal_type, current_params):
+    """
+    【V8.3.13.6】根据市场状态动态选择策略
+    """
+    try:
+        adjusted_params = current_params.copy()
+        
+        # 高波动
+        if atr_pct > 2.5:
+            if signal_type == 'scalping':
+                adjusted_params['atr_stop_multiplier'] = current_params.get('atr_stop_multiplier', 1.0) * 1.3
+                adjusted_params['max_holding_hours'] = current_params.get('max_holding_hours', 1.5) * 0.8
+                strategy_note = "高波动：扩大止损30%，缩短持仓20%"
+            else:
+                adjusted_params['use_sr_levels'] = False
+                adjusted_params['atr_stop_multiplier'] = current_params.get('atr_stop_multiplier', 2.0) * 1.2
+                strategy_note = "高波动：使用ATR止损"
+        
+        # 低波动
+        elif atr_pct < 1.0:
+            if signal_type == 'scalping':
+                adjusted_params['atr_tp_multiplier'] = current_params.get('atr_tp_multiplier', 1.5) * 0.8
+                adjusted_params['max_holding_hours'] = current_params.get('max_holding_hours', 1.5) * 1.2
+                strategy_note = "低波动：缩小止盈20%，延长持仓20%"
+            else:
+                adjusted_params['use_sr_levels'] = True
+                adjusted_params['atr_tp_multiplier'] = current_params.get('atr_tp_multiplier', 6.0) * 0.9
+                strategy_note = "低波动：优先SR levels"
+        
+        # 正常波动
+        else:
+            strategy_note = "正常波动：标准参数"
+        
+        return adjusted_params, strategy_note
+        
+    except Exception as e:
+        print(f"⚠️ 策略选择失败: {e}")
+        return current_params, "默认参数"
+
+
+# ==================================================
+# 【V8.3.13.5】RL框架设计（仅框架）
+# ==================================================
+
+class TradingEnvironment:
+    """【V8.3.13.5】交易环境 - RL框架（框架设计，暂不实现）"""
+    def __init__(self, historical_data):
+        self.data = historical_data
+        self.current_step = 0
+        self.current_params = {}
+    
+    def reset(self):
+        """重置环境"""
+        self.current_step = 0
+        return {}
+    
+    def step(self, action):
+        """执行动作，返回(state, reward, done, info)"""
+        return {}, 0, False, {}
+
+
+class ParameterAgent:
+    """【V8.3.13.5】参数优化智能体 - RL框架（框架设计，暂不实现）"""
+    def __init__(self):
+        self.policy_network = None
+        self.value_network = None
+    
+    def select_params(self, state):
+        """选择参数"""
+        return {}
+    
+    def update(self, experience):
+        """更新策略"""
+        pass
 
 
 def analyze_missed_opportunities(trends, actual_trades, config):
