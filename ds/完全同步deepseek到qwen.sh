@@ -65,6 +65,19 @@ echo "  → 3.7 替换打印标识..."
 sed -i '' 's/print.*"DeepSeek/print("Qwen/g' qwen_多币种智能版.py
 sed -i '' 's/print.*".*深度求索/print("通义千问/g' qwen_多币种智能版.py
 
+# 3.7.1 替换Bark group标识（V8.3.16.3新增）
+echo "  → 3.7.1 替换Bark group标识..."
+sed -i '' 's/group=DeepSeek/group=Qwen/g' qwen_多币种智能版.py
+
+# 3.7.2 替换DATA_DIR常量（V8.3.16.3新增）
+echo "  → 3.7.2 替换DATA_DIR常量..."
+sed -i '' 's|DATA_DIR = Path(__file__)\.parent / "trading_data" / "deepseek"|DATA_DIR = Path(__file__).parent / "trading_data" / "qwen"|g' qwen_多币种智能版.py
+
+# 3.7.3 替换MODEL_NAME默认值（V8.3.16.3新增）
+echo "  → 3.7.3 替换MODEL_NAME默认值..."
+sed -i '' 's/os\.getenv("MODEL_NAME", "deepseek")/os.getenv("MODEL_NAME", "qwen")/g' qwen_多币种智能版.py
+sed -i '' "s/os\.getenv('MODEL_NAME', 'deepseek')/os.getenv('MODEL_NAME', 'qwen')/g" qwen_多币种智能版.py
+
 # 3.8 替换.env文件路径（qwen专用）
 echo "  → 3.8 替换.env文件路径..."
 sed -i '' "s|'.env'|'.env.qwen'|g" qwen_多币种智能版.py
@@ -110,7 +123,17 @@ echo "【验证6】max_tokens限制（应<=8192）:"
 grep "max_tokens=" qwen_多币种智能版.py | grep -v "^#" | head -3
 
 echo ""
-echo "【验证7】检查残留的deepseek（应为0或很少）:"
+echo "【验证7】Bark group标识（V8.3.16.3）:"
+grep -c "group=Qwen" qwen_多币种智能版.py || echo "0"
+
+echo "【验证8】DATA_DIR常量（V8.3.16.3）:"
+grep "DATA_DIR.*trading_data.*qwen" qwen_多币种智能版.py | head -1
+
+echo "【验证9】MODEL_NAME默认值（V8.3.16.3）:"
+grep 'MODEL_NAME.*qwen' qwen_多币种智能版.py | grep -v "^#" | head -1
+
+echo ""
+echo "【验证10】检查残留的deepseek（应为0或很少）:"
 grep -i "deepseek" qwen_多币种智能版.py | grep -v "^#" | grep -v "# " | grep -v "说明" | grep -v "注释" | wc -l
 
 echo ""
