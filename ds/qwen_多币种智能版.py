@@ -17835,9 +17835,9 @@ def apply_ai_suggestions(base_params, ai_suggestions, apply_aggressiveness=0.8):
     return adjusted_params
 
 
-def calculate_scalping_score(sim_result):
+def calculate_scalping_optimization_score(sim_result):
     """
-    【V8.3.12】超短线评分函数
+    【V8.3.12】超短线优化评分函数（用于参数优化，不是信号评分）
     
     优先级：
     1. time_exit率越低越好（权重60%）
@@ -17862,9 +17862,9 @@ def calculate_scalping_score(sim_result):
     return total_score
 
 
-def calculate_swing_score(sim_result):
+def calculate_swing_optimization_score(sim_result):
     """
-    【V8.3.12】波段评分函数
+    【V8.3.12】波段优化评分函数（用于参数优化，不是信号评分）
     
     优先级：
     1. 平均利润越高越好（权重50%）
@@ -17928,7 +17928,7 @@ def optimize_scalping_params(scalping_data, current_params):
     # 计算基准表现
     baseline_params = current_params.copy()
     baseline_result = simulate_params_on_opportunities(opportunities, baseline_params)
-    baseline_score = calculate_scalping_score(baseline_result)
+    baseline_score = calculate_scalping_optimization_score(baseline_result)
     
     print(f"     基准: time_exit率={baseline_result['time_exit_count']/baseline_result['captured_count']*100:.0f}%, 平均利润={baseline_result['avg_profit']:.1f}%")
     
@@ -17950,7 +17950,7 @@ def optimize_scalping_params(scalping_data, current_params):
                     
                     # 模拟
                     result = simulate_params_on_opportunities(opportunities, test_params)
-                    score = calculate_scalping_score(result)
+                    score = calculate_scalping_optimization_score(result)
                     
                     if score > best_score:
                         best_score = score
@@ -18072,7 +18072,7 @@ def optimize_swing_params(swing_data, current_params):
     # 计算基准表现
     baseline_params = current_params.copy()
     baseline_result = simulate_params_on_opportunities(opportunities, baseline_params)
-    baseline_score = calculate_swing_score(baseline_result)
+    baseline_score = calculate_swing_optimization_score(baseline_result)
     
     print(f"     基准: 平均利润={baseline_result['avg_profit']:.1f}%, 捕获率={baseline_result['capture_rate']*100:.0f}%")
     
@@ -18094,7 +18094,7 @@ def optimize_swing_params(swing_data, current_params):
                     
                     # 模拟
                     result = simulate_params_on_opportunities(opportunities, test_params)
-                    score = calculate_swing_score(result)
+                    score = calculate_swing_optimization_score(result)
                     
                     if score > best_score:
                         best_score = score
