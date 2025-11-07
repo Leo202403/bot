@@ -2398,6 +2398,10 @@ def save_market_snapshot_v7(market_data_list):
             
             # 【V8.2】计算信号评分的各个维度（保存"原料"而非"成品"）
             try:
+                # 【V8.3.10.3修复】确保data不为None
+                if not data or not isinstance(data, dict):
+                    raise ValueError("Invalid market_data")
+                
                 # 先分类信号类型
                 signal_classification = classify_signal_type(data)
                 signal_type = signal_classification.get('signal_type', 'swing')
