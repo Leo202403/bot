@@ -27,6 +27,13 @@ if not _env_file.exists():
     raise FileNotFoundError(f"❌ 找不到 .env.qwen 文件: {_env_file}")
 load_dotenv(_env_file, override=True)
 
+# ==================== 【V8.3.16】优化配置开关 ====================
+ENABLE_V770_FULL_OPTIMIZATION = False  # V7.7.0完整优化（7-10分钟）
+ENABLE_V770_QUICK_SEARCH = True        # V7.7.0快速探索（3分钟）- 为V8.3.12提供初始参数
+ENABLE_PER_SYMBOL_OPTIMIZATION = False  # Per-Symbol优化（56-91分钟）
+ENABLE_CONDITIONAL_AI_CALL = True       # 条件AI调用（仅Time Exit>80%时）
+AI_AGGRESSIVENESS_DYNAMIC = True        # 动态AI激进度（根据Time Exit率调整）
+
 # ==================== 辅助函数 ====================
 
 def extract_json_from_ai_response(ai_content: str) -> dict:
@@ -5332,6 +5339,106 @@ def iterative_parameter_optimization(data_summary, current_config, original_stat
     return iterative_parameter_optimization_v770(data_summary, current_config, original_stats)
 
 
+def quick_global_search_v8316(data_summary, current_config):
+    """
+    【V8.3.16】快速全局探索（技术债1修复）
+    
+    目的：为V8.3.12分离策略优化提供高质量的初始参数
+    
+    流程：
+    - 只做7组战略采样（V7.7.0阶段1）
+    - 找到盈利范围即返回
+    - 不做盈利扩大和AI优化
+    
+    返回：
+    {
+        'min_risk_reward': float,
+        'min_indicator_consensus': int,
+        'atr_stop_multiplier': float,
+        'found_profitable': bool
+    }
+    
+    耗时：约3分钟（减少5-7分钟vs完整V7.7.0）
+    """
+    print(f"\n{'='*70}")
+    print(f"【V8.3.16 快速全局探索】")
+    print(f"{'='*70}")
+    print(f"  🎯 目标：快速找到盈利参数范围")
+    print(f"  📊 流程：7组战略采样 → 为V8.3.12提供初始值")
+    print(f"  ⏱️  预计：约3分钟")
+    print(f"{'='*70}")
+    
+    days = 7
+    
+    # 读取历史最优采样范围
+    model_name = os.getenv("MODEL_NAME", "deepseek")
+    config_file = Path("trading_data") / model_name / "learning_config.json"
+    historical_sampling_range = None
+    
+    if config_file.exists():
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                saved_config = json.load(f)
+                historical_sampling_range = saved_config.get('optimal_sampling_range')
+                if historical_sampling_range:
+                    print(f"  ℹ️  使用历史最优范围:")
+                    print(f"     R:R [{historical_sampling_range['min_risk_reward'][0]:.2f}, {historical_sampling_range['min_risk_reward'][1]:.2f}]")
+                    print(f"     共识 [{historical_sampling_range['min_indicator_consensus'][0]}, {historical_sampling_range['min_indicator_consensus'][1]}]")
+                    print(f"     ATR [{historical_sampling_range['atr_stop_multiplier'][0]:.2f}, {historical_sampling_range['atr_stop_multiplier'][1]:.2f}]")
+        except Exception as e:
+            print(f"  ⚠️  读取历史范围失败: {e}")
+    
+    # 定义默认采样范围
+    if historical_sampling_range:
+        sampling_range = historical_sampling_range
+    else:
+        sampling_range = {
+            'min_risk_reward': [1.4, 3.5],
+            'min_indicator_consensus': [2, 3],
+            'atr_stop_multiplier': [1.4, 1.9]
+        }
+    
+    # 7组战略采样
+    best_params = None
+    best_profit = -float('inf')
+    found_profitable = False
+    
+    test_points = generate_strategic_samples_v770(sampling_range)
+    
+    print(f"\n  🔍 测试7组战略采样...")
+    for i, test_params in enumerate(test_points):
+        result = backtest_parameters_v760(
+            data_summary=data_summary,
+            min_risk_reward=test_params['min_risk_reward'],
+            min_indicator_consensus=test_params['min_indicator_consensus'],
+            atr_stop_multiplier=test_params['atr_stop_multiplier'],
+            days=days
+        )
+        
+        if result['total_profit'] > best_profit:
+            best_profit = result['total_profit']
+            best_params = test_params.copy()
+            if result['total_profit'] > 0:
+                found_profitable = True
+                print(f"     ✅ 找到盈利配置: R:R={test_params['min_risk_reward']}, 共识={test_params['min_indicator_consensus']}, ATR={test_params['atr_stop_multiplier']:.2f} | 盈利{result['total_profit']:.1f}%")
+    
+    if not best_params:
+        # 使用当前配置作为默认值
+        best_params = {
+            'min_risk_reward': current_config['global'].get('min_risk_reward', 1.5),
+            'min_indicator_consensus': current_config['global'].get('min_indicator_consensus', 2),
+            'atr_stop_multiplier': current_config['global'].get('atr_stop_multiplier', 1.5)
+        }
+    
+    best_params['found_profitable'] = found_profitable
+    
+    print(f"\n  ✅ 快速探索完成:")
+    print(f"     最优参数: R:R={best_params['min_risk_reward']}, 共识={best_params['min_indicator_consensus']}, ATR={best_params['atr_stop_multiplier']:.2f}")
+    print(f"     盈利状态: {'✅ 找到盈利' if found_profitable else '⚠️ 未找到盈利（使用最优亏损点）'}")
+    
+    return best_params
+
+
 def iterative_parameter_optimization_v770(data_summary, current_config, original_stats):
     """
     V7.7.0: 多阶段盈利优先优化
@@ -6892,13 +6999,47 @@ def analyze_and_adjust_params():
             'total_profit': recent_20['盈亏(U)'].sum()
         }
         
-        # 🆕 V7.6.3.3: 执行多轮迭代优化
-        iterative_result = iterative_parameter_optimization(
-            data_summary=data_summary,
-            current_config=config,
-            original_stats=original_stats,
-            max_rounds=5
-        )
+        # 【V8.3.16】技术债1修复：根据配置选择优化模式
+        global_initial_params = None
+        iterative_result = None
+        
+        if ENABLE_V770_QUICK_SEARCH:
+            # 快速探索模式（3分钟）- 为V8.3.12提供初始参数
+            print(f"  ℹ️  使用快速探索模式（V8.3.16）")
+            global_initial_params = quick_global_search_v8316(
+                data_summary=data_summary,
+                current_config=config
+            )
+            
+            # 将快速探索结果作为iterative_result返回（兼容后续代码）
+            iterative_result = {
+                'final_params': global_initial_params,
+                'quick_search_mode': True
+            }
+            
+        elif ENABLE_V770_FULL_OPTIMIZATION:
+            # 完整V7.7.0优化（7-10分钟）
+            print(f"  ℹ️  使用完整V7.7.0优化模式")
+            iterative_result = iterative_parameter_optimization(
+                data_summary=data_summary,
+                current_config=config,
+                original_stats=original_stats,
+                max_rounds=5
+            )
+            global_initial_params = iterative_result.get('final_params') if iterative_result else None
+            
+        else:
+            # 跳过V7.7.0，使用当前配置
+            print(f"  ℹ️  跳过V7.7.0优化，使用当前配置")
+            global_initial_params = {
+                'min_risk_reward': config['global'].get('min_risk_reward', 1.5),
+                'min_indicator_consensus': config['global'].get('min_indicator_consensus', 2),
+                'atr_stop_multiplier': config['global'].get('atr_stop_multiplier', 1.5)
+            }
+            iterative_result = {
+                'final_params': global_initial_params,
+                'skipped': True
+            }
         
         if not iterative_result:
             print("⚠️ 多轮迭代优化失败，使用备用规则引擎")
@@ -7057,12 +7198,26 @@ def analyze_and_adjust_params():
                     old_config=config
                 )
                 
+                # 【V8.3.16】技术债1修复：使用V7.7.0快速探索的结果作为初始参数
+                initial_params_for_scalping = global_initial_params if global_initial_params else {}
+                initial_params_for_swing = global_initial_params if global_initial_params else {}
+                
+                # 合并当前配置中的策略特定参数
+                scalping_current = config.get('scalping_params', {})
+                scalping_current.update(initial_params_for_scalping)
+                
+                swing_current = config.get('swing_params', {})
+                swing_current.update(initial_params_for_swing)
+                
                 # 分别优化超短线参数
                 if separated_analysis['scalping']['total_opportunities'] > 20:
                     print(f"\n  ⚡ 优化超短线参数...")
+                    if global_initial_params:
+                        print(f"     ℹ️  使用V7.7.0初始参数: R:R={global_initial_params.get('min_risk_reward', 'N/A')}, 共识={global_initial_params.get('min_indicator_consensus', 'N/A')}")
                     scalping_optimization = optimize_scalping_params(
                         scalping_data=separated_analysis['scalping'],
-                        current_params=config.get('scalping_params', {})
+                        current_params=scalping_current,
+                        initial_params=initial_params_for_scalping  # 【V8.3.16新增】
                     )
                     
                     if scalping_optimization.get('improvement') is not None:
@@ -7085,9 +7240,12 @@ def analyze_and_adjust_params():
                 # 分别优化波段参数
                 if separated_analysis['swing']['total_opportunities'] > 20:
                     print(f"\n  🌊 优化波段参数...")
+                    if global_initial_params:
+                        print(f"     ℹ️  使用V7.7.0初始参数: R:R={global_initial_params.get('min_risk_reward', 'N/A')}, 共识={global_initial_params.get('min_indicator_consensus', 'N/A')}")
                     swing_optimization = optimize_swing_params(
                         swing_data=separated_analysis['swing'],
-                        current_params=config.get('swing_params', {})
+                        current_params=swing_current,
+                        initial_params=initial_params_for_swing  # 【V8.3.16新增】
                     )
                     
                     if swing_optimization.get('improvement') is not None:
@@ -7116,7 +7274,11 @@ def analyze_and_adjust_params():
         print("\n【第4.7步：Per-Symbol优化（V8.3.13.3）】")
         per_symbol_optimization = None
         
-        if kline_snapshots is not None and not kline_snapshots.empty:
+        # 【V8.3.16】立即优化：配置开关跳过Per-Symbol
+        if not ENABLE_PER_SYMBOL_OPTIMIZATION:
+            print(f"  ⏭️  跳过Per-Symbol优化（配置已禁用，节省56-91分钟）")
+            print(f"     理由：大部分币种可共享全局/策略参数，独立优化增益有限")
+        elif kline_snapshots is not None and not kline_snapshots.empty:
             try:
                 # 分析每个币种的机会
                 per_symbol_data = analyze_per_symbol_opportunities(
@@ -17945,17 +18107,22 @@ def calculate_swing_optimization_score(sim_result):
     return total_score
 
 
-def optimize_scalping_params(scalping_data, current_params):
+def optimize_scalping_params(scalping_data, current_params, initial_params=None):
     """
-    【V8.3.12.1】超短线参数优化 - Grid Search + Exit Analysis + AI优化
+    【V8.3.12.1 + V8.3.16】超短线参数优化 - Grid Search + Exit Analysis + 条件AI优化
     
     优化流程：
-    1. Grid Search找到最优参数（48组参数）
+    1. Grid Search找到最优参数（54组参数）
     2. Exit Analysis分析最优参数的问题
-    3. AI给出策略调整建议
-    4. 应用AI建议得到最终参数
+    3. 条件AI调用：只在Time Exit>80%时调用AI（V8.3.16）
+    4. 动态激进度：根据Time Exit率调整AI建议采纳度（V8.3.16技术债3）
     
     目标：降低time_exit率，提高平均利润
+    
+    Args:
+        scalping_data: 超短线机会数据
+        current_params: 当前配置的策略参数
+        initial_params: 【V8.3.16新增】V7.7.0快速探索提供的初始参数（技术债1）
     """
     opportunities = scalping_data['opportunities']
     
@@ -17965,6 +18132,12 @@ def optimize_scalping_params(scalping_data, current_params):
             'optimized_params': current_params,
             'improvement': None
         }
+    
+    # 【V8.3.16】使用initial_params作为Grid Search的起点
+    if initial_params:
+        print(f"     ℹ️  应用V7.7.0初始参数到Grid Search")
+        # 将initial_params合并到current_params
+        current_params = {**current_params, **initial_params}
     
     print(f"  🔧 开始超短线参数优化（{len(opportunities)}个机会）...")
     
@@ -18063,14 +18236,45 @@ def optimize_scalping_params(scalping_data, current_params):
             print(f"     💡 建议: {tf_recommendations['recommended_timeframe']}时间框架")
             print(f"        {tf_recommendations['reason']}")
     
-    # ========== 阶段3: AI分析 ==========
-    print(f"\n  🤖 阶段3: AI策略分析")
-    ai_suggestions = call_ai_for_exit_analysis(exit_analysis, best_params, 'scalping')
+    # ========== 阶段3: AI策略分析（条件调用+动态激进度）==========
+    # 【V8.3.16】技术债3修复：条件AI调用+动态激进度
+    print(f"\n  🤖 阶段3: AI策略分析（V8.3.16条件调用）")
+    
+    te_rate = exit_analysis['time_exit']['rate'] / 100 if exit_analysis else 0
+    ai_suggestions = None
+    
+    # 【V8.3.16】条件AI调用：只在Time Exit>80%或配置强制时调用
+    should_call_ai = (not ENABLE_CONDITIONAL_AI_CALL) or (te_rate > 0.8)
+    
+    if should_call_ai:
+        if te_rate > 0.8:
+            print(f"     ⚠️  Time Exit率过高({te_rate*100:.0f}%)，调用AI分析...")
+        ai_suggestions = call_ai_for_exit_analysis(exit_analysis, best_params, 'scalping')
+    else:
+        print(f"     ✅ Time Exit率可接受({te_rate*100:.0f}%)，跳过AI调用（节省1-2分钟）")
     
     final_params = best_params.copy()
     if ai_suggestions:
-        # 应用AI建议（80%激进度）
-        final_params = apply_ai_suggestions(best_params, ai_suggestions, apply_aggressiveness=0.8)
+        # 【V8.3.16】技术债3修复：动态调整AI激进度
+        if AI_AGGRESSIVENESS_DYNAMIC:
+            if te_rate > 0.9:
+                aggressiveness = 1.0
+                print(f"     📊 Time Exit率>90% → AI激进度=100%（全部采纳）")
+            elif te_rate > 0.8:
+                aggressiveness = 0.9
+                print(f"     📊 Time Exit率>80% → AI激进度=90%")
+            elif te_rate > 0.6:
+                aggressiveness = 0.7
+                print(f"     📊 Time Exit率>60% → AI激进度=70%")
+            else:
+                aggressiveness = 0.5
+                print(f"     📊 Time Exit率<60% → AI激进度=50%（保守）")
+        else:
+            aggressiveness = 0.8
+            print(f"     📊 使用固定AI激进度=80%")
+        
+        # 应用AI建议
+        final_params = apply_ai_suggestions(best_params, ai_suggestions, apply_aggressiveness=aggressiveness)
         
         # 验证AI调整后的效果
         print(f"\n  ✅ 验证AI调整后的效果...")
@@ -18086,7 +18290,8 @@ def optimize_scalping_params(scalping_data, current_params):
             final_params = best_params
             final_result = best_result
     else:
-        print(f"     ⚠️  AI分析失败，使用Grid Search结果")
+        if should_call_ai:
+            print(f"     ⚠️  AI分析失败，使用Grid Search结果")
         final_result = best_result
     
     return {
@@ -18103,17 +18308,22 @@ def optimize_scalping_params(scalping_data, current_params):
     }
 
 
-def optimize_swing_params(swing_data, current_params):
+def optimize_swing_params(swing_data, current_params, initial_params=None):
     """
-    【V8.3.12.1】波段参数优化 - Grid Search + Exit Analysis + AI优化
+    【V8.3.12.1 + V8.3.16】波段参数优化 - Grid Search + Exit Analysis + 条件AI优化
     
     优化流程：
-    1. Grid Search找到最优参数（81组参数）
+    1. Grid Search找到最优参数（54组参数）
     2. Exit Analysis分析最优参数的问题
-    3. AI给出策略调整建议
-    4. 应用AI建议得到最终参数
+    3. 条件AI调用：只在Time Exit>80%时调用AI（V8.3.16）
+    4. 动态激进度：根据Time Exit率调整AI建议采纳度（V8.3.16技术债3）
     
     目标：提高平均利润，保持捕获率
+    
+    Args:
+        swing_data: 波段机会数据
+        current_params: 当前配置的策略参数
+        initial_params: 【V8.3.16新增】V7.7.0快速探索提供的初始参数（技术债1）
     """
     opportunities = swing_data['opportunities']
     
@@ -18123,6 +18333,12 @@ def optimize_swing_params(swing_data, current_params):
             'optimized_params': current_params,
             'improvement': None
         }
+    
+    # 【V8.3.16】使用initial_params作为Grid Search的起点
+    if initial_params:
+        print(f"     ℹ️  应用V7.7.0初始参数到Grid Search")
+        # 将initial_params合并到current_params
+        current_params = {**current_params, **initial_params}
     
     print(f"  🔧 开始波段参数优化（{len(opportunities)}个机会）...")
     
@@ -18221,14 +18437,45 @@ def optimize_swing_params(swing_data, current_params):
             print(f"     💡 建议: {tf_recommendations['recommended_timeframe']}时间框架")
             print(f"        {tf_recommendations['reason']}")
     
-    # ========== 阶段3: AI分析 ==========
-    print(f"\n  🤖 阶段3: AI策略分析")
-    ai_suggestions = call_ai_for_exit_analysis(exit_analysis, best_params, 'swing')
+    # ========== 阶段3: AI策略分析（条件调用+动态激进度）==========
+    # 【V8.3.16】技术债3修复：条件AI调用+动态激进度
+    print(f"\n  🤖 阶段3: AI策略分析（V8.3.16条件调用）")
+    
+    te_rate = exit_analysis['time_exit']['rate'] / 100 if exit_analysis else 0
+    ai_suggestions = None
+    
+    # 【V8.3.16】条件AI调用：只在Time Exit>80%或配置强制时调用
+    should_call_ai = (not ENABLE_CONDITIONAL_AI_CALL) or (te_rate > 0.8)
+    
+    if should_call_ai:
+        if te_rate > 0.8:
+            print(f"     ⚠️  Time Exit率过高({te_rate*100:.0f}%)，调用AI分析...")
+        ai_suggestions = call_ai_for_exit_analysis(exit_analysis, best_params, 'swing')
+    else:
+        print(f"     ✅ Time Exit率可接受({te_rate*100:.0f}%)，跳过AI调用（节省1-2分钟）")
     
     final_params = best_params.copy()
     if ai_suggestions:
-        # 应用AI建议（80%激进度）
-        final_params = apply_ai_suggestions(best_params, ai_suggestions, apply_aggressiveness=0.8)
+        # 【V8.3.16】技术债3修复：动态调整AI激进度
+        if AI_AGGRESSIVENESS_DYNAMIC:
+            if te_rate > 0.9:
+                aggressiveness = 1.0
+                print(f"     📊 Time Exit率>90% → AI激进度=100%（全部采纳）")
+            elif te_rate > 0.8:
+                aggressiveness = 0.9
+                print(f"     📊 Time Exit率>80% → AI激进度=90%")
+            elif te_rate > 0.6:
+                aggressiveness = 0.7
+                print(f"     📊 Time Exit率>60% → AI激进度=70%")
+            else:
+                aggressiveness = 0.5
+                print(f"     📊 Time Exit率<60% → AI激进度=50%（保守）")
+        else:
+            aggressiveness = 0.8
+            print(f"     📊 使用固定AI激进度=80%")
+        
+        # 应用AI建议
+        final_params = apply_ai_suggestions(best_params, ai_suggestions, apply_aggressiveness=aggressiveness)
         
         # 验证AI调整后的效果
         print(f"\n  ✅ 验证AI调整后的效果...")
@@ -18244,7 +18491,8 @@ def optimize_swing_params(swing_data, current_params):
             final_params = best_params
             final_result = best_result
     else:
-        print(f"     ⚠️  AI分析失败，使用Grid Search结果")
+        if should_call_ai:
+            print(f"     ⚠️  AI分析失败，使用Grid Search结果")
         final_result = best_result
     
     return {
