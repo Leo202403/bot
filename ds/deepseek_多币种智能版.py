@@ -4844,9 +4844,10 @@ def profit_expansion_phase_v770(profitable_center, all_results, days=7, max_iter
         
         # 注意：共识需要特殊处理（整数，且有范围限制）
         # 如果共识变化，使用 ±1
+        # 【V8.3.14.4】硬约束：min_indicator_consensus必须 >= 2
         if current_center['min_indicator_consensus'] < 4:
             directions.append({'rr': 0, 'consensus': +1, 'atr': 0, 'name': '共识+1'})
-        if current_center['min_indicator_consensus'] > 1:
+        if current_center['min_indicator_consensus'] > 2:  # 从 > 1 改为 > 2
             directions.append({'rr': 0, 'consensus': -1, 'atr': 0, 'name': '共识-1'})
         
         print(f"     ━━━━━━━━━━━━━━━━━━━━ 回测{len(directions)}个方向...")
