@@ -6964,6 +6964,12 @@ def analyze_and_adjust_params():
                 if param in config["global"]:
                     config["global"][param] = value
             
+            # 【V8.3.10.5】强制约束：min_indicator_consensus 必须 >= 2
+            if config["global"].get("min_indicator_consensus", 2) < 2:
+                print(f"⚠️  【硬约束】min_indicator_consensus={config['global']['min_indicator_consensus']} < 2，强制调整为2")
+                config["global"]["min_indicator_consensus"] = 2
+                adjustments['global']['min_indicator_consensus'] = 2
+            
             # 🔧 修复：为成功的多轮迭代设置optimization变量
             optimization = {
                 'diagnosis': f'完成{iterative_result["total_rounds"]}轮迭代优化',
