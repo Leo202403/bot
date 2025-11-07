@@ -7067,6 +7067,8 @@ def analyze_and_adjust_params():
                     
                     if scalping_optimization.get('improvement') is not None:
                         # 更新config中的超短线参数
+                        if 'scalping_params' not in config:
+                            config['scalping_params'] = {}
                         config['scalping_params'].update(scalping_optimization['optimized_params'])
                         
                         old_rate = scalping_optimization['old_time_exit_rate']
@@ -7090,6 +7092,8 @@ def analyze_and_adjust_params():
                     
                     if swing_optimization.get('improvement') is not None:
                         # 更新config中的波段参数
+                        if 'swing_params' not in config:
+                            config['swing_params'] = {}
                         config['swing_params'].update(swing_optimization['optimized_params'])
                         
                         old_profit = swing_optimization['old_avg_profit']
@@ -17708,7 +17712,7 @@ ANALYSIS REQUIREMENTS:
    
    - Are Take Profits too early? Evidence:
      * {tp['early_count']} trades closed then rallied 3%+
-     * Avg missed profit: {tp_profit_avg:.1f}% on TP trades
+     * Avg missed profit: {tp['avg_missed_profit']:.1f}% on TP trades
 
 2. Parameter Recommendations:
    Based on the data, recommend:
