@@ -17459,6 +17459,123 @@ IMPORTANT: Be aggressive in recommendations. If Time Exit > 50%, TP is definitel
     return prompt
 
 
+def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_name='deepseek'):
+    """
+    【V8.3.12.1】调用AI分析exit patterns并给出策略建议
+    
+    返回：
+    {
+        'diagnosis': str,
+        'root_causes': list,
+        'recommendations': dict,
+        'strategy_notes': str,
+        'expected_improvement': str
+    }
+    """
+    try:
+        prompt = generate_ai_strategy_prompt(exit_analysis, current_params, signal_type)
+        
+        if not prompt:
+            return None
+        
+        print(f"  🤖 调用AI分析{signal_type} exit patterns...")
+        
+        # 调用AI
+        response = deepseek_client.chat.completions.create(
+            model="deepseek-reasoner",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a professional quantitative trading strategy optimizer specialized in TP/SL parameter optimization."
+                },
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1
+        )
+        
+        ai_response = response.choices[0].message.content
+        
+        # 解析JSON
+        import re
+        import json
+        
+        json_match = re.search(r"```json\s*(.*?)\s*```", ai_response, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(1)
+        else:
+            # 尝试直接解析
+            json_str = ai_response
+        
+        try:
+            ai_suggestions = json.loads(json_str)
+            print(f"  ✅ AI分析完成")
+            print(f"     诊断: {ai_suggestions.get('diagnosis', 'N/A')[:80]}...")
+            return ai_suggestions
+        except json.JSONDecodeError as e:
+            print(f"  ⚠️ JSON解析失败: {e}")
+            print(f"  原始响应: {ai_response[:200]}...")
+            return None
+            
+    except Exception as e:
+        print(f"  ⚠️ AI调用失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def apply_ai_suggestions(base_params, ai_suggestions, apply_aggressiveness=0.8):
+    """
+    【V8.3.12.1】应用AI建议到参数
+    
+    参数：
+        base_params: 基础参数（Grid Search结果）
+        ai_suggestions: AI建议
+        apply_aggressiveness: 应用激进度（0-1），0.5表示AI建议的50%调整
+    
+    返回：
+        调整后的参数
+    """
+    if not ai_suggestions or 'recommendations' not in ai_suggestions:
+        return base_params
+    
+    adjusted_params = base_params.copy()
+    recommendations = ai_suggestions['recommendations']
+    
+    print(f"\n  📊 应用AI建议（激进度{apply_aggressiveness*100:.0f}%）:")
+    
+    # 应用每个参数的建议
+    for param_name, suggestion in recommendations.items():
+        if param_name not in adjusted_params:
+            continue
+        
+        current_value = adjusted_params[param_name]
+        recommended_value = suggestion.get('recommended', current_value)
+        
+        # 计算调整量
+        if isinstance(recommended_value, (int, float)) and isinstance(current_value, (int, float)):
+            # 使用激进度调整
+            adjustment = (recommended_value - current_value) * apply_aggressiveness
+            new_value = current_value + adjustment
+            
+            # 应用合理范围限制
+            if param_name == 'atr_tp_multiplier':
+                new_value = max(0.5, min(10.0, new_value))
+            elif param_name == 'atr_stop_multiplier':
+                new_value = max(0.5, min(3.0, new_value))
+            elif param_name == 'max_holding_hours':
+                new_value = max(0.25, min(72.0, new_value))
+            elif param_name == 'min_risk_reward':
+                new_value = max(1.0, min(5.0, new_value))
+            
+            adjusted_params[param_name] = new_value
+            
+            change_pct = (new_value - current_value) / current_value * 100 if current_value != 0 else 0
+            print(f"     {param_name}: {current_value:.2f} → {new_value:.2f} ({change_pct:+.0f}%)")
+            print(f"       理由: {suggestion.get('reason', 'N/A')[:60]}...")
+    
+    return adjusted_params
+
+
 def calculate_scalping_score(sim_result):
     """
     【V8.3.12】超短线评分函数
@@ -17515,15 +17632,15 @@ def calculate_swing_score(sim_result):
 
 def optimize_scalping_params(scalping_data, current_params):
     """
-    【V8.3.12】超短线参数优化
+    【V8.3.12.1】超短线参数优化 - Grid Search + Exit Analysis + AI优化
+    
+    优化流程：
+    1. Grid Search找到最优参数（48组参数）
+    2. Exit Analysis分析最优参数的问题
+    3. AI给出策略调整建议
+    4. 应用AI建议得到最终参数
     
     目标：降低time_exit率，提高平均利润
-    
-    参数搜索空间：
-    - max_holding_hours: [0.5, 1.0, 1.5, 2.0]
-    - atr_tp_multiplier: [1.0, 1.2, 1.5, 2.0]
-    - atr_stop_multiplier: [0.8, 1.0, 1.2]
-    - min_risk_reward: [1.2, 1.3, 1.5]
     """
     opportunities = scalping_data['opportunities']
     
@@ -17536,7 +17653,8 @@ def optimize_scalping_params(scalping_data, current_params):
     
     print(f"  🔧 开始超短线参数优化（{len(opportunities)}个机会）...")
     
-    # 定义搜索空间
+    # ========== 阶段1: Grid Search ==========
+    print(f"\n  📊 阶段1: Grid Search（48组参数）")
     param_grid = {
         'max_holding_hours': [0.5, 1.0, 1.5, 2.0],
         'atr_tp_multiplier': [1.0, 1.2, 1.5, 2.0],
@@ -17553,7 +17671,7 @@ def optimize_scalping_params(scalping_data, current_params):
     baseline_result = simulate_params_on_opportunities(opportunities, baseline_params)
     baseline_score = calculate_scalping_score(baseline_result)
     
-    print(f"  📊 基准表现: time_exit率={baseline_result['time_exit_count']/baseline_result['captured_count']*100:.0f}%, 平均利润={baseline_result['avg_profit']:.1f}%")
+    print(f"     基准: time_exit率={baseline_result['time_exit_count']/baseline_result['captured_count']*100:.0f}%, 平均利润={baseline_result['avg_profit']:.1f}%")
     
     tested_count = 0
     # Grid Search
@@ -17580,31 +17698,72 @@ def optimize_scalping_params(scalping_data, current_params):
                         best_params = test_params
                         best_result = result
     
-    print(f"  ✅ 测试{tested_count}组参数，找到最优配置")
-    print(f"  📈 优化后: time_exit率={best_result['time_exit_count']/best_result['captured_count']*100:.0f}%, 平均利润={best_result['avg_profit']:.1f}%")
+    print(f"     ✅ Grid Search完成: time_exit率={best_result['time_exit_count']/best_result['captured_count']*100:.0f}%, 平均利润={best_result['avg_profit']:.1f}%")
+    
+    # ========== 阶段2: Exit Analysis ==========
+    print(f"\n  🔍 阶段2: Exit Analysis")
+    detailed_result = simulate_params_on_opportunities_with_details(opportunities, best_params)
+    exit_analysis = analyze_exit_patterns(detailed_result['exit_details'])
+    
+    if exit_analysis:
+        te = exit_analysis['time_exit']
+        sl = exit_analysis['stop_loss']
+        tp = exit_analysis['take_profit']
+        print(f"     Time Exit: {te['count']}笔 ({te['rate']:.0f}%) | 平均错过{te['avg_missed_profit']:.1f}%利润")
+        print(f"     Stop Loss: {sl['count']}笔 ({sl['rate']:.0f}%) | {sl['tight_count']}笔过紧")
+        print(f"     Take Profit: {tp['count']}笔 ({tp['rate']:.0f}%) | {tp['early_count']}笔过早")
+    
+    # ========== 阶段3: AI分析 ==========
+    print(f"\n  🤖 阶段3: AI策略分析")
+    ai_suggestions = call_ai_for_exit_analysis(exit_analysis, best_params, 'scalping')
+    
+    final_params = best_params.copy()
+    if ai_suggestions:
+        # 应用AI建议（80%激进度）
+        final_params = apply_ai_suggestions(best_params, ai_suggestions, apply_aggressiveness=0.8)
+        
+        # 验证AI调整后的效果
+        print(f"\n  ✅ 验证AI调整后的效果...")
+        final_result = simulate_params_on_opportunities(opportunities, final_params)
+        final_score = calculate_scalping_score(final_result)
+        
+        print(f"     最终: time_exit率={final_result['time_exit_count']/final_result['captured_count']*100:.0f}%, 平均利润={final_result['avg_profit']:.1f}%")
+        print(f"     评分: Grid={best_score:.3f} → AI调整后={final_score:.3f}")
+        
+        # 如果AI调整后反而变差，使用Grid Search结果
+        if final_score < best_score * 0.95:  # 允许5%的容错
+            print(f"     ⚠️  AI调整效果不佳，保持Grid Search结果")
+            final_params = best_params
+            final_result = best_result
+    else:
+        print(f"     ⚠️  AI分析失败，使用Grid Search结果")
+        final_result = best_result
     
     return {
-        'optimized_params': best_params,
+        'optimized_params': final_params,
         'old_result': baseline_result,
-        'new_result': best_result,
+        'new_result': final_result,
         'old_time_exit_rate': baseline_result['time_exit_count']/baseline_result['captured_count'] if baseline_result['captured_count'] > 0 else 0,
-        'new_time_exit_rate': best_result['time_exit_count']/best_result['captured_count'] if best_result['captured_count'] > 0 else 0,
+        'new_time_exit_rate': final_result['time_exit_count']/final_result['captured_count'] if final_result['captured_count'] > 0 else 0,
         'old_avg_profit': baseline_result['avg_profit'],
-        'new_avg_profit': best_result['avg_profit']
+        'new_avg_profit': final_result['avg_profit'],
+        'exit_analysis': exit_analysis,
+        'ai_suggestions': ai_suggestions,
+        'improvement': 'with_ai' if ai_suggestions else 'grid_only'
     }
 
 
 def optimize_swing_params(swing_data, current_params):
     """
-    【V8.3.12】波段参数优化
+    【V8.3.12.1】波段参数优化 - Grid Search + Exit Analysis + AI优化
+    
+    优化流程：
+    1. Grid Search找到最优参数（81组参数）
+    2. Exit Analysis分析最优参数的问题
+    3. AI给出策略调整建议
+    4. 应用AI建议得到最终参数
     
     目标：提高平均利润，保持捕获率
-    
-    参数搜索空间：
-    - max_holding_hours: [24, 36, 48]
-    - atr_tp_multiplier: [4.0, 6.0, 8.0]
-    - atr_stop_multiplier: [1.5, 2.0, 2.5]
-    - min_risk_reward: [2.0, 2.5, 3.0]
     """
     opportunities = swing_data['opportunities']
     
@@ -17617,7 +17776,8 @@ def optimize_swing_params(swing_data, current_params):
     
     print(f"  🔧 开始波段参数优化（{len(opportunities)}个机会）...")
     
-    # 定义搜索空间
+    # ========== 阶段1: Grid Search ==========
+    print(f"\n  📊 阶段1: Grid Search（81组参数）")
     param_grid = {
         'max_holding_hours': [24, 36, 48],
         'atr_tp_multiplier': [4.0, 6.0, 8.0],
@@ -17634,7 +17794,7 @@ def optimize_swing_params(swing_data, current_params):
     baseline_result = simulate_params_on_opportunities(opportunities, baseline_params)
     baseline_score = calculate_swing_score(baseline_result)
     
-    print(f"  📊 基准表现: 平均利润={baseline_result['avg_profit']:.1f}%, 捕获率={baseline_result['capture_rate']*100:.0f}%")
+    print(f"     基准: 平均利润={baseline_result['avg_profit']:.1f}%, 捕获率={baseline_result['capture_rate']*100:.0f}%")
     
     tested_count = 0
     # Grid Search
@@ -17661,17 +17821,58 @@ def optimize_swing_params(swing_data, current_params):
                         best_params = test_params
                         best_result = result
     
-    print(f"  ✅ 测试{tested_count}组参数，找到最优配置")
-    print(f"  📈 优化后: 平均利润={best_result['avg_profit']:.1f}%, 捕获率={best_result['capture_rate']*100:.0f}%")
+    print(f"     ✅ Grid Search完成: 平均利润={best_result['avg_profit']:.1f}%, 捕获率={best_result['capture_rate']*100:.0f}%")
+    
+    # ========== 阶段2: Exit Analysis ==========
+    print(f"\n  🔍 阶段2: Exit Analysis")
+    detailed_result = simulate_params_on_opportunities_with_details(opportunities, best_params)
+    exit_analysis = analyze_exit_patterns(detailed_result['exit_details'])
+    
+    if exit_analysis:
+        te = exit_analysis['time_exit']
+        sl = exit_analysis['stop_loss']
+        tp = exit_analysis['take_profit']
+        print(f"     Time Exit: {te['count']}笔 ({te['rate']:.0f}%) | 平均错过{te['avg_missed_profit']:.1f}%利润")
+        print(f"     Stop Loss: {sl['count']}笔 ({sl['rate']:.0f}%) | {sl['tight_count']}笔过紧")
+        print(f"     Take Profit: {tp['count']}笔 ({tp['rate']:.0f}%) | {tp['early_count']}笔过早")
+    
+    # ========== 阶段3: AI分析 ==========
+    print(f"\n  🤖 阶段3: AI策略分析")
+    ai_suggestions = call_ai_for_exit_analysis(exit_analysis, best_params, 'swing')
+    
+    final_params = best_params.copy()
+    if ai_suggestions:
+        # 应用AI建议（80%激进度）
+        final_params = apply_ai_suggestions(best_params, ai_suggestions, apply_aggressiveness=0.8)
+        
+        # 验证AI调整后的效果
+        print(f"\n  ✅ 验证AI调整后的效果...")
+        final_result = simulate_params_on_opportunities(opportunities, final_params)
+        final_score = calculate_swing_score(final_result)
+        
+        print(f"     最终: 平均利润={final_result['avg_profit']:.1f}%, 捕获率={final_result['capture_rate']*100:.0f}%")
+        print(f"     评分: Grid={best_score:.3f} → AI调整后={final_score:.3f}")
+        
+        # 如果AI调整后反而变差，使用Grid Search结果
+        if final_score < best_score * 0.95:  # 允许5%的容错
+            print(f"     ⚠️  AI调整效果不佳，保持Grid Search结果")
+            final_params = best_params
+            final_result = best_result
+    else:
+        print(f"     ⚠️  AI分析失败，使用Grid Search结果")
+        final_result = best_result
     
     return {
-        'optimized_params': best_params,
+        'optimized_params': final_params,
         'old_result': baseline_result,
-        'new_result': best_result,
+        'new_result': final_result,
         'old_avg_profit': baseline_result['avg_profit'],
-        'new_avg_profit': best_result['avg_profit'],
+        'new_avg_profit': final_result['avg_profit'],
         'old_capture_rate': baseline_result['capture_rate'],
-        'new_capture_rate': best_result['capture_rate']
+        'new_capture_rate': final_result['capture_rate'],
+        'exit_analysis': exit_analysis,
+        'ai_suggestions': ai_suggestions,
+        'improvement': 'with_ai' if ai_suggestions else 'grid_only'
     }
 
 
