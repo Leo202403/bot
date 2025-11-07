@@ -7024,6 +7024,70 @@ def analyze_and_adjust_params():
                 print(f"⚠️ 机会重评估失败: {e}")
                 opportunity_analysis = None
 
+        # ========== 【V8.3.12】第4.6步：分离策略优化 ==========
+        print("\n【第4.6步：分离策略优化（V8.3.12）】")
+        scalping_optimization = None
+        swing_optimization = None
+        
+        if kline_snapshots is not None and not kline_snapshots.empty:
+            try:
+                # 分析超短线和波段的分离机会
+                separated_analysis = analyze_separated_opportunities(
+                    market_snapshots=kline_snapshots,
+                    old_config=config
+                )
+                
+                # 分别优化超短线参数
+                if separated_analysis['scalping']['total_opportunities'] > 20:
+                    print(f"\n  ⚡ 优化超短线参数...")
+                    scalping_optimization = optimize_scalping_params(
+                        scalping_data=separated_analysis['scalping'],
+                        current_params=config.get('scalping_params', {})
+                    )
+                    
+                    if scalping_optimization.get('improvement') is not None:
+                        # 更新config中的超短线参数
+                        config['scalping_params'].update(scalping_optimization['optimized_params'])
+                        
+                        old_rate = scalping_optimization['old_time_exit_rate']
+                        new_rate = scalping_optimization['new_time_exit_rate']
+                        old_profit = scalping_optimization['old_avg_profit']
+                        new_profit = scalping_optimization['new_avg_profit']
+                        
+                        print(f"  ✅ 超短线优化完成:")
+                        print(f"     time_exit率: {old_rate*100:.0f}% → {new_rate*100:.0f}% ({(new_rate-old_rate)*100:+.0f}%)")
+                        print(f"     平均利润: {old_profit:.1f}% → {new_profit:.1f}% ({new_profit-old_profit:+.1f}%)")
+                else:
+                    print(f"  ⚠️  超短线机会不足20个（{separated_analysis['scalping']['total_opportunities']}个），跳过优化")
+                
+                # 分别优化波段参数
+                if separated_analysis['swing']['total_opportunities'] > 20:
+                    print(f"\n  🌊 优化波段参数...")
+                    swing_optimization = optimize_swing_params(
+                        swing_data=separated_analysis['swing'],
+                        current_params=config.get('swing_params', {})
+                    )
+                    
+                    if swing_optimization.get('improvement') is not None:
+                        # 更新config中的波段参数
+                        config['swing_params'].update(swing_optimization['optimized_params'])
+                        
+                        old_profit = swing_optimization['old_avg_profit']
+                        new_profit = swing_optimization['new_avg_profit']
+                        old_capture = swing_optimization['old_capture_rate']
+                        new_capture = swing_optimization['new_capture_rate']
+                        
+                        print(f"  ✅ 波段优化完成:")
+                        print(f"     平均利润: {old_profit:.1f}% → {new_profit:.1f}% ({new_profit-old_profit:+.1f}%)")
+                        print(f"     捕获率: {old_capture*100:.0f}% → {new_capture*100:.0f}% ({(new_capture-old_capture)*100:+.0f}%)")
+                else:
+                    print(f"  ⚠️  波段机会不足20个（{separated_analysis['swing']['total_opportunities']}个），跳过优化")
+                
+            except Exception as e:
+                print(f"⚠️ 分离策略优化失败: {e}")
+                import traceback
+                traceback.print_exc()
+
         # ========== 第5步：保存并通知 ==========
         current_config = json.dumps(config, ensure_ascii=False, default=str)
         if current_config != original_config:
