@@ -12371,8 +12371,9 @@ def calculate_scalping_score(market_data):
     """
     try:
         score = 50  # 基础分
-        pa = market_data["price_action"]
-        lt = market_data["long_term"]
+        # 【V8.3.14.1】安全获取字段，避免KeyError
+        pa = market_data.get("price_action", {})
+        lt = market_data.get("long_term", {})
         
         # === 超短线核心因素（高权重）===
         
@@ -12421,12 +12422,13 @@ def calculate_scalping_score(market_data):
         # === 减分项 ===
         
         # 阻力位（中等惩罚）
-        sr = market_data["support_resistance"]
-        if sr["position_status"] == "at_resistance":
+        sr = market_data.get("support_resistance", {})
+        if sr.get("position_status") == "at_resistance":
             score -= 10  # 超短线可以突破阻力
         
         # RSI极端值（轻微惩罚）
-        rsi = market_data["rsi"]["rsi_14"]
+        rsi_data = market_data.get("rsi", {})
+        rsi = rsi_data.get("rsi_14", 50)
         if rsi > 80 or rsi < 20:
             score -= 5  # 超短线不太看重RSI
         
@@ -12467,8 +12469,9 @@ def calculate_swing_score(market_data):
     """
     try:
         score = 50  # 基础分
-        pa = market_data["price_action"]
-        lt = market_data["long_term"]
+        # 【V8.3.14.1】安全获取字段，避免KeyError
+        pa = market_data.get("price_action", {})
+        lt = market_data.get("long_term", {})
         
         # === 波段核心因素（高权重）===
         
@@ -12541,12 +12544,13 @@ def calculate_swing_score(market_data):
         # === 减分项 ===
         
         # 阻力位（重度惩罚）
-        sr = market_data["support_resistance"]
-        if sr["position_status"] == "at_resistance":
+        sr = market_data.get("support_resistance", {})
+        if sr.get("position_status") == "at_resistance":
             score -= 20  # 波段更怕阻力
         
         # RSI极端值
-        rsi = market_data["rsi"]["rsi_14"]
+        rsi_data = market_data.get("rsi", {})
+        rsi = rsi_data.get("rsi_14", 50)
         if rsi > 75 or rsi < 25:
             score -= 10  # 波段看重RSI
         

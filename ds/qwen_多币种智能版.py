@@ -21,10 +21,10 @@ from typing import Dict, List, Any, Optional
 import re  # 🔧 V7.6.7: 用于AI响应解析
 from urllib.parse import urlencode
 
-# 🔧 明确指定 .env 文件路径
-_env_file = Path(__file__).parent / '.env'
+# 🔧 明确指定 .env.qwen 文件路径
+_env_file = Path(__file__).parent / '.env.qwen'
 if not _env_file.exists():
-    raise FileNotFoundError(f"❌ 找不到 .env 文件: {_env_file}")
+    raise FileNotFoundError(f"❌ 找不到 .env.qwen 文件: {_env_file}")
 load_dotenv(_env_file, override=True)
 
 # ==================== 辅助函数 ====================
@@ -532,7 +532,7 @@ ai_optimizer = AICallOptimizer()
 # 初始化Qwen客户端
 qwen_api_key = os.getenv("QWEN_API_KEY")
 if not qwen_api_key:
-    raise ValueError("❌ QWEN_API_KEY 环境变量未设置，请检查 .env 文件")
+    raise ValueError("❌ QWEN_API_KEY 环境变量未设置，请检查 .env.qwen 文件")
 # 去除可能的空格和换行符
 qwen_api_key = qwen_api_key.strip()
 qwen_client = OpenAI(
@@ -3563,7 +3563,7 @@ You are a professional quantitative trading parameter optimization expert. Analy
 
         # 调用AI分析
         response = qwen_client.chat.completions.create(
-            model="qwen-max",
+            model="qwen3-max",
             messages=[
                 {
                     "role": "system",
@@ -4308,7 +4308,7 @@ This metric balances three dimensions:
 """
 
         response = qwen_client.chat.completions.create(
-            model="qwen-max",
+            model="qwen3-max",
             messages=[
                 {
                     "role": "system",
@@ -4489,7 +4489,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
             # 调用AI（直接使用全局qwen_client）
             try:
                 response = qwen_client.chat.completions.create(
-                    model="qwen-max",
+                    model="qwen3-max",
                     messages=[{"role": "user", "content": ai_prompt}],
                     temperature=0.7,
                     max_tokens=4000  # 🔧 V7.7.0.12: 增加到4000，避免JSON被截断
@@ -4603,7 +4603,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
             
             try:
                 response = qwen_client.chat.completions.create(
-                    model="qwen-max",
+                    model="qwen3-max",
                     messages=[{"role": "user", "content": ai_deep_prompt}],
                     temperature=0.8,  # 更高温度鼓励创新
                     max_tokens=2000
@@ -4677,7 +4677,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
             
             try:
                 response = qwen_client.chat.completions.create(
-                    model="qwen-max",
+                    model="qwen3-max",
                     messages=[{"role": "user", "content": emergency_prompt}],
                     temperature=0.9,  # 最高温度，最大创新
                     max_tokens=2000
@@ -5052,7 +5052,7 @@ JSON (4 test points):
     
     try:
         response = qwen_client.chat.completions.create(
-            model="qwen-max",
+            model="qwen3-max",
             messages=[{"role": "user", "content": ai_fine_tune_prompt}],
             temperature=0.3,
             max_tokens=8000  # 🔧 V7.7.0.14: 增至8000（充分放宽，避免截断）
@@ -5757,7 +5757,7 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
             try:
                 # 调用AI
                 ai_response = qwen_client.chat.completions.create(
-                    model="qwen-max",
+                    model="qwen3-max",
                     messages=[
                         {"role": "system", "content": "You are a professional quantitative trading analyst specializing in parameter optimization and profitability discovery. Respond in Chinese for designated fields."},
                             {"role": "user", "content": profit_discovery_prompt}
@@ -5964,7 +5964,7 @@ Based on the results above, design a BETTER 5-point sampling strategy.
             import re
             
             response = qwen_client.chat.completions.create(
-                model="qwen-max",
+                model="qwen3-max",
                 messages=[{"role": "user", "content": resample_prompt}],
                 temperature=0.1
             )
@@ -6109,7 +6109,7 @@ Based on the 5 strategic sampling points above:
     # 调用AI分析（使用已有的qwen_client）
     try:
         response = qwen_client.chat.completions.create(
-            model="qwen-max",
+            model="qwen3-max",
             messages=[{"role": "user", "content": ai_analysis_prompt}],
             temperature=0.1
         )
@@ -8310,7 +8310,7 @@ def chat_with_ai(user_message, context=None):
 """
         
         response = qwen_client.chat.completions.create(
-            model="qwen-max",  # Qwen模型
+            model="qwen3-max",  # Qwen模型
             messages=[
                 {
                     "role": "system",
@@ -10905,7 +10905,7 @@ Output JSON only:
     try:
         print(f"正在请求AI评估仓位调整...")
         response = qwen_client.chat.completions.create(
-            model="qwen-max",
+            model="qwen3-max",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=2000,  # 增加token限制，为reasoner思考过程预留空间
             temperature=0.3
@@ -12036,7 +12036,7 @@ Your core principles:
 - Always respond in Chinese (中文)"""
         
         response = qwen_client.chat.completions.create(
-            model="qwen-max",  # Qwen模型（思考模式，提升复杂策略分析能力）
+            model="qwen3-max",  # Qwen模型（思考模式，提升复杂策略分析能力）
             messages=[
                 {
                     "role": "system",
@@ -12045,7 +12045,7 @@ Your core principles:
                 {"role": "user", "content": prompt},
             ],
             stream=False,
-            max_tokens=16000,  # 🔧 从8K提升到16K，避免JSON被截断
+            max_tokens=8000,  # 🔧 Qwen限制最大8192，设置为8000安全
         )
         
         result = response.choices[0].message.content
@@ -12371,8 +12371,9 @@ def calculate_scalping_score(market_data):
     """
     try:
         score = 50  # 基础分
-        pa = market_data["price_action"]
-        lt = market_data["long_term"]
+        # 【V8.3.14.1】安全获取字段，避免KeyError
+        pa = market_data.get("price_action", {})
+        lt = market_data.get("long_term", {})
         
         # === 超短线核心因素（高权重）===
         
@@ -12421,12 +12422,13 @@ def calculate_scalping_score(market_data):
         # === 减分项 ===
         
         # 阻力位（中等惩罚）
-        sr = market_data["support_resistance"]
-        if sr["position_status"] == "at_resistance":
+        sr = market_data.get("support_resistance", {})
+        if sr.get("position_status") == "at_resistance":
             score -= 10  # 超短线可以突破阻力
         
         # RSI极端值（轻微惩罚）
-        rsi = market_data["rsi"]["rsi_14"]
+        rsi_data = market_data.get("rsi", {})
+        rsi = rsi_data.get("rsi_14", 50)
         if rsi > 80 or rsi < 20:
             score -= 5  # 超短线不太看重RSI
         
@@ -12467,8 +12469,9 @@ def calculate_swing_score(market_data):
     """
     try:
         score = 50  # 基础分
-        pa = market_data["price_action"]
-        lt = market_data["long_term"]
+        # 【V8.3.14.1】安全获取字段，避免KeyError
+        pa = market_data.get("price_action", {})
+        lt = market_data.get("long_term", {})
         
         # === 波段核心因素（高权重）===
         
@@ -12541,12 +12544,13 @@ def calculate_swing_score(market_data):
         # === 减分项 ===
         
         # 阻力位（重度惩罚）
-        sr = market_data["support_resistance"]
-        if sr["position_status"] == "at_resistance":
+        sr = market_data.get("support_resistance", {})
+        if sr.get("position_status") == "at_resistance":
             score -= 20  # 波段更怕阻力
         
         # RSI极端值
-        rsi = market_data["rsi"]["rsi_14"]
+        rsi_data = market_data.get("rsi", {})
+        rsi = rsi_data.get("rsi_14", 50)
         if rsi > 75 or rsi < 25:
             score -= 10  # 波段看重RSI
         
@@ -13393,7 +13397,7 @@ Return JSON (reason MUST be in Chinese):
         
         # 调用AI
         response = qwen_client.chat.completions.create(
-            model="qwen-max",
+            model="qwen3-max",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=300,
             temperature=0.7
@@ -13514,7 +13518,7 @@ Return JSON:
         
         # 调用AI
         response = qwen_client.chat.completions.create(
-            model="qwen-max",
+            model="qwen3-max",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=400,
             temperature=0.7
@@ -17720,7 +17724,7 @@ def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_
         
         # 调用AI
         response = qwen_client.chat.completions.create(
-            model="qwen-max",
+            model="qwen3-max",
             messages=[
                 {
                     "role": "system",
