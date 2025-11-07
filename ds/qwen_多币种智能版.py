@@ -5031,6 +5031,7 @@ def fine_tuning_phase_v770(profitable_region, best_config, best_metric, days=7):
     print(f"     盈利范围: 平均+{avg_profit:.1f}%, 最高+{max_profit:.1f}%")
     
     # 🔧 V7.7.0.13: 极简Prompt（统计摘要 + 纯参数输出，无需描述性文本）
+    # 🔧 V8.3.14.4.3: 添加硬约束 min_indicator_consensus >= 2
     ai_fine_tune_prompt = f"""
 Task: Fine-tune parameters (4 tests)
 
@@ -5043,10 +5044,11 @@ C avg={consensus_avg:.1f}
 Profit avg={avg_profit:.1f}% max={max_profit:.1f}%
 
 Strategy: Adjust R:R±0.1-0.3, ATR±0.05-0.15, C±1
+⚠️ HARD CONSTRAINT: min_indicator_consensus MUST be >= 2 (NEVER 1)
 
 JSON (4 test points):
 [
-  {{"min_risk_reward": X, "min_indicator_consensus": Y, "atr_stop_multiplier": Z}},
+  {{"min_risk_reward": X, "min_indicator_consensus": Y (>=2), "atr_stop_multiplier": Z}},
   ...
 ]
 """
@@ -5109,6 +5111,12 @@ JSON (4 test points):
                 'name': 'ATR+0.15'
             },
         ]
+    
+    # 🔧 V8.3.14.4.3: 验证并修正test_points中的硬约束
+    for point in test_points:
+        if point.get('min_indicator_consensus', 2) < 2:
+            print(f"     ⚠️ 检测到AI生成的参数违反硬约束: consensus={point['min_indicator_consensus']} < 2，强制调整为2")
+            point['min_indicator_consensus'] = 2
     
     # 回测精细调整点
     print(f"     ━━━━━━━━━━━━━━━━━━━━ 回测{len(test_points)}个优化点...")
