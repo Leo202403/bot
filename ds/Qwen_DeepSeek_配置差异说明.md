@@ -15,11 +15,12 @@ qwen和deepseek文件已**完全同步**，代码逻辑100%一致，仅在以下
 | **API Client变量** | `deepseek_client` | `qwen_client` |
 | **API Key** | `DEEPSEEK_API_KEY` | `QWEN_API_KEY` |
 | **API Base URL** | `https://api.deepseek.com` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
-| **模型名称** | `deepseek-chat` / `deepseek-reasoner` | `qwen-plus` / `qwen-max` |
+| **模型名称** | `deepseek-chat` / `deepseek-reasoner` | `qwen-plus` / `qwen3-max` |
 | **配置路径** | `trading_data/deepseek/` | `trading_data/qwen/` |
 | **默认MODEL_NAME** | `"deepseek"` | `"qwen"` |
 | **邮件标识** | `[DeepSeek]` / `DeepSeek智能交易系统` | `[通义千问]` / `通义千问智能交易系统` |
 | **Bark分组** | `group=DeepSeek` | `group=Qwen` |
+| **环境变量文件** | `.env` | `.env.qwen` |
 | **注释说明** | DeepSeek相关 | Qwen相关 |
 
 ---
@@ -54,7 +55,29 @@ qwen_client = OpenAI(
 
 ---
 
-### 2. 模型调用（多处）
+### 2. 环境变量文件路径
+
+**位置**: Line ~24-27
+
+**DeepSeek**:
+```python
+_env_file = Path(__file__).parent / '.env'
+if not _env_file.exists():
+    raise FileNotFoundError(f"❌ 找不到 .env 文件: {_env_file}")
+```
+
+**Qwen**:
+```python
+_env_file = Path(__file__).parent / '.env.qwen'
+if not _env_file.exists():
+    raise FileNotFoundError(f"❌ 找不到 .env.qwen 文件: {_env_file}")
+```
+
+**原因**: Qwen使用独立的环境变量文件，避免API Key混用
+
+---
+
+### 3. 模型调用（多处）
 
 **DeepSeek**:
 ```python
@@ -68,7 +91,7 @@ response = deepseek_client.chat.completions.create(
 **Qwen**:
 ```python
 response = qwen_client.chat.completions.create(
-    model="qwen-plus",  # 或 "qwen-max"
+    model="qwen-plus",  # 或 "qwen3-max"（注意是qwen3-max）
     messages=[...],
     ...
 )
@@ -78,9 +101,13 @@ response = qwen_client.chat.completions.create(
 - AI决策函数（~19处）
 - 参数优化（~15处）
 
+**说明**:
+- `qwen-plus`: 轻量版，速度快
+- `qwen3-max`: 最新版，推理能力强（对应deepseek-reasoner）
+
 ---
 
-### 3. 配置文件路径
+### 4. 配置文件路径
 
 **DeepSeek**:
 ```python

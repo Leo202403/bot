@@ -65,6 +65,19 @@ echo "  → 3.7 替换打印标识..."
 sed -i '' 's/print.*"DeepSeek/print("Qwen/g' qwen_多币种智能版.py
 sed -i '' 's/print.*".*深度求索/print("通义千问/g' qwen_多币种智能版.py
 
+# 3.8 替换.env文件路径（qwen专用）
+echo "  → 3.8 替换.env文件路径..."
+sed -i '' "s|'.env'|'.env.qwen'|g" qwen_多币种智能版.py
+sed -i '' 's|"\.env"|".env.qwen"|g' qwen_多币种智能版.py
+sed -i '' 's|找不到 \.env 文件|找不到 .env.qwen 文件|g' qwen_多币种智能版.py
+sed -i '' 's|明确指定 \.env 文件路径|明确指定 .env.qwen 文件路径|g' qwen_多币种智能版.py
+sed -i '' 's|请检查 \.env 文件|请检查 .env.qwen 文件|g' qwen_多币种智能版.py
+
+# 3.9 替换qwen-max为qwen3-max（qwen专用）
+echo "  → 3.9 替换模型为qwen3-max..."
+sed -i '' 's/"qwen-max"/"qwen3-max"/g' qwen_多币种智能版.py
+sed -i '' "s/'qwen-max'/'qwen3-max'/g" qwen_多币种智能版.py
+
 echo "✅ 配置替换完成"
 echo ""
 
@@ -75,8 +88,9 @@ echo ""
 echo "【验证1】qwen_client数量:"
 grep -c "qwen_client" qwen_多币种智能版.py || echo "0"
 
-echo "【验证2】qwen-plus/qwen-max数量:"
-grep -c "qwen-plus\|qwen-max" qwen_多币种智能版.py || echo "0"
+echo "【验证2】qwen-plus/qwen3-max数量:"
+echo "  qwen-plus: $(grep -c 'qwen-plus' qwen_多币种智能版.py || echo '0')"
+echo "  qwen3-max: $(grep -c 'qwen3-max' qwen_多币种智能版.py || echo '0')"
 
 echo "【验证3】trading_data/qwen路径:"
 grep -c "trading_data/qwen" qwen_多币种智能版.py || echo "0"
@@ -84,8 +98,11 @@ grep -c "trading_data/qwen" qwen_多币种智能版.py || echo "0"
 echo "【验证4】通义千问标识:"
 grep -c "通义千问" qwen_多币种智能版.py || echo "0"
 
+echo "【验证5】.env.qwen配置:"
+grep -c "\.env\.qwen" qwen_多币种智能版.py || echo "0"
+
 echo ""
-echo "【验证5】检查残留的deepseek（应为0或很少）:"
+echo "【验证6】检查残留的deepseek（应为0或很少）:"
 grep -i "deepseek" qwen_多币种智能版.py | grep -v "^#" | grep -v "# " | grep -v "说明" | grep -v "注释" | wc -l
 
 echo ""
