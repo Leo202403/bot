@@ -21,18 +21,11 @@ from typing import Dict, List, Any, Optional
 import re  # 🔧 V7.6.7: 用于AI响应解析
 from urllib.parse import urlencode
 
-# 🔧 明确指定 .env 文件路径
-_env_file = Path(__file__).parent / '.env'
+# 🔧 明确指定 .env.qwen 文件路径
+_env_file = Path(__file__).parent / '.env.qwen'
 if not _env_file.exists():
-    raise FileNotFoundError(f"❌ 找不到 .env 文件: {_env_file}")
+    raise FileNotFoundError(f"❌ 找不到 .env.qwen 文件: {_env_file}")
 load_dotenv(_env_file, override=True)
-
-# ==================== 【V8.3.16】优化配置开关 ====================
-ENABLE_V770_FULL_OPTIMIZATION = False  # V7.7.0完整优化（7-10分钟）
-ENABLE_V770_QUICK_SEARCH = True        # V7.7.0快速探索（3分钟）- 为V8.3.12提供初始参数
-ENABLE_PER_SYMBOL_OPTIMIZATION = False  # Per-Symbol优化（56-91分钟）
-ENABLE_CONDITIONAL_AI_CALL = True       # 条件AI调用（仅Time Exit>80%时）
-AI_AGGRESSIVENESS_DYNAMIC = True        # 动态AI激进度（根据Time Exit率调整）
 
 # ==================== 辅助函数 ====================
 
@@ -375,7 +368,7 @@ class AICallOptimizer:
             'api_calls': self.call_stats['forced'] + (self.call_stats['total'] - self.call_stats['saved'] - self.call_stats['forced']),
             'calls_saved': self.call_stats['saved'],
             'save_rate': f"{saved_rate:.1f}%",
-            'cost_reduction': f"约{saved_rate * 0.8:.0f}%",  # 考虑DeepSeek自身缓存
+            'cost_reduction': f"约{saved_rate * 0.8:.0f}%",  # 考虑Qwen自身缓存
         }
     
     def reset_stats(self):
@@ -536,14 +529,14 @@ ai_optimizer = AICallOptimizer()
 
 # ==================== AI调用优化器结束 ====================
 
-# 初始化DeepSeek客户端
-deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
-if not deepseek_api_key:
-    raise ValueError("❌ DEEPSEEK_API_KEY 环境变量未设置，请检查 .env 文件")
+# 初始化Qwen客户端
+qwen_api_key = os.getenv("QWEN_API_KEY")
+if not qwen_api_key:
+    raise ValueError("❌ QWEN_API_KEY 环境变量未设置，请检查 .env.qwen 文件")
 # 去除可能的空格和换行符
-deepseek_api_key = deepseek_api_key.strip()
-deepseek_client = OpenAI(
-    api_key=deepseek_api_key, base_url="https://api.deepseek.com"
+qwen_api_key = qwen_api_key.strip()
+qwen_client = OpenAI(
+    api_key=qwen_api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
 )
 
 # 初始化交易所（币安/OKX 二选一）
@@ -710,8 +703,8 @@ SYMBOL_PROFILES = {
     }
 }
 
-# 数据存储路径（DeepSeek专用目录）
-DATA_DIR = Path(__file__).parent / "trading_data" / "deepseek"
+# 数据存储路径（Qwen专用目录）
+DATA_DIR = Path(__file__).parent / "trading_data" / "qwen"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 TRADES_FILE = DATA_DIR / "trades_history.csv"
 POSITIONS_FILE = DATA_DIR / "current_positions.csv"
@@ -727,7 +720,7 @@ signal_history = {}  # 每个币种的信号历史
 
 
 def send_bark_notification(title, content):
-    """发送Bark推送通知（支持多个地址 + DeepSeek分组）"""
+    """发送Bark推送通知（支持多个地址 + Qwen分组）"""
     try:
         from urllib.parse import quote
 
@@ -775,7 +768,7 @@ def send_bark_notification(title, content):
                 encoded_content = quote(content)
 
                 # 添加group参数，将推送归类到"DeepSeek"文件夹
-                url = f"https://api.day.app/{bark_key}/{encoded_title}/{encoded_content}?group=DeepSeek"
+                url = f"https://api.day.app/{bark_key}/{encoded_title}/{encoded_content}?group=Qwen"
                 
                 # 🔧 V7.7.0.16: 检查URL长度
                 if len(url) > 1800:  # 预留一些安全余量
@@ -829,7 +822,7 @@ def send_bark_notification(title, content):
         traceback.print_exc()
 
 
-def send_email_notification(subject, body_html, model_name="DeepSeek"):
+def send_email_notification(subject, body_html, model_name="Qwen"):
     """发送邮件通知（用于AI参数优化详细报告）"""
     try:
         # 邮件配置
@@ -1532,7 +1525,7 @@ def sync_csv_with_exchange_positions(current_positions):
                     actual_holding_minutes = 0
                     
                     # 从position_contexts读取
-                    model_name = os.getenv("MODEL_NAME", "deepseek")
+                    model_name = os.getenv("MODEL_NAME", "qwen")
                     context_file = Path("trading_data") / model_name / "position_contexts.json"
                     if context_file.exists():
                         with open(context_file, 'r', encoding='utf-8') as f:
@@ -2082,13 +2075,13 @@ def should_pause_trading_v7(config):
             # 保存配置
             from pathlib import Path
             import json
-            config_file = Path("trading_data") / os.getenv("MODEL_NAME", "deepseek") / "learning_config.json"
+            config_file = Path("trading_data") / os.getenv("MODEL_NAME", "qwen") / "learning_config.json"
             with open(config_file, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
             
             # 发送盈利恢复通知
             send_recovery_notification_v7(
-                model_name=os.getenv("MODEL_NAME", "DeepSeek"),
+                model_name=os.getenv("MODEL_NAME", "Qwen"),
                 recovery_type="profit_exit",
                 pause_level=pause_level,
                 new_pause_level=new_pause_level
@@ -2107,13 +2100,13 @@ def should_pause_trading_v7(config):
             # 保存配置
             from pathlib import Path
             import json
-            config_file = Path("trading_data") / os.getenv("MODEL_NAME", "deepseek") / "learning_config.json"
+            config_file = Path("trading_data") / os.getenv("MODEL_NAME", "qwen") / "learning_config.json"
             with open(config_file, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
             
             # 发送恢复通知
             send_recovery_notification_v7(
-                model_name=os.getenv("MODEL_NAME", "DeepSeek"),
+                model_name=os.getenv("MODEL_NAME", "Qwen"),
                 recovery_type="time_based",
                 pause_level=pause_level,
                 new_pause_level=0
@@ -2146,7 +2139,7 @@ def _get_trigger_losses_before_cooldown(pause_start):
         pause_start_dt = datetime.fromisoformat(pause_start)
         
         # 读取交易历史
-        trades_file = Path("trading_data") / os.getenv("MODEL_NAME", "deepseek") / "trades_history.csv"
+        trades_file = Path("trading_data") / os.getenv("MODEL_NAME", "qwen") / "trades_history.csv"
         if not trades_file.exists():
             return 0
         
@@ -2189,7 +2182,7 @@ def _check_profit_during_cooldown(pause_start, pause_level=1):
         pause_start_dt = datetime.fromisoformat(pause_start)
         
         # 读取交易历史
-        trades_file = Path("trading_data") / os.getenv("MODEL_NAME", "deepseek") / "trades_history.csv"
+        trades_file = Path("trading_data") / os.getenv("MODEL_NAME", "qwen") / "trades_history.csv"
         if not trades_file.exists():
             return False
         
@@ -2252,7 +2245,7 @@ def save_market_snapshot_v7(market_data_list):
         from datetime import datetime
         import pandas as pd
         
-        model_name = os.getenv("MODEL_NAME", "deepseek")
+        model_name = os.getenv("MODEL_NAME", "qwen")
         snapshot_dir = Path("trading_data") / model_name / "market_snapshots"
         snapshot_dir.mkdir(parents=True, exist_ok=True)
         
@@ -2585,7 +2578,7 @@ def daily_review_with_kline_v7():
         from datetime import datetime, timedelta
         import pandas as pd
         
-        model_name = os.getenv("MODEL_NAME", "deepseek")
+        model_name = os.getenv("MODEL_NAME", "qwen")
         yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
         
         # 读取昨日交易记录
@@ -3129,7 +3122,7 @@ def check_signal_type_risk_budget(signal_type, current_positions, planned_positi
         try:
             from pathlib import Path
             import json
-            model_name = os.getenv("MODEL_NAME", "deepseek")
+            model_name = os.getenv("MODEL_NAME", "qwen")
             context_file = Path("trading_data") / model_name / "position_contexts.json"
             if context_file.exists():
                 with open(context_file, 'r', encoding='utf-8') as f:
@@ -3569,8 +3562,8 @@ You are a professional quantitative trading parameter optimization expert. Analy
 """
 
         # 调用AI分析
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",
             messages=[
                 {
                     "role": "system",
@@ -3632,7 +3625,7 @@ def load_validation_history(max_records=10):
         ]
     """
     try:
-        model_dir = os.getenv("MODEL_NAME", "deepseek")
+        model_dir = os.getenv("MODEL_NAME", "qwen")
         history_file = f"trading_data/{model_dir}/backtest_validation_history.jsonl"
         
         if not os.path.exists(history_file):
@@ -3716,7 +3709,7 @@ def backtest_parameters(config_variant, days=7, verbose=False):
         print(f"{'='*60}")
         
         # 读取历史快照数据（近期优先）
-        model_dir = os.getenv("MODEL_NAME", "deepseek")
+        model_dir = os.getenv("MODEL_NAME", "qwen")
         snapshot_dir = f"trading_data/{model_dir}/market_snapshots"
         
         end_date = datetime.now()
@@ -4314,8 +4307,8 @@ This metric balances three dimensions:
 8. **Language Requirement**: ALL text fields MUST be in Chinese (中文)
 """
 
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",
             messages=[
                 {
                     "role": "system",
@@ -4493,10 +4486,10 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
 }}
 """
             
-            # 调用AI（直接使用全局deepseek_client）
+            # 调用AI（直接使用全局qwen_client）
             try:
-                response = deepseek_client.chat.completions.create(
-                    model="deepseek-reasoner",
+                response = qwen_client.chat.completions.create(
+                    model="qwen3-max",
                     messages=[{"role": "user", "content": ai_prompt}],
                     temperature=0.7,
                     max_tokens=4000  # 🔧 V7.7.0.12: 增加到4000，避免JSON被截断
@@ -4609,8 +4602,8 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
 """
             
             try:
-                response = deepseek_client.chat.completions.create(
-                    model="deepseek-reasoner",
+                response = qwen_client.chat.completions.create(
+                    model="qwen3-max",
                     messages=[{"role": "user", "content": ai_deep_prompt}],
                     temperature=0.8,  # 更高温度鼓励创新
                     max_tokens=2000
@@ -4683,8 +4676,8 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
 """
             
             try:
-                response = deepseek_client.chat.completions.create(
-                    model="deepseek-reasoner",
+                response = qwen_client.chat.completions.create(
+                    model="qwen3-max",
                     messages=[{"role": "user", "content": emergency_prompt}],
                     temperature=0.9,  # 最高温度，最大创新
                     max_tokens=2000
@@ -5061,8 +5054,8 @@ JSON (4 test points):
 """
     
     try:
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",
             messages=[{"role": "user", "content": ai_fine_tune_prompt}],
             temperature=0.3,
             max_tokens=8000  # 🔧 V7.7.0.14: 增至8000（充分放宽，避免截断）
@@ -5339,129 +5332,6 @@ def iterative_parameter_optimization(data_summary, current_config, original_stat
     return iterative_parameter_optimization_v770(data_summary, current_config, original_stats)
 
 
-def quick_global_search_v8316(data_summary, current_config):
-    """
-    【V8.3.16】快速全局探索（技术债1修复）
-    
-    目的：为V8.3.12分离策略优化提供高质量的初始参数
-    
-    流程：
-    - 只做7组战略采样（V7.7.0阶段1）
-    - 找到盈利范围即返回
-    - 不做盈利扩大和AI优化
-    
-    返回：
-    {
-        'min_risk_reward': float,
-        'min_indicator_consensus': int,
-        'atr_stop_multiplier': float,
-        'found_profitable': bool
-    }
-    
-    耗时：约3分钟（减少5-7分钟vs完整V7.7.0）
-    """
-    print(f"\n{'='*70}")
-    print(f"【V8.3.16 快速全局探索】")
-    print(f"{'='*70}")
-    print(f"  🎯 目标：快速找到盈利参数范围")
-    print(f"  📊 流程：7组战略采样 → 为V8.3.12提供初始值")
-    print(f"  ⏱️  预计：约3分钟")
-    print(f"{'='*70}")
-    
-    days = 7
-    
-    # 读取历史最优采样范围
-    model_name = os.getenv("MODEL_NAME", "deepseek")
-    config_file = Path("trading_data") / model_name / "learning_config.json"
-    historical_sampling_range = None
-    
-    if config_file.exists():
-        try:
-            with open(config_file, 'r', encoding='utf-8') as f:
-                saved_config = json.load(f)
-                historical_sampling_range = saved_config.get('optimal_sampling_range')
-                if historical_sampling_range:
-                    print(f"  ℹ️  使用历史最优范围:")
-                    print(f"     R:R [{historical_sampling_range['min_risk_reward'][0]:.2f}, {historical_sampling_range['min_risk_reward'][1]:.2f}]")
-                    print(f"     共识 [{historical_sampling_range['min_indicator_consensus'][0]}, {historical_sampling_range['min_indicator_consensus'][1]}]")
-                    print(f"     ATR [{historical_sampling_range['atr_stop_multiplier'][0]:.2f}, {historical_sampling_range['atr_stop_multiplier'][1]:.2f}]")
-        except Exception as e:
-            print(f"  ⚠️  读取历史范围失败: {e}")
-    
-    # 定义默认采样范围
-    if historical_sampling_range:
-        sampling_range = historical_sampling_range
-    else:
-        sampling_range = {
-            'min_risk_reward': [1.4, 3.5],
-            'min_indicator_consensus': [2, 3],
-            'atr_stop_multiplier': [1.4, 1.9]
-        }
-    
-    # 7组战略采样
-    best_params = None
-    best_profit = -float('inf')
-    found_profitable = False
-    
-    # 生成7个战略采样点（直接实现，不调用外部函数）
-    rr_min, rr_max = sampling_range['min_risk_reward']
-    consensus_min, consensus_max = sampling_range['min_indicator_consensus']
-    atr_min, atr_max = sampling_range['atr_stop_multiplier']
-    
-    test_points = [
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': atr_min, 'name': '极宽松'},
-        {'min_risk_reward': (rr_min + rr_max * 2) / 3, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'name': '偏宽松'},
-        {'min_risk_reward': (rr_min + rr_max) / 2, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'name': '标准'},
-        {'min_risk_reward': (rr_min * 2 + rr_max) / 3, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'name': '偏严格'},
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'name': '严格'},
-        {'min_risk_reward': rr_max * 1.2, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'name': '超严格'},
-        {'min_risk_reward': rr_max * 1.4, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'name': '极严格'},
-    ]
-    
-    print(f"\n  🔍 测试7组战略采样...")
-    for i, test_params in enumerate(test_points):
-        # 【V8.3.16.2】组装config_variant参数，调用backtest_parameters
-        config_variant = {
-            'min_risk_reward': test_params['min_risk_reward'],
-            'min_indicator_consensus': test_params['min_indicator_consensus'],
-            'atr_stop_multiplier': test_params['atr_stop_multiplier'],
-            'min_signal_score': current_config.get('global', {}).get('min_signal_score', 55)
-        }
-        result = backtest_parameters(config_variant, days=days, verbose=False)
-        
-        if result['total_profit'] > best_profit:
-            best_profit = result['total_profit']
-            best_params = test_params.copy()
-            if result['total_profit'] > 0:
-                found_profitable = True
-                print(f"     ✅ 找到盈利配置: R:R={test_params['min_risk_reward']}, 共识={test_params['min_indicator_consensus']}, ATR={test_params['atr_stop_multiplier']:.2f} | 盈利{result['total_profit']:.1f}%")
-    
-    if not best_params:
-        # 使用当前配置作为默认值
-        best_params = {
-            'min_risk_reward': current_config['global'].get('min_risk_reward', 1.5),
-            'min_indicator_consensus': current_config['global'].get('min_indicator_consensus', 2),
-            'atr_stop_multiplier': current_config['global'].get('atr_stop_multiplier', 1.5)
-        }
-    
-    best_params['found_profitable'] = found_profitable
-    
-    print(f"\n  ✅ 快速探索完成:")
-    print(f"     最优参数: R:R={best_params['min_risk_reward']}, 共识={best_params['min_indicator_consensus']}, ATR={best_params['atr_stop_multiplier']:.2f}")
-    print(f"     盈利状态: {'✅ 找到盈利' if found_profitable else '⚠️ 未找到盈利（使用最优亏损点）'}")
-    
-    # 【V8.3.16.3】兼容后续代码：构建iterative_result格式
-    return {
-        'final_params': best_params,
-        'best_config': best_params,  # 兼容Line 7081
-        'best_round_num': 1,  # 快速探索视为第1轮
-        'best_metric': 0.0,  # 快速探索不计算综合指标
-        'baseline_metric': 0.0,
-        'quick_search_mode': True,
-        'found_profitable': found_profitable
-    }
-
-
 def iterative_parameter_optimization_v770(data_summary, current_config, original_stats):
     """
     V7.7.0: 多阶段盈利优先优化
@@ -5487,7 +5357,7 @@ def iterative_parameter_optimization_v770(data_summary, current_config, original
     days = 7
     
     # 读取历史最优采样范围
-    model_name = os.getenv("MODEL_NAME", "deepseek")
+    model_name = os.getenv("MODEL_NAME", "qwen")
     config_file = Path("trading_data") / model_name / "learning_config.json"
     historical_sampling_range = None
     
@@ -5709,7 +5579,7 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
     days = 7
     
     # 🆕 V7.6.3.13: 读取历史最优采样范围（如果有）
-    model_name = os.getenv("MODEL_NAME", "deepseek")
+    model_name = os.getenv("MODEL_NAME", "qwen")
     config_file = Path("trading_data") / model_name / "learning_config.json"
     historical_sampling_range = None
     
@@ -5900,8 +5770,8 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
             
             try:
                 # 调用AI
-                ai_response = deepseek_client.chat.completions.create(
-                    model="deepseek-reasoner",
+                ai_response = qwen_client.chat.completions.create(
+                    model="qwen3-max",
                     messages=[
                         {"role": "system", "content": "You are a professional quantitative trading analyst specializing in parameter optimization and profitability discovery. Respond in Chinese for designated fields."},
                             {"role": "user", "content": profit_discovery_prompt}
@@ -6102,13 +5972,13 @@ Based on the results above, design a BETTER 5-point sampling strategy.
 **IMPORTANT**: All text fields (diagnosis, expected_improvement) MUST be in Chinese (中文).
 """
         
-        # 调用AI（使用已有的deepseek_client）
+        # 调用AI（使用已有的qwen_client）
         try:
             import json
             import re
             
-            response = deepseek_client.chat.completions.create(
-                model="deepseek-reasoner",
+            response = qwen_client.chat.completions.create(
+                model="qwen3-max",
                 messages=[{"role": "user", "content": resample_prompt}],
                 temperature=0.1
             )
@@ -6250,10 +6120,10 @@ Based on the 5 strategic sampling points above:
 **IMPORTANT**: All text fields (reasoning, reason, analysis) MUST be in Chinese (中文).
 """
     
-    # 调用AI分析（使用已有的deepseek_client）
+    # 调用AI分析（使用已有的qwen_client）
     try:
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",
             messages=[{"role": "user", "content": ai_analysis_prompt}],
             temperature=0.1
         )
@@ -6763,7 +6633,7 @@ def analyze_and_adjust_params():
     yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
     
     # 🔧 V7.9.1: 读取最近7-14天的市场快照（时间越久权重越低）
-    model_name = os.getenv("MODEL_NAME", "deepseek")
+    model_name = os.getenv("MODEL_NAME", "qwen")
     snapshot_dir = Path("trading_data") / model_name / "market_snapshots"
     
     kline_snapshots = None
@@ -7022,43 +6892,13 @@ def analyze_and_adjust_params():
             'total_profit': recent_20['盈亏(U)'].sum()
         }
         
-        # 【V8.3.16】技术债1修复：根据配置选择优化模式
-        global_initial_params = None
-        iterative_result = None
-        
-        if ENABLE_V770_QUICK_SEARCH:
-            # 快速探索模式（3分钟）- 为V8.3.12提供初始参数
-            print(f"  ℹ️  使用快速探索模式（V8.3.16）")
-            iterative_result = quick_global_search_v8316(
-                data_summary=data_summary,
-                current_config=config
-            )
-            # 提取final_params作为global_initial_params（兼容后续代码）
-            global_initial_params = iterative_result.get('final_params')
-            
-        elif ENABLE_V770_FULL_OPTIMIZATION:
-            # 完整V7.7.0优化（7-10分钟）
-            print(f"  ℹ️  使用完整V7.7.0优化模式")
-            iterative_result = iterative_parameter_optimization(
-                data_summary=data_summary,
-                current_config=config,
-                original_stats=original_stats,
-                max_rounds=5
-            )
-            global_initial_params = iterative_result.get('final_params') if iterative_result else None
-            
-        else:
-            # 跳过V7.7.0，使用当前配置
-            print(f"  ℹ️  跳过V7.7.0优化，使用当前配置")
-            global_initial_params = {
-                'min_risk_reward': config['global'].get('min_risk_reward', 1.5),
-                'min_indicator_consensus': config['global'].get('min_indicator_consensus', 2),
-                'atr_stop_multiplier': config['global'].get('atr_stop_multiplier', 1.5)
-            }
-            iterative_result = {
-                'final_params': global_initial_params,
-                'skipped': True
-            }
+        # 🆕 V7.6.3.3: 执行多轮迭代优化
+        iterative_result = iterative_parameter_optimization(
+            data_summary=data_summary,
+            current_config=config,
+            original_stats=original_stats,
+            max_rounds=5
+        )
         
         if not iterative_result:
             print("⚠️ 多轮迭代优化失败，使用备用规则引擎")
@@ -7109,7 +6949,7 @@ def analyze_and_adjust_params():
                     print(f"  ✓ {param}: {old_value} → {value}")
 
             # 记录完整的迭代历史到文件
-            history_file = Path("trading_data") / os.getenv("MODEL_NAME", "deepseek") / "iterative_optimization_history.jsonl"
+            history_file = Path("trading_data") / os.getenv("MODEL_NAME", "qwen") / "iterative_optimization_history.jsonl"
             history_file.parent.mkdir(parents=True, exist_ok=True)
             
             iteration_log = {
@@ -7217,33 +7057,12 @@ def analyze_and_adjust_params():
                     old_config=config
                 )
                 
-                # 【V8.3.16】技术债1修复：使用V7.7.0快速探索的结果作为初始参数
-                # 【V8.3.16.3】修复：从iterative_result中提取final_params
-                if global_initial_params and isinstance(global_initial_params, dict):
-                    # 优先使用final_params，如果不存在则直接使用global_initial_params（兼容旧版本）
-                    base_params = global_initial_params.get('final_params', global_initial_params)
-                else:
-                    base_params = {}
-                
-                initial_params_for_scalping = base_params.copy() if base_params else {}
-                initial_params_for_swing = base_params.copy() if base_params else {}
-                
-                # 合并当前配置中的策略特定参数
-                scalping_current = config.get('scalping_params', {})
-                scalping_current.update(initial_params_for_scalping)
-                
-                swing_current = config.get('swing_params', {})
-                swing_current.update(initial_params_for_swing)
-                
                 # 分别优化超短线参数
                 if separated_analysis['scalping']['total_opportunities'] > 20:
                     print(f"\n  ⚡ 优化超短线参数...")
-                    if base_params:
-                        print(f"     ℹ️  使用V7.7.0初始参数: R:R={base_params.get('min_risk_reward', 'N/A')}, 共识={base_params.get('min_indicator_consensus', 'N/A')}")
                     scalping_optimization = optimize_scalping_params(
                         scalping_data=separated_analysis['scalping'],
-                        current_params=scalping_current,
-                        initial_params=initial_params_for_scalping  # 【V8.3.16新增】
+                        current_params=config.get('scalping_params', {})
                     )
                     
                     if scalping_optimization.get('improvement') is not None:
@@ -7266,12 +7085,9 @@ def analyze_and_adjust_params():
                 # 分别优化波段参数
                 if separated_analysis['swing']['total_opportunities'] > 20:
                     print(f"\n  🌊 优化波段参数...")
-                    if base_params:
-                        print(f"     ℹ️  使用V7.7.0初始参数: R:R={base_params.get('min_risk_reward', 'N/A')}, 共识={base_params.get('min_indicator_consensus', 'N/A')}")
                     swing_optimization = optimize_swing_params(
                         swing_data=separated_analysis['swing'],
-                        current_params=swing_current,
-                        initial_params=initial_params_for_swing  # 【V8.3.16新增】
+                        current_params=config.get('swing_params', {})
                     )
                     
                     if swing_optimization.get('improvement') is not None:
@@ -7300,11 +7116,7 @@ def analyze_and_adjust_params():
         print("\n【第4.7步：Per-Symbol优化（V8.3.13.3）】")
         per_symbol_optimization = None
         
-        # 【V8.3.16】立即优化：配置开关跳过Per-Symbol
-        if not ENABLE_PER_SYMBOL_OPTIMIZATION:
-            print(f"  ⏭️  跳过Per-Symbol优化（配置已禁用，节省56-91分钟）")
-            print(f"     理由：大部分币种可共享全局/策略参数，独立优化增益有限")
-        elif kline_snapshots is not None and not kline_snapshots.empty:
+        if kline_snapshots is not None and not kline_snapshots.empty:
             try:
                 # 分析每个币种的机会
                 per_symbol_data = analyze_per_symbol_opportunities(
@@ -7374,13 +7186,13 @@ def analyze_and_adjust_params():
                         backtest_info += f" 捕获率{capture_rate*100:.0f}%"
             
             send_bark_notification(
-                "[DeepSeek]🤖AI参数优化V7.7.0",
+                "[通义千问]🤖AI参数优化V7.7.0",
                 f"胜率{win_rate*100:.0f}% 盈亏比{win_loss_ratio:.1f}\n{iter_desc}{backtest_info}",
             )
             
             # 🆕 发送邮件通知（详细版）
             try:
-                model_name = os.getenv("MODEL_NAME", "DeepSeek")
+                model_name = os.getenv("MODEL_NAME", "Qwen")
                 
                 # 构建参数调整详情（HTML格式）- 只显示有变化的参数
                 param_changes_html = ""
@@ -8521,8 +8333,8 @@ def chat_with_ai(user_message, context=None):
 {context.get('market_text', '暂无数据')}
 """
         
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",  # DeepSeek模型
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",  # Qwen模型
             messages=[
                 {
                     "role": "system",
@@ -8628,14 +8440,14 @@ def setup_exchange(is_manual_backtest=False):
         if is_manual_backtest:
             # 手动回测模式：发送回测开始通知
             send_bark_notification(
-                f"[DeepSeek]🔬回测开始",
+                f"[通义千问]🔬回测开始",
                 f"余额{usdt_balance:.0f}U{stage_detail}",
             )
         else:
             # 正常启动模式：发送系统启动通知
             mode_emoji = "🧪" if TRADE_CONFIG.get("test_mode", False) else "🔴"
             send_bark_notification(
-                f"[DeepSeek]启动{mode_emoji}",
+                f"[通义千问]启动{mode_emoji}",
                 f"余额{usdt_balance:.0f}U{stage_detail}",
         )
         
@@ -11116,8 +10928,8 @@ Output JSON only:
     
     try:
         print(f"正在请求AI评估仓位调整...")
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=2000,  # 增加token限制，为reasoner思考过程预留空间
             temperature=0.3
@@ -12237,7 +12049,7 @@ While code executes as single position, AI should plan multi-part management:
         }
     
     try:
-        # 🔧 优化System Prompt结构（利于DeepSeek后端缓存）
+        # 🔧 优化System Prompt结构（利于Qwen后端缓存）
         optimized_system_prompt = """You are a professional quantitative portfolio manager AI specializing in multi-asset analysis and capital allocation.
 
 Your core principles:
@@ -12247,8 +12059,8 @@ Your core principles:
 - Dynamically adjust positions to ensure total risk is controlled
 - Always respond in Chinese (中文)"""
         
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",  # DeepSeek模型（思考模式，提升复杂策略分析能力）
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",  # Qwen模型（思考模式，提升复杂策略分析能力）
             messages=[
                 {
                     "role": "system",
@@ -12257,7 +12069,7 @@ Your core principles:
                 {"role": "user", "content": prompt},
             ],
             stream=False,
-            max_tokens=16000,  # 🔧 从8K提升到16K，避免JSON被截断
+            max_tokens=8000,  # 🔧 Qwen限制最大8192，设置为8000安全
         )
         
         result = response.choices[0].message.content
@@ -13625,8 +13437,8 @@ Return JSON (reason MUST be in Chinese):
 """
         
         # 调用AI
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=300,
             temperature=0.7
@@ -13746,8 +13558,8 @@ Return JSON:
 """
         
         # 调用AI
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=400,
             temperature=0.7
@@ -14282,7 +14094,7 @@ def monitor_positions_for_invalidation(market_data_list: list, current_positions
         allow_ai_confirmation = global_thresholds.get('allow_ai_confirmation', True)
         allow_dynamic_adjustment = tp_sl_strategy.get('allow_dynamic_adjustment', True)
         
-        model_name = os.getenv("MODEL_NAME", "deepseek")
+        model_name = os.getenv("MODEL_NAME", "qwen")
         
         for position in current_positions:
             symbol = position.get('symbol')
@@ -14352,7 +14164,7 @@ def monitor_positions_for_invalidation(market_data_list: list, current_positions
                     
                     # 保存更新后的context
                     try:
-                        model_name = os.getenv("MODEL_NAME", "deepseek")
+                        model_name = os.getenv("MODEL_NAME", "qwen")
                         context_file = Path("trading_data") / model_name / "position_contexts.json"
                         contexts = {}
                         if context_file.exists():
@@ -14747,7 +14559,7 @@ def _execute_single_close_action(action, current_positions):
             
             try:
                 # 从position_contexts读取原始止盈止损
-                model_name = os.getenv("MODEL_NAME", "deepseek")
+                model_name = os.getenv("MODEL_NAME", "qwen")
                 context_file = Path("trading_data") / model_name / "position_contexts.json"
                 original_sl = None
                 original_tp = None
@@ -14790,7 +14602,7 @@ def _execute_single_close_action(action, current_positions):
         actual_holding = 0
         try:
             # 读取position_contexts
-            model_name = os.getenv("MODEL_NAME", "deepseek")
+            model_name = os.getenv("MODEL_NAME", "qwen")
             context_file = Path("trading_data") / model_name / "position_contexts.json"
             if context_file.exists():
                 with open(context_file, 'r', encoding='utf-8') as f:
@@ -14874,7 +14686,7 @@ def _execute_single_close_action(action, current_positions):
         if old_pos:
             position_type = "多" if old_pos["side"] == "long" else "空"
             send_bark_notification(
-                f"[DeepSeek]{coin_name}平仓失败❌",
+                f"[通义千问]{coin_name}平仓失败❌",
                 f"{position_type}仓 持有:{old_pos['size']:.4f}个\n"
                 f"开仓价:{old_pos.get('entry_price', 0):.2f} 当前盈亏:{old_pos['unrealized_pnl']:+.2f}U\n"
                     f"失败原因: {str(e)[:80]}\n"
@@ -14925,7 +14737,7 @@ def _execute_single_open_action_v55(
     if should_pause:
         print(f"🚫 交易已暂停: {pause_reason}")
         send_bark_notification(
-            f"[DeepSeek]交易暂停🚫",
+            f"[通义千问]交易暂停🚫",
             f"{pause_reason}\n币种:{coin_name}\n建议:等待市场环境改善",
         )
         return
@@ -14994,7 +14806,7 @@ def _execute_single_open_action_v55(
         if trades_count < 20 and signal_type == 'scalping':
             print(f"❌ {level_name}禁止Scalping信号（需要快速反应经验）")
             send_bark_notification(
-                f"[DeepSeek]{coin_name}开仓被拒❌",
+                f"[通义千问]{coin_name}开仓被拒❌",
                 f"新手期禁止Scalping信号\n当前:{signal_classification['signal_name']}\n建议:等待Swing机会或完成5笔交易",
             )
             return
@@ -15044,7 +14856,7 @@ def _execute_single_open_action_v55(
     if not budget_ok:
         print(f"❌ {budget_reason}")
         send_bark_notification(
-            f"[DeepSeek]{coin_name}开仓被拒❌",
+            f"[通义千问]{coin_name}开仓被拒❌",
             f"{budget_reason}\n信号类型:{signal_type}\nAI理由:{action.get('reason', '')[:60]}",
         )
         return
@@ -15058,7 +14870,7 @@ def _execute_single_open_action_v55(
         if not freq_ok:
             print(f"❌ {freq_reason}")
             send_bark_notification(
-                f"[DeepSeek]{coin_name}开仓被拒❌",
+                f"[通义千问]{coin_name}开仓被拒❌",
                 f"{freq_reason}\n建议:等待冷却期结束或选择Swing信号",
             )
             return
@@ -15071,7 +14883,7 @@ def _execute_single_open_action_v55(
     if not reserve_ok:
         print(f"❌ {reserve_reason}")
         send_bark_notification(
-            f"[DeepSeek]{coin_name}现金储备不足❌",
+            f"[通义千问]{coin_name}现金储备不足❌",
             f"{reserve_reason}\n建议:等待现有仓位平仓释放资金",
         )
         return
@@ -15088,7 +14900,7 @@ def _execute_single_open_action_v55(
     if not direction_ok:
         print(f"❌ {direction_reason}")
         send_bark_notification(
-            f"[DeepSeek]{coin_name}开仓被拒❌",
+            f"[通义千问]{coin_name}开仓被拒❌",
             f"{direction_reason}",
         )
         return
@@ -15123,7 +14935,7 @@ def _execute_single_open_action_v55(
                 f"❌ 盈亏比{risk_reward:.2f} < {symbol}要求{min_rr_required:.1f}，拒绝{direction}"
             )
             send_bark_notification(
-                f"[DeepSeek]{coin_name}{direction_emoji}{direction}被拒❌",
+                f"[通义千问]{coin_name}{direction_emoji}{direction}被拒❌",
                 f"AI判断:{direction} 但盈亏比不足\n"
                 f"要求:{min_rr_required:.1f} 实际:{risk_reward:.2f}\n"
                 f"当前价:{entry_price:.2f} 止损:{stop_loss:.2f} 止盈:{take_profit:.2f}\n"
@@ -15170,7 +14982,7 @@ def _execute_single_open_action_v55(
     if not allowed:
         print(f"❌ 风险预算不足（已使用{risk_used_pct:.0f}%），拒绝开仓")
         send_bark_notification(
-            f"[DeepSeek]{coin_name}风险预算不足❌",
+            f"[通义千问]{coin_name}风险预算不足❌",
             f"风险已用:{risk_used_pct:.0f}% 总资产:{total_assets:.0f}U\n"
             f"计划开仓:{planned_position:.0f}U {leverage}x杠杆\n"
             f"AI理由: {action.get('reason', 'N/A')[:60]}",
@@ -15203,7 +15015,7 @@ def _execute_single_open_action_v55(
                 if deviation_pct > 0.01:  # 超过1%
                     print(f"❌ 追价过高({deviation_pct*100:.1f}%)，拒绝入场")
                     send_bark_notification(
-                        f"[DeepSeek]{coin_name}拒绝开多❌",
+                        f"[通义千问]{coin_name}拒绝开多❌",
                         f"追价过高：市价${entry_price:.2f} > LWP${lwp_reference:.2f}\n"
                             f"偏离度:{deviation_pct*100:.1f}% (上限1.0%)\n"
                         f"AI理由: {action.get('reason', 'N/A')[:60]}",
@@ -15248,7 +15060,7 @@ def _execute_single_open_action_v55(
                 if deviation_pct > 0.01:
                     print(f"❌ 追价过低({deviation_pct*100:.1f}%)，拒绝入场")
                     send_bark_notification(
-                        f"[DeepSeek]{coin_name}拒绝开空❌",
+                        f"[通义千问]{coin_name}拒绝开空❌",
                         f"追价过低：市价${entry_price:.2f} < LWP${lwp_reference:.2f}\n"
                             f"偏离度:{deviation_pct*100:.1f}% (上限1.0%)\n"
                         f"AI理由: {action.get('reason', 'N/A')[:60]}",
@@ -15404,7 +15216,7 @@ def _execute_single_open_action_v55(
                     ai_reason = ai_decision['reason']
                     ai_reason_short = ai_reason[:60] + "..." if len(ai_reason) > 60 else ai_reason
                     send_bark_notification(
-                        f"[DeepSeek]{coin_name}仓位智能调整✅",
+                        f"[通义千问]{coin_name}仓位智能调整✅",
                         f"{'多' if operation=='OPEN_LONG' else '空'}仓 {leverage}x杠杆\n"
                         f"调整: ${planned_position:.0f}U→${min_value_usd:.0f}U (+{adjustment_pct:.0f}%)\n"
                         f"信号: {signal_score}分 R:R{risk_reward:.2f}\n"
@@ -15417,7 +15229,7 @@ def _execute_single_open_action_v55(
                     print(f"理由: {ai_decision['reason']}")
                     
                     send_bark_notification(
-                        f"[DeepSeek]{coin_name}开仓取消❌",
+                        f"[通义千问]{coin_name}开仓取消❌",
                         f"方向:{'多' if operation=='OPEN_LONG' else '空'}仓 仓位:{planned_position:.0f}U {leverage}x杠杆\n"
                             f"信号: 得分{signal_score} R:R{risk_reward:.2f}\n"
                         f"原因: 仓位不足且AI拒绝调整\n"
@@ -15487,7 +15299,7 @@ def _execute_single_open_action_v55(
             print(f"⚠️ 设置止损/止盈订单失败: {e}")
             # 失败不中断流程，但发送警告
             send_bark_notification(
-                f"[DeepSeek]{coin_name}止损单设置失败⚠️",
+                f"[通义千问]{coin_name}止损单设置失败⚠️",
                 f"已开仓但止损单未设置！\n仓位:{planned_position:.0f}U\n止损价:{stop_loss:.2f}\n请手动设置保护！",
             )
 
@@ -15564,7 +15376,7 @@ def _execute_single_open_action_v55(
         print(f"❌ 开仓失败: {e}")
         direction = "多" if operation == "OPEN_LONG" else "空"
         send_bark_notification(
-            f"[DeepSeek]{coin_name}开仓失败❌",
+            f"[通义千问]{coin_name}开仓失败❌",
             f"方向:{direction}仓 仓位:{planned_position:.0f}U {leverage}x杠杆\n"
             f"信号得分:{score} 盈亏比:{risk_reward:.2f}\n"
             f"失败原因: {str(e)[:100]}\n"
@@ -15836,7 +15648,7 @@ def execute_portfolio_actions(
                     f"❌ 盈亏比{risk_reward:.2f}:1 < {min_rr_required:.1f}:1，不符合学习参数要求，放弃{direction}"
                 )
                 send_bark_notification(
-                    f"[DeepSeek]{coin_name}{direction_emoji}{direction}被拒❌",
+                    f"[通义千问]{coin_name}{direction_emoji}{direction}被拒❌",
                     f"AI判断:{direction} 但盈亏比不足\n"
                     f"要求:{min_rr_required:.1f} 实际:{risk_reward:.2f}\n"
                     f"当前价:{entry_price:.2f} 止损:{stop_loss:.2f} 止盈:{take_profit:.2f}\n"
@@ -15902,7 +15714,7 @@ def execute_portfolio_actions(
                     close_reason = action.get("reason", "N/A")
                     position_type = "多" if current_pos["side"] == "long" else "空"
                     send_bark_notification(
-                        f"[DeepSeek]{coin_name}平仓{pnl_emoji}",
+                        f"[通义千问]{coin_name}平仓{pnl_emoji}",
                         f"{position_type}仓平仓 盈亏:{pnl:+.2f}U\n开仓价:{current_pos.get('entry_price', 0):.2f} 平仓价:{current_pos.get('mark_price', 0):.2f}\n平仓理由:{close_reason}",
                             )
                     
@@ -15979,7 +15791,7 @@ def execute_portfolio_actions(
                     # 立即发送通知（在保存记录之前，确保一定会推送）
                     open_reason = action.get("reason", "N/A")
                     send_bark_notification(
-                        f"[DeepSeek]{coin_name}开多仓📈",
+                        f"[通义千问]{coin_name}开多仓📈",
                         f"仓位:{position_usd}U 杠杆:{leverage}x\n盈亏比:{risk_reward:.2f} 止损:{action.get('stop_loss_price', 0):.0f}\n理由:{open_reason}",
                     )
                     
@@ -16062,7 +15874,7 @@ def execute_portfolio_actions(
                     # 立即发送通知（在保存记录之前，确保一定会推送）
                     open_reason = action.get("reason", "N/A")
                     send_bark_notification(
-                        f"[DeepSeek]{coin_name}开空仓📉",
+                        f"[通义千问]{coin_name}开空仓📉",
                         f"仓位:{position_usd}U 杠杆:{leverage}x\n盈亏比:{risk_reward:.2f} 止损:{action.get('stop_loss_price', 0):.0f}\n理由:{open_reason}",
                     )
                     
@@ -16099,7 +15911,7 @@ def execute_portfolio_actions(
         except Exception as e:
             print(f"执行失败: {e}")
             send_bark_notification(
-                f"[DeepSeek]{coin_name}交易失败❌", f"操作:{operation} 错误:{str(e)}"
+                f"[通义千问]{coin_name}交易失败❌", f"操作:{operation} 错误:{str(e)}"
             )
             import traceback
 
@@ -16352,7 +16164,7 @@ def trading_bot():
     except Exception as e:
         elapsed = time.time() - start_time
         print(f"\n❌ 交易循环异常 (耗时: {elapsed:.1f}秒): {e}")
-        send_bark_notification("[DeepSeek]系统异常⚠️", f"交易循环出错 {str(e)}")
+        send_bark_notification("[通义千问]系统异常⚠️", f"交易循环出错 {str(e)}")
         import traceback
 
         traceback.print_exc()
@@ -16474,7 +16286,7 @@ def main():
             print("=" * 70)
 
             # 发送停止通知
-            send_bark_notification("[DeepSeek]系统停止", "用户手动停止交易系统")
+            send_bark_notification("[通义千问]系统停止", "用户手动停止交易系统")
             break
 
         except Exception as e:
@@ -16501,7 +16313,7 @@ def main():
 
                 # 发送严重告警
                 send_bark_notification(
-                    "[DeepSeek]系统严重异常⚠️",
+                    "[通义千问]系统严重异常⚠️",
                     f"Schedule连续失败{max_consecutive_errors}次 {error_msg[:50]}",
                 )
 
@@ -16513,7 +16325,7 @@ def main():
             elif consecutive_errors >= 3:
                 # 中等异常，发送通知
                 send_bark_notification(
-                    "[DeepSeek]Schedule异常",
+                    "[通义千问]Schedule异常",
                     f"连续{consecutive_errors}次错误 {error_msg[:50]}",
                 )
 
@@ -17962,7 +17774,7 @@ IMPORTANT: Be aggressive in recommendations. If Time Exit > 50%, TP is definitel
     return prompt
 
 
-def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_name='deepseek'):
+def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_name='qwen'):
     """
     【V8.3.12.1】调用AI分析exit patterns并给出策略建议
     
@@ -17984,8 +17796,8 @@ def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_
         print(f"  🤖 调用AI分析{signal_type} exit patterns...")
         
         # 调用AI
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",
             messages=[
                 {
                     "role": "system",
@@ -18133,22 +17945,17 @@ def calculate_swing_optimization_score(sim_result):
     return total_score
 
 
-def optimize_scalping_params(scalping_data, current_params, initial_params=None):
+def optimize_scalping_params(scalping_data, current_params):
     """
-    【V8.3.12.1 + V8.3.16】超短线参数优化 - Grid Search + Exit Analysis + 条件AI优化
+    【V8.3.12.1】超短线参数优化 - Grid Search + Exit Analysis + AI优化
     
     优化流程：
-    1. Grid Search找到最优参数（54组参数）
+    1. Grid Search找到最优参数（48组参数）
     2. Exit Analysis分析最优参数的问题
-    3. 条件AI调用：只在Time Exit>80%时调用AI（V8.3.16）
-    4. 动态激进度：根据Time Exit率调整AI建议采纳度（V8.3.16技术债3）
+    3. AI给出策略调整建议
+    4. 应用AI建议得到最终参数
     
     目标：降低time_exit率，提高平均利润
-    
-    Args:
-        scalping_data: 超短线机会数据
-        current_params: 当前配置的策略参数
-        initial_params: 【V8.3.16新增】V7.7.0快速探索提供的初始参数（技术债1）
     """
     opportunities = scalping_data['opportunities']
     
@@ -18159,24 +17966,17 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
             'improvement': None
         }
     
-    # 【V8.3.16】使用initial_params作为Grid Search的起点
-    if initial_params:
-        print(f"     ℹ️  应用V7.7.0初始参数到Grid Search")
-        # 将initial_params合并到current_params
-        current_params = {**current_params, **initial_params}
-    
     print(f"  🔧 开始超短线参数优化（{len(opportunities)}个机会）...")
     
     # ========== 阶段1: Grid Search ==========
-    # 【V8.3.15】激进调整参数范围，解决Time Exit率100%问题
-    # 关键变化：延长持仓时间4-6倍，降低TP距离60-70%
-    print(f"\n  📊 阶段1: Grid Search（54组参数，V8.3.15激进优化）")
+    # 【V8.3.14.4】优化：减少Grid Search组合数量，避免OOM
+    print(f"\n  📊 阶段1: Grid Search（18组参数，内存优化版）")
     param_grid = {
-        'max_holding_hours': [2.0, 2.5, 3.0],       # 延长（0.5-1.5h → 2.0-3.0h）
-        'atr_tp_multiplier': [0.3, 0.5, 0.8],       # 大幅降低（1.0-2.0 → 0.3-0.8）
-        'atr_stop_multiplier': [0.5, 0.8],          # 降低（0.8-1.0 → 0.5-0.8）
-        'min_risk_reward': [0.8, 1.0, 1.2]          # 降低（1.2-1.5 → 0.8-1.2）
-    }  # Total: 3×3×2×3 = 54组（V8.3.15激进优化）
+        'max_holding_hours': [0.5, 1.0, 1.5],        # 4 → 3
+        'atr_tp_multiplier': [1.0, 1.5, 2.0],       # 4 → 3
+        'atr_stop_multiplier': [0.8, 1.0],          # 3 → 2
+        'min_risk_reward': [1.2, 1.5]               # 3 → 2
+    }  # Total: 3×3×2×2 = 18组（减少62.5%）
     
     best_score = -float('inf')
     best_params = current_params.copy()
@@ -18262,50 +18062,19 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
             print(f"     💡 建议: {tf_recommendations['recommended_timeframe']}时间框架")
             print(f"        {tf_recommendations['reason']}")
     
-    # ========== 阶段3: AI策略分析（条件调用+动态激进度）==========
-    # 【V8.3.16】技术债3修复：条件AI调用+动态激进度
-    print(f"\n  🤖 阶段3: AI策略分析（V8.3.16条件调用）")
-    
-    te_rate = exit_analysis['time_exit']['rate'] / 100 if exit_analysis else 0
-    ai_suggestions = None
-    
-    # 【V8.3.16】条件AI调用：只在Time Exit>80%或配置强制时调用
-    should_call_ai = (not ENABLE_CONDITIONAL_AI_CALL) or (te_rate > 0.8)
-    
-    if should_call_ai:
-        if te_rate > 0.8:
-            print(f"     ⚠️  Time Exit率过高({te_rate*100:.0f}%)，调用AI分析...")
-        ai_suggestions = call_ai_for_exit_analysis(exit_analysis, best_params, 'scalping')
-    else:
-        print(f"     ✅ Time Exit率可接受({te_rate*100:.0f}%)，跳过AI调用（节省1-2分钟）")
+    # ========== 阶段3: AI分析 ==========
+    print(f"\n  🤖 阶段3: AI策略分析")
+    ai_suggestions = call_ai_for_exit_analysis(exit_analysis, best_params, 'scalping')
     
     final_params = best_params.copy()
     if ai_suggestions:
-        # 【V8.3.16】技术债3修复：动态调整AI激进度
-        if AI_AGGRESSIVENESS_DYNAMIC:
-            if te_rate > 0.9:
-                aggressiveness = 1.0
-                print(f"     📊 Time Exit率>90% → AI激进度=100%（全部采纳）")
-            elif te_rate > 0.8:
-                aggressiveness = 0.9
-                print(f"     📊 Time Exit率>80% → AI激进度=90%")
-            elif te_rate > 0.6:
-                aggressiveness = 0.7
-                print(f"     📊 Time Exit率>60% → AI激进度=70%")
-            else:
-                aggressiveness = 0.5
-                print(f"     📊 Time Exit率<60% → AI激进度=50%（保守）")
-        else:
-            aggressiveness = 0.8
-            print(f"     📊 使用固定AI激进度=80%")
-        
-        # 应用AI建议
-        final_params = apply_ai_suggestions(best_params, ai_suggestions, apply_aggressiveness=aggressiveness)
+        # 应用AI建议（80%激进度）
+        final_params = apply_ai_suggestions(best_params, ai_suggestions, apply_aggressiveness=0.8)
         
         # 验证AI调整后的效果
         print(f"\n  ✅ 验证AI调整后的效果...")
         final_result = simulate_params_on_opportunities(opportunities, final_params)
-        final_score = calculate_scalping_optimization_score(final_result)
+        final_score = calculate_scalping_score(final_result)
         
         print(f"     最终: time_exit率={final_result['time_exit_count']/final_result['captured_count']*100:.0f}%, 平均利润={final_result['avg_profit']:.1f}%")
         print(f"     评分: Grid={best_score:.3f} → AI调整后={final_score:.3f}")
@@ -18316,8 +18085,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
             final_params = best_params
             final_result = best_result
     else:
-        if should_call_ai:
-            print(f"     ⚠️  AI分析失败，使用Grid Search结果")
+        print(f"     ⚠️  AI分析失败，使用Grid Search结果")
         final_result = best_result
     
     return {
@@ -18334,22 +18102,17 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
     }
 
 
-def optimize_swing_params(swing_data, current_params, initial_params=None):
+def optimize_swing_params(swing_data, current_params):
     """
-    【V8.3.12.1 + V8.3.16】波段参数优化 - Grid Search + Exit Analysis + 条件AI优化
+    【V8.3.12.1】波段参数优化 - Grid Search + Exit Analysis + AI优化
     
     优化流程：
-    1. Grid Search找到最优参数（54组参数）
+    1. Grid Search找到最优参数（81组参数）
     2. Exit Analysis分析最优参数的问题
-    3. 条件AI调用：只在Time Exit>80%时调用AI（V8.3.16）
-    4. 动态激进度：根据Time Exit率调整AI建议采纳度（V8.3.16技术债3）
+    3. AI给出策略调整建议
+    4. 应用AI建议得到最终参数
     
     目标：提高平均利润，保持捕获率
-    
-    Args:
-        swing_data: 波段机会数据
-        current_params: 当前配置的策略参数
-        initial_params: 【V8.3.16新增】V7.7.0快速探索提供的初始参数（技术债1）
     """
     opportunities = swing_data['opportunities']
     
@@ -18360,24 +18123,17 @@ def optimize_swing_params(swing_data, current_params, initial_params=None):
             'improvement': None
         }
     
-    # 【V8.3.16】使用initial_params作为Grid Search的起点
-    if initial_params:
-        print(f"     ℹ️  应用V7.7.0初始参数到Grid Search")
-        # 将initial_params合并到current_params
-        current_params = {**current_params, **initial_params}
-    
     print(f"  🔧 开始波段参数优化（{len(opportunities)}个机会）...")
     
     # ========== 阶段1: Grid Search ==========
-    # 【V8.3.15】激进调整参数范围，解决Time Exit率82%和捕获率5%问题
-    # 关键变化：延长持仓时间，大幅降低TP距离50-70%
-    print(f"\n  📊 阶段1: Grid Search（54组参数，V8.3.15激进优化）")
+    # 【V8.3.14.4】优化：减少Grid Search组合数量，避免OOM
+    print(f"\n  📊 阶段1: Grid Search（18组参数，内存优化版）")
     param_grid = {
-        'max_holding_hours': [48, 60, 72],          # 延长（24-48h → 48-72h）
-        'atr_tp_multiplier': [2.0, 3.0, 4.0],       # 大幅降低（4.0-6.0 → 2.0-4.0）
-        'atr_stop_multiplier': [1.5, 2.0],          # 保持
-        'min_risk_reward': [1.5, 2.0, 2.5]          # 扩展（2.0-2.5 → 1.5-2.5）
-    }  # Total: 3×3×2×3 = 54组（V8.3.15激进优化）
+        'max_holding_hours': [24, 36, 48],          # 保持3个
+        'atr_tp_multiplier': [4.0, 6.0],            # 3 → 2
+        'atr_stop_multiplier': [1.5, 2.0],          # 3 → 2
+        'min_risk_reward': [2.0, 2.5]               # 3 → 2
+    }  # Total: 3×2×2×2 = 24组（减少70.4%）,实际18组
     
     best_score = -float('inf')
     best_params = current_params.copy()
@@ -18463,50 +18219,19 @@ def optimize_swing_params(swing_data, current_params, initial_params=None):
             print(f"     💡 建议: {tf_recommendations['recommended_timeframe']}时间框架")
             print(f"        {tf_recommendations['reason']}")
     
-    # ========== 阶段3: AI策略分析（条件调用+动态激进度）==========
-    # 【V8.3.16】技术债3修复：条件AI调用+动态激进度
-    print(f"\n  🤖 阶段3: AI策略分析（V8.3.16条件调用）")
-    
-    te_rate = exit_analysis['time_exit']['rate'] / 100 if exit_analysis else 0
-    ai_suggestions = None
-    
-    # 【V8.3.16】条件AI调用：只在Time Exit>80%或配置强制时调用
-    should_call_ai = (not ENABLE_CONDITIONAL_AI_CALL) or (te_rate > 0.8)
-    
-    if should_call_ai:
-        if te_rate > 0.8:
-            print(f"     ⚠️  Time Exit率过高({te_rate*100:.0f}%)，调用AI分析...")
-        ai_suggestions = call_ai_for_exit_analysis(exit_analysis, best_params, 'swing')
-    else:
-        print(f"     ✅ Time Exit率可接受({te_rate*100:.0f}%)，跳过AI调用（节省1-2分钟）")
+    # ========== 阶段3: AI分析 ==========
+    print(f"\n  🤖 阶段3: AI策略分析")
+    ai_suggestions = call_ai_for_exit_analysis(exit_analysis, best_params, 'swing')
     
     final_params = best_params.copy()
     if ai_suggestions:
-        # 【V8.3.16】技术债3修复：动态调整AI激进度
-        if AI_AGGRESSIVENESS_DYNAMIC:
-            if te_rate > 0.9:
-                aggressiveness = 1.0
-                print(f"     📊 Time Exit率>90% → AI激进度=100%（全部采纳）")
-            elif te_rate > 0.8:
-                aggressiveness = 0.9
-                print(f"     📊 Time Exit率>80% → AI激进度=90%")
-            elif te_rate > 0.6:
-                aggressiveness = 0.7
-                print(f"     📊 Time Exit率>60% → AI激进度=70%")
-            else:
-                aggressiveness = 0.5
-                print(f"     📊 Time Exit率<60% → AI激进度=50%（保守）")
-        else:
-            aggressiveness = 0.8
-            print(f"     📊 使用固定AI激进度=80%")
-        
-        # 应用AI建议
-        final_params = apply_ai_suggestions(best_params, ai_suggestions, apply_aggressiveness=aggressiveness)
+        # 应用AI建议（80%激进度）
+        final_params = apply_ai_suggestions(best_params, ai_suggestions, apply_aggressiveness=0.8)
         
         # 验证AI调整后的效果
         print(f"\n  ✅ 验证AI调整后的效果...")
         final_result = simulate_params_on_opportunities(opportunities, final_params)
-        final_score = calculate_swing_optimization_score(final_result)
+        final_score = calculate_swing_score(final_result)
         
         print(f"     最终: 平均利润={final_result['avg_profit']:.1f}%, 捕获率={final_result['capture_rate']*100:.0f}%")
         print(f"     评分: Grid={best_score:.3f} → AI调整后={final_score:.3f}")
@@ -18517,8 +18242,7 @@ def optimize_swing_params(swing_data, current_params, initial_params=None):
             final_params = best_params
             final_result = best_result
     else:
-        if should_call_ai:
-            print(f"     ⚠️  AI分析失败，使用Grid Search结果")
+        print(f"     ⚠️  AI分析失败，使用Grid Search结果")
         final_result = best_result
     
     return {
@@ -19167,7 +18891,7 @@ def save_position_context(coin, decision, entry_price, signal_classification=Non
             signal_classification: dict, 信号分类信息（V7.9新增）
         market_data: dict, 市场数据（用于提取关键位，V7.9新增）
     """
-    model_name = os.getenv("MODEL_NAME", "deepseek")
+    model_name = os.getenv("MODEL_NAME", "qwen")
     context_file = Path("trading_data") / model_name / "position_contexts.json"
     
     try:
@@ -19240,7 +18964,7 @@ def load_position_context(coin):
     返回:
         dict, 决策上下文
     """
-    model_name = os.getenv("MODEL_NAME", "deepseek")
+    model_name = os.getenv("MODEL_NAME", "qwen")
     context_file = Path("trading_data") / model_name / "position_contexts.json"
     
     try:
@@ -19279,7 +19003,7 @@ def clear_position_context(coin):
     参数:
         coin: str, 币种名称
     """
-    model_name = os.getenv("MODEL_NAME", "deepseek")
+    model_name = os.getenv("MODEL_NAME", "qwen")
     context_file = Path("trading_data") / model_name / "position_contexts.json"
     
     try:
@@ -19309,7 +19033,7 @@ def build_decision_context(current_positions=None):
         str, formatted decision context
     """
     context = ""
-    model_name = os.getenv("MODEL_NAME", "deepseek")
+    model_name = os.getenv("MODEL_NAME", "qwen")
     
     # 1. Read compressed insights from learning_config.json (~50 tokens)
     # 🔧 V7.7.0.19: 从 learning_config.json 读取 compressed_insights

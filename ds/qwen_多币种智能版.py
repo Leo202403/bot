@@ -7029,16 +7029,12 @@ def analyze_and_adjust_params():
         if ENABLE_V770_QUICK_SEARCH:
             # 快速探索模式（3分钟）- 为V8.3.12提供初始参数
             print(f"  ℹ️  使用快速探索模式（V8.3.16）")
-            global_initial_params = quick_global_search_v8316(
+            iterative_result = quick_global_search_v8316(
                 data_summary=data_summary,
                 current_config=config
             )
-            
-            # 将快速探索结果作为iterative_result返回（兼容后续代码）
-            iterative_result = {
-                'final_params': global_initial_params,
-                'quick_search_mode': True
-            }
+            # 提取final_params作为global_initial_params（兼容后续代码）
+            global_initial_params = iterative_result.get('final_params')
             
         elif ENABLE_V770_FULL_OPTIMIZATION:
             # 完整V7.7.0优化（7-10分钟）
