@@ -5451,14 +5451,23 @@ def quick_global_search_v8316(data_summary, current_config):
     print(f"     盈利状态: {'✅ 找到盈利' if found_profitable else '⚠️ 未找到盈利（使用最优亏损点）'}")
     
     # 【V8.3.16.3】兼容后续代码：构建iterative_result格式
+    # 【V8.3.16.7】修复：添加缺失的total_rounds和rounds键（避免Line 7117, 7352, 7155的KeyError）
     return {
         'final_params': best_params,
-        'best_config': best_params,  # 兼容Line 7081
+        'best_config': best_params,  # 兼容Line 7090
         'best_round_num': 1,  # 快速探索视为第1轮
         'best_metric': 0.0,  # 快速探索不计算综合指标
         'baseline_metric': 0.0,
         'quick_search_mode': True,
-        'found_profitable': found_profitable
+        'found_profitable': found_profitable,
+        'total_rounds': 1,  # 【V8.3.16.7】快速探索算1轮
+        'rounds': [{  # 【V8.3.16.7】兼容迭代历史记录
+            'round_num': 1,
+            'improved': found_profitable,
+            'metric': 0.0,
+            'direction': '快速探索',
+            'status': 'COMPLETED'
+        }]
     }
 
 
