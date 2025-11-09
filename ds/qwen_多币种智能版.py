@@ -18287,7 +18287,7 @@ def call_ai_for_round_decision(round_num, round_results, current_best_params, op
     """
     【V8.3.18】调用AI分析当前轮次结果并决策
     """
-    global deepseek_base_url, qwen_api_key  # 【修复】声明全局变量
+    global qwen_api_key  # 【修复】声明全局变量
     best_result = round_results[0] if round_results else None
     
     prompt = f"""You are a quantitative trading strategy optimization expert.
@@ -18360,7 +18360,7 @@ Respond in JSON format ONLY:
     
     try:
         response = requests.post(
-            deepseek_base_url + "/chat/completions",
+            "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
             headers={"Authorization": f"Bearer {qwen_api_key}"},
             json={
                 "model": "qwen-plus",
