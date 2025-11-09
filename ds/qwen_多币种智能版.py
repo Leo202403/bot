@@ -7373,7 +7373,13 @@ def analyze_and_adjust_params():
 
         # ========== 第5步：保存并通知 ==========
         current_config = json.dumps(config, ensure_ascii=False, default=str)
-        if current_config != original_config:
+        config_changed = (current_config != original_config)
+        
+        # 【V8.3.18.2】手动回测模式：不管参数是否变化都发送通知
+        is_manual_backtest = os.getenv("MANUAL_BACKTEST") == "true"
+        should_send_notification = config_changed or is_manual_backtest
+        
+        if config_changed:
             save_learning_config(config)
 
             adjusted_count = len(adjustments.get("global", {})) + len(
@@ -8547,7 +8553,71 @@ def analyze_and_adjust_params():
             
             print("\n✓ AI优化建议已应用")
         else:
-            print("\n→ 参数无需调整")
+            # 【V8.3.18.2】参数未变化，但如果是手动回测，仍然发送通知
+            if is_manual_backtest:
+                print("\n→ 参数无需调整（手动回测模式：仍发送报告）")
+                
+                # 发送Bark通知
+                send_bark_notification(
+                    "[通义千问]🔬回测完成",
+                    f"参数未变化\n胜率{win_rate*100:.0f}% 盈亏比{win_loss_ratio:.1f}",
+                )
+                
+                # 发送邮件（复用之前构建的邮件HTML）
+                try:
+                    model_name = os.getenv("MODEL_NAME", "DeepSeek")
+                    # 构建简化的邮件（无参数变化）
+                    # 由于没有参数变化，我们需要重新构建部分HTML
+                    # 这里直接复用前面已经构建好的HTML变量（如果存在的话）
+                    # 实际上，邮件HTML是在前面的大块里构建的，这里只是发送一个简化版本
+                    
+                    # 构建简化邮件
+                    simple_email_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {{ font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; }}
+        h1 {{ color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }}
+        .info-box {{ background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #2196f3; }}
+        pre {{ background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; }}
+    </style>
+</head>
+<body>
+    <h1>🔬 手动回测报告 - {model_name}</h1>
+    <p><strong>生成时间：</strong>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    
+    <div class="info-box">
+        <h2>✅ 参数评估结果</h2>
+        <p><strong>结论：</strong>当前参数已接近最优，无需调整</p>
+        <p><strong>当前表现：</strong></p>
+        <ul>
+            <li>胜率: {win_rate*100:.1f}%</li>
+            <li>盈亏比: {win_loss_ratio:.2f}:1</li>
+            <li>样本数: {len(recent_20)}笔</li>
+        </ul>
+    </div>
+    
+    <h2>📊 详细交易数据</h2>
+    <pre>{data_summary}</pre>
+    
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em;">
+        <p>此邮件由 {model_name} 智能交易系统自动发送（手动回测模式）</p>
+    </div>
+</body>
+</html>
+"""
+                    
+                    send_email_notification(
+                        subject="手动回测报告 - 参数无需调整",
+                        body_html=simple_email_html,
+                        model_name=model_name
+                    )
+                except Exception as email_err:
+                    print(f"⚠️ 邮件发送失败（不影响主流程）: {email_err}")
+            else:
+                print("\n→ 参数无需调整")
 
         print("=" * 70 + "\n")
         
@@ -18318,9 +18388,24 @@ Parameters: {json.dumps(best_result['params'], ensure_ascii=False) if best_resul
         prompt += """
 【Task】Should we run Round 2?
 
+🎯 **Optimization Goals** (CRITICAL):
+1. **time_exit_rate**: Target <70% (MUST <90%, NEVER accept 100%)
+   - 100% = total failure (all trades timeout, no TP/SL triggered)
+   - 90-99% = poor quality (strategy too slow)
+   - 70-89% = acceptable
+   - <70% = excellent (most trades exit via TP/SL)
+
+2. **avg_profit**: Target >1.5% per trade
+   - >2% = excellent
+   - 1-2% = good
+   - 0.5-1% = acceptable
+   - <0.5% = needs improvement
+
+3. **captured_count**: Target >500 (enough data)
+
 Context:
-- If Round 1 already found acceptable parameters (time_exit<80% OR avg_profit>0.5%), you can skip Round 2
-- If ALL combinations have time_exit=100%, we MUST try more aggressive parameters in Round 2
+- If Round 1 found time_exit<90% AND avg_profit>1%, you can skip Round 2
+- If ALL combinations have time_exit≥90%, you MUST run Round 2 with more aggressive params
 
 Respond in JSON format ONLY:
 {
@@ -18350,24 +18435,34 @@ Respond in JSON format ONLY:
         r1_profit = best_round1['result']['avg_profit'] if best_round1 else 0
         r2_profit = best_round2['result']['avg_profit'] if best_round2 else 0
         
+        # 获取time_exit率
+        r1_te_rate = best_round1['result']['time_exit_count']/best_round1['result']['captured_count']*100 if best_round1 and best_round1['result']['captured_count'] > 0 else 100
+        r2_te_rate = best_round2['result']['time_exit_count']/best_round2['result']['captured_count']*100 if best_round2 and best_round2['result']['captured_count'] > 0 else 100
+        
         prompt += f"""
 【Task】Make the FINAL decision - Compare ALL rounds and select the BEST
 
 📊 **Round Comparison**:
-- Round 1 Best: avg_profit={r1_profit:.1f}%, score={best_round1['score'] if best_round1 else 0:.4f}
-- Round 2 Best: avg_profit={r2_profit:.1f}%, score={best_round2['score'] if best_round2 else 0:.4f}
+- Round 1 Best: avg_profit={r1_profit:.1f}%, time_exit={r1_te_rate:.0f}%, score={best_round1['score'] if best_round1 else 0:.4f}
+- Round 2 Best: avg_profit={r2_profit:.1f}%, time_exit={r2_te_rate:.0f}%, score={best_round2['score'] if best_round2 else 0:.4f}
 
-🎯 **Decision Rule** (CRITICAL):
-**Always select the round with HIGHEST avg_profit**. Score is secondary.
+🎯 **Optimization Goals** (MUST achieve):
+1. **time_exit_rate < 90%** (CRITICAL) - 100% = total failure
+2. **avg_profit > 0.8%** (minimum for profitability)
+3. Prefer: time_exit <70% + avg_profit >1.5%
 
-⚠️ If time_exit=100%, it means all trades timeout (not ideal but acceptable if profit is good).
+🎯 **Decision Rule**:
+1. **REJECT** if BOTH rounds have time_exit ≥95% (strategy broken, needs rethink)
+2. **Priority**: Lower time_exit_rate > Higher avg_profit
+   - Example: 80% te + 1.2% profit > 100% te + 1.6% profit
+3. If both have similar time_exit (<5% diff), choose higher avg_profit
 
 Respond in JSON format ONLY:
 {{
   "final_decision": {{
     "accept_result": true/false,
-    "selected_params": {{...}},  // 🔴 Use params from Round {1 if r1_profit > r2_profit else 2} (highest profit)
-    "reasoning": "Selected Round X because avg_profit={max(r1_profit, r2_profit):.1f}% > Round Y's profit. Time_exit=100% is acceptable.",
+    "selected_params": {{...}},  // 🔴 Choose based on: 1.time_exit first 2.profit second
+    "reasoning": "Selected Round X: time_exit={r1_te_rate if r1_te_rate < r2_te_rate else r2_te_rate:.0f}% (target <90%), profit={max(r1_profit, r2_profit):.1f}% (target >1.5%). Comparison: R1 te{r1_te_rate:.0f}%/profit{r1_profit:.1f}% vs R2 te{r2_te_rate:.0f}%/profit{r2_profit:.1f}%.",
     "execution_strategy": "apply_immediately",
     "monitoring_metrics": ["avg_profit", "time_exit_rate", "capture_count"],
     "rollback_conditions": "7-day avg profit <0.5% OR cumulative loss >3U"
