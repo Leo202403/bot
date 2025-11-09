@@ -18154,15 +18154,15 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
     
     # ========== 阶段1: Grid Search ==========
     # 【V8.3.16.8】二次激进调整：扩大TP范围，延长持仓时间
-    # 问题诊断：0.3-0.8×ATR的TP太近，导致100% Time Exit
-    # 修复：TP范围扩大到0.8-1.5×ATR，持仓时间延长到3-6小时
-    print(f"\n  📊 阶段1: Grid Search（36组参数，V8.3.16.8 TP范围扩大）")
+    # V8.3.16.7.2: 真正的scalping参数 - 15-60分钟持仓，快速TP
+    # 之前的3-6小时太长了，应该是15-60分钟
+    print(f"\n  📊 阶段1: Grid Search（36组参数，V8.3.16.7.2 真正scalping）")
     param_grid = {
-        'max_holding_hours': [3.0, 4.0, 6.0],       # 进一步延长（2.0-3.0h → 3.0-6.0h）
-        'atr_tp_multiplier': [0.8, 1.0, 1.5],       # 扩大TP范围（0.3-0.8 → 0.8-1.5）
-        'atr_stop_multiplier': [0.6, 0.8],          # 微调（0.5-0.8 → 0.6-0.8）
-        'min_risk_reward': [1.0, 1.2]               # 简化（0.8-1.2 → 1.0-1.2）
-    }  # Total: 3×3×2×2 = 36组（减少组合，节省时间）
+        'max_holding_hours': [0.25, 0.5, 1.0],      # 15/30/60分钟（真正短期）
+        'atr_tp_multiplier': [0.3, 0.5, 0.7],       # 更快速止盈
+        'atr_stop_multiplier': [0.8, 1.2],          # 宽松止损（避免误杀）
+        'min_risk_reward': [1.2, 1.5]               # 保持合理R:R
+    }  # Total: 3×3×2×2 = 36组
     
     best_score = -float('inf')
     best_params = current_params.copy()
@@ -18299,11 +18299,16 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
         print(f"     最终: time_exit率={final_te_rate*100:.0f}%, 平均利润={final_result['avg_profit']:.1f}%")
         print(f"     评分: Grid={best_score:.3f} → AI调整后={final_score:.3f}")
         
-        # 【V8.3.16.8】严格验证：必须同时满足评分改善且time_exit率不恶化
+        # 【V8.3.16.7.2】超严格验证：必须实质性改善time_exit率
         score_improved = final_score >= best_score * 0.95  # 评分至少持平（5%容错）
         te_improved = final_te_rate <= grid_te_rate + 0.05  # time_exit率不能恶化超过5%
         
-        if not (score_improved and te_improved):
+        # 【V8.3.16.7.2新增】如果基线time_exit率>90%，AI调整后必须<90%，否则拒绝
+        if grid_te_rate > 0.9 and final_te_rate > 0.9:
+            print(f"     ❌ Time Exit率仍>90%({grid_te_rate*100:.0f}%→{final_te_rate*100:.0f}%)，AI调整无效，拒绝建议")
+            final_params = best_params
+            final_result = best_result
+        elif not (score_improved and te_improved):
             if not score_improved:
                 print(f"     ⚠️  AI调整评分下降({best_score:.3f}→{final_score:.3f})，保持Grid Search结果")
             if not te_improved:
