@@ -18193,6 +18193,199 @@ def calculate_scalping_optimization_score(sim_result):
     return total_score
 
 
+def generate_round1_combinations():
+    """
+    【V8.3.18】生成第1轮Grid Search的测试组合
+    
+    使用V8.3.17的分层采样策略：34组参数
+    """
+    test_combinations = []
+    
+    # 【策略1】高质量低数量（信号分85，严格TP/SL）- 4组
+    for tp in [0.8, 1.2]:
+        for time_h in [1.0, 1.5]:
+            test_combinations.append({
+                'max_holding_hours': time_h,
+                'atr_tp_multiplier': tp,
+                'atr_stop_multiplier': 1.0,
+                'min_risk_reward': 2.5,
+                'min_signal_score': 85
+            })
+    
+    # 【策略2】中等质量中等数量（信号分75，平衡TP/SL）- 18组
+    for tp in [0.5, 0.8, 1.2]:
+        for sl in [0.8, 1.0]:
+            for time_h in [0.5, 1.0, 1.5]:
+                test_combinations.append({
+                    'max_holding_hours': time_h,
+                    'atr_tp_multiplier': tp,
+                    'atr_stop_multiplier': sl,
+                    'min_risk_reward': 2.0,
+                    'min_signal_score': 75
+                })
+    
+    # 【策略3】低质量高数量（信号分65，宽松TP/SL）- 4组
+    for tp in [0.5, 0.8]:
+        for time_h in [0.5, 1.0]:
+            test_combinations.append({
+                'max_holding_hours': time_h,
+                'atr_tp_multiplier': tp,
+                'atr_stop_multiplier': 0.8,
+                'min_risk_reward': 1.5,
+                'min_signal_score': 65
+            })
+    
+    # 补充边界情况 - 8组
+    for rr in [1.5, 2.0]:
+        for score in [70, 80]:
+            for tp in [0.6, 1.0]:
+                test_combinations.append({
+                    'max_holding_hours': 1.0,
+                    'atr_tp_multiplier': tp,
+                    'atr_stop_multiplier': 0.9,
+                    'min_risk_reward': rr,
+                    'min_signal_score': score
+                })
+    
+    return test_combinations  # 总计34组
+
+
+def generate_round2_combinations_from_ai(ai_suggestions):
+    """
+    【V8.3.18】根据AI建议生成第2轮测试组合
+    """
+    param_ranges = ai_suggestions.get('param_ranges', {})
+    
+    if not param_ranges:
+        param_ranges = {
+            'atr_tp_multiplier': [0.3, 0.4, 0.5],
+            'max_holding_hours': [1.5, 2.0, 2.5],
+            'min_signal_score': [70, 80, 90],
+            'atr_stop_multiplier': [0.6, 0.8],
+            'min_risk_reward': [1.8, 2.2]
+        }
+    
+    test_combinations = []
+    from itertools import product
+    
+    keys = list(param_ranges.keys())
+    values = [param_ranges[k] for k in keys]
+    
+    for combo_values in product(*values):
+        combination = dict(zip(keys, combo_values))
+        test_combinations.append(combination)
+    
+    if len(test_combinations) > 50:
+        import random
+        random.shuffle(test_combinations)
+        test_combinations = test_combinations[:50]
+    
+    return test_combinations
+
+
+def call_ai_for_round_decision(round_num, round_results, current_best_params, opportunities_count):
+    """
+    【V8.3.18】调用AI分析当前轮次结果并决策
+    """
+    best_result = round_results[0] if round_results else None
+    
+    prompt = f"""You are a quantitative trading strategy optimization expert.
+
+【Current Status】
+- Round: {round_num} of Grid Search
+- Opportunities: {opportunities_count} scalping opportunities
+- Tested Combinations: {len(round_results)} parameter sets
+
+【Round {round_num} Best Result】
+Parameters: {json.dumps(best_result['params'], ensure_ascii=False) if best_result else 'None'}
+"""
+    
+    if best_result:
+        result = best_result['result']
+        te_rate = result['time_exit_count']/result['captured_count']*100 if result['captured_count'] > 0 else 100
+        prompt += f"""Performance: time_exit={te_rate:.0f}%, avg_profit={result['avg_profit']:.1f}%, captured={result['captured_count']}, score={best_result['score']:.4f}
+
+【Top 5 Comparison】
+"""
+        for i, res in enumerate(round_results[:5], 1):
+            p = res['params']
+            r = res['result']
+            te = r['time_exit_count']/r['captured_count']*100 if r['captured_count'] > 0 else 100
+            prompt += f"#{i}. signal{p['min_signal_score']} TP{p['atr_tp_multiplier']}× hold{p['max_holding_hours']}h → te={te:.0f}% profit={r['avg_profit']:.1f}% score={res['score']:.4f}\n"
+    
+    if round_num == 1:
+        prompt += """
+【Task】Should we run Round 2?
+
+Context:
+- If Round 1 already found acceptable parameters (time_exit<80% OR avg_profit>0.5%), you can skip Round 2
+- If ALL combinations have time_exit=100%, we MUST try more aggressive parameters in Round 2
+
+Respond in JSON format ONLY:
+{
+  "needs_round2": true/false,
+  "reasoning": "Your analysis",
+  "round2_suggestions": {
+    "strategy": "Brief description",
+    "param_ranges": {
+      "atr_tp_multiplier": [0.3, 0.4, 0.5],
+      "max_holding_hours": [1.5, 2.0, 2.5],
+      "min_signal_score": [70, 80, 90],
+      "atr_stop_multiplier": [0.6, 0.8],
+      "min_risk_reward": [1.8, 2.2]
+    }
+  },
+  "final_decision": {
+    "accept_result": true,
+    "selected_params": {...},
+    "execution_strategy": "apply_immediately"
+  }
+}"""
+    else:
+        prompt += """
+【Task】Make the FINAL decision
+
+Respond in JSON format ONLY:
+{
+  "final_decision": {
+    "accept_result": true/false,
+    "selected_params": {...},
+    "reasoning": "Why these parameters?",
+    "execution_strategy": "apply_immediately",
+    "monitoring_metrics": ["profit_loss_ratio", "time_exit_rate"],
+    "rollback_conditions": "7-day P/L ratio <1.2"
+  }
+}"""
+    
+    try:
+        response = requests.post(
+            deepseek_base_url + "/chat/completions",
+            headers={"Authorization": f"Bearer {deepseek_api_key}"},
+            json={
+                "model": "deepseek-chat",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.3,
+                "max_tokens": 2000
+            },
+            timeout=60
+        )
+        
+        if response.status_code == 200:
+            ai_text = response.json()['choices'][0]['message']['content'].strip()
+            if '```json' in ai_text:
+                ai_text = ai_text.split('```json')[1].split('```')[0].strip()
+            elif '```' in ai_text:
+                ai_text = ai_text.split('```')[1].split('```')[0].strip()
+            return json.loads(ai_text)
+        else:
+            print(f"     ⚠️  AI调用失败: {response.status_code}")
+            return {"needs_round2": False, "final_decision": {"accept_result": True, "selected_params": current_best_params}}
+    except Exception as e:
+        print(f"     ⚠️  AI决策异常: {e}")
+        return {"needs_round2": False, "final_decision": {"accept_result": True, "selected_params": current_best_params}}
+
+
+
 def calculate_swing_optimization_score(sim_result):
     """
     【V8.3.12】波段优化评分函数（用于参数优化，不是信号评分）
@@ -18250,100 +18443,22 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
     if initial_params:
         print(f"     ℹ️  应用V7.7.0初始参数到Grid Search")
         # 将initial_params合并到current_params
-        current_params = {**current_params, **initial_params}
+    # ========== 存储所有轮次的结果 ==========
+    all_rounds_results = []
+    final_ai_decision = None
     
-    print(f"  🔧 开始超短线参数优化（{len(opportunities)}个机会）...")
+    # ========== 第1轮 Grid Search ==========
+    print(f"\n  🔍 第1轮 Grid Search")
+    round1_combinations = generate_round1_combinations()
+    print(f"     测试组合: {len(round1_combinations)}组")
     
-    # ========== 阶段1: Grid Search ==========
-    # 【V8.3.16.8】二次激进调整：扩大TP范围，延长持仓时间
-    # V8.3.16.7.2: 真正的scalping参数 - 15-60分钟持仓，快速TP
-    # 【V8.3.17】联合优化：将min_signal_score纳入Grid Search，用严格标准筛选高质量信号
-    print(f"\n  📊 阶段1: Grid Search（54组参数，V8.3.17 联合优化）")
-    param_grid = {
-        'max_holding_hours': [0.5, 1.0, 1.5],       # 30/60/90分钟（持仓时间）
-        'atr_tp_multiplier': [0.5, 0.8, 1.2],       # 止盈距离
-        'atr_stop_multiplier': [0.8, 1.0],          # 止损距离
-        'min_risk_reward': [1.5, 2.0, 2.5],         # 🔧 盈亏比范围（1.5-2.5）
-        'min_signal_score': [65, 75, 85]            # 🔧 关键：信号分阈值也参与优化！
-    }  # Total: 3×3×2×3×3 = 162组 → 太多！需要优化
-
-    # 🔧 V8.3.17: 为控制组合数，使用分层采样
-    # 策略：先测试3个代表性配置，找到趋势
-    print(f"     🎯 采用分层采样（54组）：平衡质量vs数量")
-    
-    # 生成54个战略采样点（而非162个全组合）
-    test_combinations = []
-    
-    # 【策略1】高质量低数量（信号分85，严格TP/SL）
-    for tp in [0.8, 1.2]:
-        for time_h in [1.0, 1.5]:
-            test_combinations.append({
-                'max_holding_hours': time_h,
-                'atr_tp_multiplier': tp,
-                'atr_stop_multiplier': 1.0,
-                'min_risk_reward': 2.5,
-                'min_signal_score': 85
-            })
-    
-    # 【策略2】中等质量中等数量（信号分75，平衡TP/SL）
-    for tp in [0.5, 0.8, 1.2]:
-        for sl in [0.8, 1.0]:
-            for time_h in [0.5, 1.0, 1.5]:
-                test_combinations.append({
-                    'max_holding_hours': time_h,
-                    'atr_tp_multiplier': tp,
-                    'atr_stop_multiplier': sl,
-                    'min_risk_reward': 2.0,
-                    'min_signal_score': 75
-                })
-    
-    # 【策略3】低质量高数量（信号分65，宽松TP/SL）
-    for tp in [0.5, 0.8]:
-        for time_h in [0.5, 1.0]:
-            test_combinations.append({
-                'max_holding_hours': time_h,
-                'atr_tp_multiplier': tp,
-                'atr_stop_multiplier': 0.8,
-                'min_risk_reward': 1.5,
-                'min_signal_score': 65
-            })
-    
-    print(f"     实际测试组合: {len(test_combinations)}组")  # 应该是4+18+4=26组（再补充到54组）
-    
-    # 补充更多组合，覆盖边界情况
-    for rr in [1.5, 2.0]:
-        for score in [70, 80]:
-            for tp in [0.6, 1.0]:
-                test_combinations.append({
-                    'max_holding_hours': 1.0,
-                    'atr_tp_multiplier': tp,
-                    'atr_stop_multiplier': 0.9,
-                    'min_risk_reward': rr,
-                    'min_signal_score': score
-                })
-    
-    best_score = -float('inf')
-    best_params = current_params.copy()
-    best_result = None
-    
-    # 计算基准表现
-    baseline_params = current_params.copy()
-    baseline_result = simulate_params_on_opportunities(opportunities, baseline_params)
-    baseline_score = calculate_scalping_optimization_score(baseline_result)
-    
-    print(f"     基准: time_exit率={baseline_result['time_exit_count']/baseline_result['captured_count']*100:.0f}%, 平均利润={baseline_result['avg_profit']:.1f}%")
-    
-    tested_count = 0
-    total_combinations = len(test_combinations)
-    
-    # Grid Search with memory optimization
+    # 执行第1轮Grid Search
+    round1_results = []
     import gc
-    for combination in test_combinations:
-        tested_count += 1
-        
-        # 【V8.3.14.4】进度显示，避免用户以为卡住
-        if tested_count % 5 == 0 or tested_count == total_combinations:
-            print(f"     进度: {tested_count}/{total_combinations}组... (信号分={combination['min_signal_score']})")
+    
+    for idx, combination in enumerate(round1_combinations, 1):
+        if idx % 5 == 0 or idx == len(round1_combinations):
+            print(f"     进度: {idx}/{len(round1_combinations)}组... (信号分={combination.get('min_signal_score', '?')})")
         
         test_params = current_params.copy()
         test_params.update(combination)
@@ -18352,125 +18467,142 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
         result = simulate_params_on_opportunities(opportunities, test_params)
         score = calculate_scalping_optimization_score(result)
         
-        if score > best_score:
-            best_score = score
-            best_params = test_params
-            best_result = result
-            print(f"       🎯 新最优: 信号分={combination['min_signal_score']}, TP={combination['atr_tp_multiplier']:.1f}, 分数={score:.4f}")
+        round1_results.append({
+            'params': combination,
+            'full_params': test_params,  # 保存完整参数
+            'result': result,
+            'score': score,
+            'rank': 0  # 稍后排序
+        })
         
-        # 【V8.3.14.4】释放内存，避免OOM
         del result, test_params
-        if tested_count % 5 == 0:
-            gc.collect()  # 每5组强制垃圾回收
+        if idx % 5 == 0:
+            gc.collect()
     
-    print(f"     ✅ Grid Search完成: time_exit率={best_result['time_exit_count']/best_result['captured_count']*100:.0f}%, 平均利润={best_result['avg_profit']:.1f}%")
+    # 排序
+    round1_results.sort(key=lambda x: x['score'], reverse=True)
+    for idx, r in enumerate(round1_results, 1):
+        r['rank'] = idx
+    all_rounds_results.append(('round1', round1_results))
     
-    # ========== 阶段2: Exit Analysis ==========
-    print(f"\n  🔍 阶段2: Exit Analysis")
-    detailed_result = simulate_params_on_opportunities_with_details(opportunities, best_params)
-    exit_analysis = analyze_exit_patterns(detailed_result['exit_details'])
+    best_round1 = round1_results[0]
+    best_round1_te_rate = best_round1['result']['time_exit_count']/best_round1['result']['captured_count']*100 if best_round1['result']['captured_count'] > 0 else 100
+    print(f"     ✅ 第1轮完成: 最佳分数={best_round1['score']:.4f}, time_exit={best_round1_te_rate:.0f}%, 利润={best_round1['result']['avg_profit']:.1f}%")
     
-    if exit_analysis:
-        te = exit_analysis['time_exit']
-        sl = exit_analysis['stop_loss']
-        tp = exit_analysis['take_profit']
-        print(f"     Time Exit: {te['count']}笔 ({te['rate']:.0f}%) | 平均错过{te['avg_missed_profit']:.1f}%利润")
-        print(f"     Stop Loss: {sl['count']}笔 ({sl['rate']:.0f}%) | {sl['tight_count']}笔过紧")
-        print(f"     Take Profit: {tp['count']}笔 ({tp['rate']:.0f}%) | {tp['early_count']}笔过早")
-    
-    # ========== 【V8.3.13.4】多时间框架分析 ==========
-    print(f"\n  📊 【V8.3.13.4】多时间框架分析")
-    timeframe_analysis = analyze_multi_timeframe_exits(
-        exit_details=detailed_result['exit_details'],
-        timeframes=['1H', '4H']
+    # ========== 调用AI决策：是否需要第2轮 ==========
+    print(f"\n  🤖 调用AI分析第1轮结果...")
+    ai_decision_round1 = call_ai_for_round_decision(
+        round_num=1,
+        round_results=round1_results,
+        current_best_params=best_round1['params'],
+        opportunities_count=len(opportunities)
     )
     
-    if timeframe_analysis:
-        for tf, stats in timeframe_analysis.items():
-            print(f"     {tf}: {stats['total_count']}笔, Time Exit率{stats['time_exit_rate']*100:.0f}%, 平均持仓{stats['avg_holding_time']:.1f}h")
+    print(f"     AI决策: needs_round2={ai_decision_round1.get('needs_round2', False)}")
+    print(f"     推理: {ai_decision_round1.get('reasoning', 'N/A')[:120]}...")
+    
+    # ========== 如果需要第2轮 ==========
+    round2_results = []
+    if ai_decision_round1.get('needs_round2', False):
+        print(f"\n  🔍 第2轮 Grid Search（AI建议）")
+        round2_suggestions = ai_decision_round1.get('round2_suggestions', {})
+        print(f"     策略: {round2_suggestions.get('strategy', 'N/A')}")
         
-        # 生成建议
-        tf_recommendations = generate_timeframe_recommendations(
-            timeframe_analysis=timeframe_analysis,
-            signal_type='scalping'
+        round2_combinations = generate_round2_combinations_from_ai(round2_suggestions)
+        print(f"     测试组合: {len(round2_combinations)}组")
+        
+        # 执行第2轮Grid Search
+        for idx, combination in enumerate(round2_combinations, 1):
+            if idx % 5 == 0 or idx == len(round2_combinations):
+                print(f"     进度: {idx}/{len(round2_combinations)}组...")
+            
+            test_params = current_params.copy()
+            test_params.update(combination)
+            
+            result = simulate_params_on_opportunities(opportunities, test_params)
+            score = calculate_scalping_optimization_score(result)
+            
+            round2_results.append({
+                'params': combination,
+                'full_params': test_params,
+                'result': result,
+                'score': score,
+                'rank': 0
+            })
+            
+            del result, test_params
+            if idx % 5 == 0:
+                gc.collect()
+        
+        # 排序
+        round2_results.sort(key=lambda x: x['score'], reverse=True)
+        for idx, r in enumerate(round2_results, 1):
+            r['rank'] = idx
+        all_rounds_results.append(('round2', round2_results))
+        
+        best_round2 = round2_results[0]
+        best_round2_te_rate = best_round2['result']['time_exit_count']/best_round2['result']['captured_count']*100 if best_round2['result']['captured_count'] > 0 else 100
+        print(f"     ✅ 第2轮完成: 最佳分数={best_round2['score']:.4f}, time_exit={best_round2_te_rate:.0f}%, 利润={best_round2['result']['avg_profit']:.1f}%")
+        
+        # ========== 调用AI给出最终决策 ==========
+        print(f"\n  🤖 调用AI综合第1/第2轮，给出最终决策...")
+        # 合并两轮的Top结果
+        combined_top_results = sorted(
+            round1_results[:5] + round2_results[:5],
+            key=lambda x: x['score'],
+            reverse=True
+        )[:10]
+        
+        final_ai_decision = call_ai_for_round_decision(
+            round_num=2,
+            round_results=combined_top_results,
+            current_best_params=best_round2['full_params'],
+            opportunities_count=len(opportunities)
         )
-        
-        if tf_recommendations:
-            print(f"     💡 建议: {tf_recommendations['recommended_timeframe']}时间框架")
-            print(f"        {tf_recommendations['reason']}")
-    
-    # ========== 阶段3: AI策略分析（条件调用+动态激进度）==========
-    # 【V8.3.16】技术债3修复：条件AI调用+动态激进度
-    print(f"\n  🤖 阶段3: AI策略分析（V8.3.16条件调用）")
-    
-    te_rate = exit_analysis['time_exit']['rate'] / 100 if exit_analysis else 0
-    ai_suggestions = None
-    
-    # 【V8.3.16】条件AI调用：只在Time Exit>80%或配置强制时调用
-    should_call_ai = (not ENABLE_CONDITIONAL_AI_CALL) or (te_rate > 0.8)
-    
-    if should_call_ai:
-        if te_rate > 0.8:
-            print(f"     ⚠️  Time Exit率过高({te_rate*100:.0f}%)，调用AI分析...")
-        ai_suggestions = call_ai_for_exit_analysis(exit_analysis, best_params, 'scalping')
     else:
-        print(f"     ✅ Time Exit率可接受({te_rate*100:.0f}%)，跳过AI调用（节省1-2分钟）")
+        # ========== 不需要第2轮，使用第1轮的AI决策 ==========
+        print(f"     ✅ AI判断：第1轮结果已足够，跳过第2轮")
+        final_ai_decision = ai_decision_round1
     
-    final_params = best_params.copy()
-    if ai_suggestions:
-        # 【V8.3.16】技术债3修复：动态调整AI激进度
-        if AI_AGGRESSIVENESS_DYNAMIC:
-            if te_rate > 0.9:
-                aggressiveness = 1.0
-                print(f"     📊 Time Exit率>90% → AI激进度=100%（全部采纳）")
-            elif te_rate > 0.8:
-                aggressiveness = 0.9
-                print(f"     📊 Time Exit率>80% → AI激进度=90%")
-            elif te_rate > 0.6:
-                aggressiveness = 0.7
-                print(f"     📊 Time Exit率>60% → AI激进度=70%")
-            else:
-                aggressiveness = 0.5
-                print(f"     📊 Time Exit率<60% → AI激进度=50%（保守）")
-        else:
-            aggressiveness = 0.8
-            print(f"     📊 使用固定AI激进度=80%")
-        
-        # 应用AI建议
-        final_params = apply_ai_suggestions(best_params, ai_suggestions, apply_aggressiveness=aggressiveness)
-        
-        # 验证AI调整后的效果
-        print(f"\n  ✅ 验证AI调整后的效果...")
-        final_result = simulate_params_on_opportunities(opportunities, final_params)
-        final_score = calculate_scalping_optimization_score(final_result)
-        
-        final_te_rate = final_result['time_exit_count']/final_result['captured_count'] if final_result['captured_count'] > 0 else 1.0
-        grid_te_rate = best_result['time_exit_count']/best_result['captured_count'] if best_result['captured_count'] > 0 else 1.0
-        
-        print(f"     最终: time_exit率={final_te_rate*100:.0f}%, 平均利润={final_result['avg_profit']:.1f}%")
-        print(f"     评分: Grid={best_score:.3f} → AI调整后={final_score:.3f}")
-        
-        # 【V8.3.16.7.2】超严格验证：必须实质性改善time_exit率
-        score_improved = final_score >= best_score * 0.95  # 评分至少持平（5%容错）
-        te_improved = final_te_rate <= grid_te_rate + 0.05  # time_exit率不能恶化超过5%
-        
-        # 【V8.3.16.7.2新增】如果基线time_exit率>90%，AI调整后必须<90%，否则拒绝
-        if grid_te_rate > 0.9 and final_te_rate > 0.9:
-            print(f"     ❌ Time Exit率仍>90%({grid_te_rate*100:.0f}%→{final_te_rate*100:.0f}%)，AI调整无效，拒绝建议")
-            final_params = best_params
-            final_result = best_result
-        elif not (score_improved and te_improved):
-            if not score_improved:
-                print(f"     ⚠️  AI调整评分下降({best_score:.3f}→{final_score:.3f})，保持Grid Search结果")
-            if not te_improved:
-                print(f"     ⚠️  AI调整Time Exit率恶化({grid_te_rate*100:.0f}%→{final_te_rate*100:.0f}%)，保持Grid Search结果")
-            final_params = best_params
-            final_result = best_result
-    else:
-        if should_call_ai:
-            print(f"     ⚠️  AI分析失败，使用Grid Search结果")
-        final_result = best_result
+    # ========== 应用最终决策 ==========
+    final_decision = final_ai_decision.get('final_decision', {})
     
+    # 从AI给出的selected_params中找到对应的完整参数
+    selected_params_partial = final_decision.get('selected_params', best_round1['params'])
+    
+    # 尝试从round1或round2结果中找到匹配的完整参数
+    final_params = None
+    for round_name, round_results_list in all_rounds_results:
+        for res in round_results_list:
+            # 检查关键参数是否匹配
+            if (res['params'].get('min_signal_score') == selected_params_partial.get('min_signal_score') and
+                res['params'].get('atr_tp_multiplier') == selected_params_partial.get('atr_tp_multiplier') and
+                res['params'].get('max_holding_hours') == selected_params_partial.get('max_holding_hours')):
+                final_params = res['full_params']
+                final_result = res['result']
+                break
+        if final_params:
+            break
+    
+    # 如果没找到匹配，使用第1轮最佳
+    if not final_params:
+        print(f"     ⚠️  未找到AI选择的参数，使用第1轮最佳结果")
+        final_params = best_round1['full_params']
+        final_result = best_round1['result']
+    
+    print(f"\n  ✅ AI最终决策:")
+    print(f"     接受结果: {final_decision.get('accept_result', True)}")
+    print(f"     执行策略: {final_decision.get('execution_strategy', 'apply_immediately')}")
+    print(f"     推理: {final_decision.get('reasoning', 'N/A')[:150]}...")
+    if final_decision.get('monitoring_metrics'):
+        print(f"     监控指标: {', '.join(final_decision.get('monitoring_metrics', [])[:3])}")
+    if final_decision.get('rollback_conditions'):
+        print(f"     回滚条件: {final_decision.get('rollback_conditions', 'N/A')[:80]}...")
+    
+    # ========== 计算改进指标 ==========
+    baseline_result = simulate_params_on_opportunities(opportunities, current_params)
+    
+    # ========== 返回优化结果 ==========
     return {
         'optimized_params': final_params,
         'old_result': baseline_result,
@@ -18479,10 +18611,16 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
         'new_time_exit_rate': final_result['time_exit_count']/final_result['captured_count'] if final_result['captured_count'] > 0 else 0,
         'old_avg_profit': baseline_result['avg_profit'],
         'new_avg_profit': final_result['avg_profit'],
-        'exit_analysis': exit_analysis,
-        'ai_suggestions': ai_suggestions,
-        'improvement': 'with_ai' if ai_suggestions else 'grid_only'
+        'exit_analysis': None,  # V8.3.18不再需要详细的Exit Analysis
+        'ai_suggestions': final_ai_decision,  # 保存AI的完整决策
+        'improvement': {
+            'rounds': len(all_rounds_results),
+            'round1_best_score': round1_results[0]['score'],
+            'round2_best_score': round2_results[0]['score'] if round2_results else None,
+            'ai_decision': final_ai_decision
+        }
     }
+
 
 
 def optimize_swing_params(swing_data, current_params, initial_params=None):
