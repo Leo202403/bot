@@ -18460,21 +18460,34 @@ Respond in JSON format ONLY:
 3. Prefer: time_exit <70% + avg_profit >1.5%
 
 🎯 **Decision Rule**:
-1. **REJECT** if BOTH rounds have time_exit ≥95% (strategy broken, needs rethink)
+1. **If time_exit ≥90% in BOTH rounds**: Set accept_result=false + MUST provide round3_suggestion
 2. **Priority**: Lower time_exit_rate > Higher avg_profit
    - Example: 80% te + 1.2% profit > 100% te + 1.6% profit
 3. If both have similar time_exit (<5% diff), choose higher avg_profit
+
+⚠️ **CRITICAL**: If rejecting (accept_result=false), you MUST provide `round3_suggestion` with new parameter ranges to test!
 
 Respond in JSON format ONLY:
 {{
   "final_decision": {{
     "accept_result": true/false,
-    "selected_params": {{...}},  // 🔴 Choose based on: 1.time_exit first 2.profit second
-    "reasoning": "Selected Round X: time_exit={r1_te_rate if r1_te_rate < r2_te_rate else r2_te_rate:.0f}% (target <90%), profit={max(r1_profit, r2_profit):.1f}% (target >1.5%). Comparison: R1 te{r1_te_rate:.0f}%/profit{r1_profit:.1f}% vs R2 te{r2_te_rate:.0f}%/profit{r2_profit:.1f}%.",
-    "execution_strategy": "apply_immediately",
+    "selected_params": {{...}} or null,  // null if rejecting
+    "reasoning": "...",
+    "execution_strategy": "apply_immediately" or "reject_and_retry",
     "monitoring_metrics": ["avg_profit", "time_exit_rate", "capture_count"],
     "rollback_conditions": "7-day avg profit <0.5% OR cumulative loss >3U"
-  }}
+  }},
+  "round3_suggestion": {{  // ⚠️ REQUIRED if accept_result=false
+    "strategy": "Brief explanation of what to change and why",
+    "param_ranges": {{
+      "min_signal_score": [40, 50, 60],  // Example: Lower thresholds to capture more
+      "max_holding_hours": [3.0, 4.0, 5.0],  // Example: Longer hold time
+      "atr_tp_multiplier": [2.0, 2.5, 3.0],  // Example: Wider TP
+      "atr_stop_multiplier": [0.8, 1.0, 1.2],
+      "min_risk_reward": [1.2, 1.5, 1.8]
+    }},
+    "rationale": "Why these ranges should work: time_exit was 100% because [specific reason], new ranges address this by [specific solution]"
+  }} or null  // Only null if accept_result=true
 }}"""
     
     try:
@@ -18505,7 +18518,8 @@ Respond in JSON format ONLY:
                     print(f"     🔍 AI响应: needs_round2={ai_response.get('needs_round2', 'N/A')}")
                 else:
                     fd = ai_response.get('final_decision', {})
-                    print(f"     🔍 AI响应: accept={fd.get('accept_result', 'N/A')}, has_params={bool(fd.get('selected_params'))}")
+                    has_round3 = bool(ai_response.get('round3_suggestion'))
+                    print(f"     🔍 AI响应: accept={fd.get('accept_result', 'N/A')}, has_params={bool(fd.get('selected_params'))}, has_round3={has_round3}")
                 return ai_response
             except json.JSONDecodeError as json_err:
                 print(f"     ⚠️  AI响应JSON解析失败: {json_err}")
@@ -18741,22 +18755,84 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
     if final_decision.get('rollback_conditions'):
         print(f"     回滚条件: {final_decision.get('rollback_conditions', 'N/A')[:80]}...")
     
-    # 【V8.3.18.5】检查AI是否拒绝结果
+    # 【V8.3.18.6】检查AI是否拒绝结果
     if not accept_result:
-        print(f"\n  ❌ AI拒绝优化结果，保持原参数")
-        print(f"     原因: {final_decision.get('reasoning', 'N/A')[:100]}...")
-        baseline_result = simulate_params_on_opportunities(opportunities, current_params)
-        return {
-            'optimized_params': current_params,  # ✅ 保持原参数
-            'old_result': baseline_result,
-            'new_result': baseline_result,  # ✅ 新旧一致
-            'old_time_exit_rate': baseline_result['time_exit_count']/baseline_result['captured_count'] if baseline_result['captured_count'] > 0 else 0,
-            'new_time_exit_rate': baseline_result['time_exit_count']/baseline_result['captured_count'] if baseline_result['captured_count'] > 0 else 0,
-            'old_avg_profit': baseline_result['avg_profit'],
-            'new_avg_profit': baseline_result['avg_profit'],
-            'improvement': None,
-            'ai_rejection_reason': final_decision.get('reasoning', 'Strategy needs redesign')
-        }
+        # 检查AI是否提供了Round 3建议
+        round3_suggestion = final_ai_decision.get('round3_suggestion')
+        if round3_suggestion and isinstance(round3_suggestion, dict) and round3_suggestion.get('param_ranges'):
+            print(f"\n  ⚠️  AI拒绝当前结果，但提供了Round 3改进建议")
+            print(f"     策略: {round3_suggestion.get('strategy', 'N/A')[:100]}...")
+            print(f"     推理: {round3_suggestion.get('rationale', 'N/A')[:150]}...")
+            
+            # 【V8.3.18.6】执行Round 3
+            print(f"\n  🔍 第3轮 Grid Search（AI改进建议）")
+            round3_combinations = generate_round2_combinations_from_ai(round3_suggestion['param_ranges'])
+            print(f"     测试组合: {len(round3_combinations)}组")
+            
+            round3_results = []
+            for idx, test_params in enumerate(round3_combinations, 1):
+                result = simulate_params_on_opportunities(opportunities, test_params)
+                score = calculate_scalping_optimization_score(result)
+                
+                round3_results.append({
+                    'params': test_params,
+                    'full_params': test_params,
+                    'result': result,
+                    'score': score,
+                    'is_profitable': result['avg_profit'] > 0,
+                    'rank': 0
+                })
+                
+                if idx % 10 == 0:
+                    print(f"     进度: {idx}/{len(round3_combinations)}组...")
+                del result, test_params
+                if idx % 5 == 0:
+                    gc.collect()
+            
+            round3_results.sort(key=lambda x: x['score'], reverse=True)
+            for idx, r in enumerate(round3_results, 1):
+                r['rank'] = idx
+            all_rounds_results.append(('round3', round3_results))
+            
+            best_round3 = round3_results[0]
+            best_round3_te_rate = best_round3['result']['time_exit_count']/best_round3['result']['captured_count']*100 if best_round3['result']['captured_count'] > 0 else 100
+            print(f"     ✅ 第3轮完成: 最佳分数={best_round3['score']:.4f}, time_exit={best_round3_te_rate:.0f}%, 利润={best_round3['result']['avg_profit']:.1f}%")
+            
+            # 如果Round 3成功（time_exit < 90%），使用Round 3结果
+            if best_round3_te_rate < 90:
+                print(f"\n  ✅ Round 3成功降低time_exit，接受此结果")
+                final_params = best_round3['full_params']
+                final_result = best_round3['result']
+            else:
+                print(f"\n  ❌ Round 3仍然失败（time_exit={best_round3_te_rate:.0f}%），保持原参数")
+                baseline_result = simulate_params_on_opportunities(opportunities, current_params)
+                return {
+                    'optimized_params': current_params,
+                    'old_result': baseline_result,
+                    'new_result': baseline_result,
+                    'old_time_exit_rate': baseline_result['time_exit_count']/baseline_result['captured_count'] if baseline_result['captured_count'] > 0 else 0,
+                    'new_time_exit_rate': baseline_result['time_exit_count']/baseline_result['captured_count'] if baseline_result['captured_count'] > 0 else 0,
+                    'old_avg_profit': baseline_result['avg_profit'],
+                    'new_avg_profit': baseline_result['avg_profit'],
+                    'improvement': None,
+                    'ai_rejection_reason': f"All 3 rounds failed (time_exit≥90%). {final_decision.get('reasoning', '')}"
+                }
+        else:
+            # AI拒绝但没给建议（不应该发生）
+            print(f"\n  ❌ AI拒绝优化结果，且未提供Round 3建议")
+            print(f"     原因: {final_decision.get('reasoning', 'N/A')[:100]}...")
+            baseline_result = simulate_params_on_opportunities(opportunities, current_params)
+            return {
+                'optimized_params': current_params,
+                'old_result': baseline_result,
+                'new_result': baseline_result,
+                'old_time_exit_rate': baseline_result['time_exit_count']/baseline_result['captured_count'] if baseline_result['captured_count'] > 0 else 0,
+                'new_time_exit_rate': baseline_result['time_exit_count']/baseline_result['captured_count'] if baseline_result['captured_count'] > 0 else 0,
+                'old_avg_profit': baseline_result['avg_profit'],
+                'new_avg_profit': baseline_result['avg_profit'],
+                'improvement': None,
+                'ai_rejection_reason': final_decision.get('reasoning', 'Strategy needs redesign')
+            }
     
     # ========== 计算改进指标 ==========
     baseline_result = simulate_params_on_opportunities(opportunities, current_params)
