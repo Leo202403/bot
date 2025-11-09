@@ -5457,7 +5457,7 @@ def quick_global_search_v8316(data_summary, current_config):
         'best_round_num': 1,  # 快速探索视为第1轮
         'best_metric': 0.0,  # 快速探索不计算综合指标
         'baseline_metric': 0.0,
-        'total_rounds': 1,  # 【V8.3.16.7 FIX】快速探索只运行1轮
+        'total_rounds': 1,  # V8.3.16.7: 修复KeyError
         'quick_search_mode': True,
         'found_profitable': found_profitable
     }
@@ -10553,25 +10553,14 @@ def get_adjusted_params_for_signal(
 
 
 def get_ohlcv_data(symbol):
-    """获取单个币种的K线数据和技术指标（增强版，带超时处理）"""
-    import signal
-
-    def timeout_handler(signum, frame):
-        raise TimeoutError("获取K线数据超时")
-
+    """获取单个币种的K线数据和技术指标（已移除signal.alarm以兼容supervisor）"""
     try:
-        # 设置15秒超时（K线数据量大）
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(15)
-
         # === 15分钟K线数据（短期） ===
+        # ccxt自带timeout机制，无需signal.alarm
         limit_15m = 1344  # 14天数据
         ohlcv_15m = exchange.fetch_ohlcv(
             symbol, TRADE_CONFIG["timeframe"], limit=limit_15m
         )
-
-        # 取消超时
-        signal.alarm(0)
 
         df_15m = pd.DataFrame(
             ohlcv_15m, columns=["timestamp", "open", "high", "low", "close", "volume"]
@@ -10580,16 +10569,13 @@ def get_ohlcv_data(symbol):
         
         # === 4小时K线数据（长期趋势） ===
         try:
-            signal.alarm(10)  # 4小时数据少，10秒超时
             ohlcv_4h = exchange.fetch_ohlcv(symbol, "4h", limit=168)  # 约1个月
-            signal.alarm(0)
             df_4h = pd.DataFrame(
                 ohlcv_4h,
                 columns=["timestamp", "open", "high", "low", "close", "volume"],
             )
             df_4h["timestamp"] = pd.to_datetime(df_4h["timestamp"], unit="ms")
         except Exception as e:
-            signal.alarm(0)
             print(f"⚠️ {symbol} 4H数据获取失败({e})，重采样15m数据")
             # V7.6.2: 重采样15m到4h，保持时间框架一致
             df_15m_copy = df_15m.copy()
@@ -10604,9 +10590,7 @@ def get_ohlcv_data(symbol):
         
         # === 1小时K线数据（止损止盈位 + 中期趋势）V6.5 ===
         try:
-            signal.alarm(15)  # V7.6.2: 增加到15秒，避免超时
             ohlcv_1h = exchange.fetch_ohlcv(symbol, "1h", limit=672)  # 约1个月
-            signal.alarm(0)
             df_1h = pd.DataFrame(
                 ohlcv_1h,
                 columns=["timestamp", "open", "high", "low", "close", "volume"],
@@ -10619,7 +10603,6 @@ def get_ohlcv_data(symbol):
                 raise ValueError("1H数据不足")
                 
         except Exception as e:
-            signal.alarm(0)
             print(f"⚠️ {symbol} 1H数据获取失败({e})，重采样15m数据")
             # V7.6.2: 重采样15m到1h，保持时间框架一致
             df_15m_copy = df_15m.copy()
