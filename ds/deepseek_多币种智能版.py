@@ -7278,7 +7278,12 @@ def analyze_and_adjust_params():
                         initial_params=initial_params_for_scalping  # 【V8.3.16新增】
                     )
                     
-                    if scalping_optimization.get('improvement') is not None:
+                    # 【V8.3.18.5】检查AI是否拒绝优化
+                    if scalping_optimization.get('ai_rejection_reason'):
+                        print(f"  ❌ 超短线优化被AI拒绝:")
+                        print(f"     原因: {scalping_optimization['ai_rejection_reason'][:150]}...")
+                        print(f"     建议: 策略需要重新设计（当前参数time_exit=100%，目标<90%）")
+                    elif scalping_optimization.get('improvement') is not None:
                         # 更新config中的超短线参数
                         if 'scalping_params' not in config:
                             config['scalping_params'] = {}
@@ -18727,13 +18732,31 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
         final_result = best_round1['result']
     
     print(f"\n  ✅ AI最终决策:")
-    print(f"     接受结果: {final_decision.get('accept_result', True)}")
+    accept_result = final_decision.get('accept_result', True)
+    print(f"     接受结果: {accept_result}")
     print(f"     执行策略: {final_decision.get('execution_strategy', 'apply_immediately')}")
     print(f"     推理: {final_decision.get('reasoning', 'N/A')[:150]}...")
     if final_decision.get('monitoring_metrics'):
         print(f"     监控指标: {', '.join(final_decision.get('monitoring_metrics', [])[:3])}")
     if final_decision.get('rollback_conditions'):
         print(f"     回滚条件: {final_decision.get('rollback_conditions', 'N/A')[:80]}...")
+    
+    # 【V8.3.18.5】检查AI是否拒绝结果
+    if not accept_result:
+        print(f"\n  ❌ AI拒绝优化结果，保持原参数")
+        print(f"     原因: {final_decision.get('reasoning', 'N/A')[:100]}...")
+        baseline_result = simulate_params_on_opportunities(opportunities, current_params)
+        return {
+            'optimized_params': current_params,  # ✅ 保持原参数
+            'old_result': baseline_result,
+            'new_result': baseline_result,  # ✅ 新旧一致
+            'old_time_exit_rate': baseline_result['time_exit_count']/baseline_result['captured_count'] if baseline_result['captured_count'] > 0 else 0,
+            'new_time_exit_rate': baseline_result['time_exit_count']/baseline_result['captured_count'] if baseline_result['captured_count'] > 0 else 0,
+            'old_avg_profit': baseline_result['avg_profit'],
+            'new_avg_profit': baseline_result['avg_profit'],
+            'improvement': None,
+            'ai_rejection_reason': final_decision.get('reasoning', 'Strategy needs redesign')
+        }
     
     # ========== 计算改进指标 ==========
     baseline_result = simulate_params_on_opportunities(opportunities, current_params)
