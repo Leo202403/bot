@@ -7694,6 +7694,56 @@ def analyze_and_adjust_params():
                     scalp_improvement = scalp_new_rate - scalp_old_rate
                     swing_improvement = swing_new_rate - swing_old_rate
                     
+                    # 【V8.3.17】计算总利润对比
+                    old_total_profit = stats['old_captured_count'] * stats['avg_old_captured_profit'] / 100
+                    new_total_profit = stats['new_captured_count'] * stats['avg_new_captured_profit'] / 100
+                    profit_diff = new_total_profit - old_total_profit
+                    profit_diff_pct = ((new_total_profit / old_total_profit - 1) * 100) if old_total_profit != 0 else (float('inf') if new_total_profit > 0 else 0)
+                    
+                    # 添加总利润对比框
+                    opportunity_stats_html += f"""
+        <div style="margin: 15px 0; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; color: white;">
+            <h3 style="margin: 0 0 10px 0; color: white; border-bottom: 2px solid rgba(255,255,255,0.3); padding-bottom: 8px;">
+                💰 总利润对比分析
+            </h3>
+            <div style="display: flex; justify-content: space-around; margin: 10px 0;">
+                <div style="text-align: center; flex: 1;">
+                    <div style="font-size: 0.9em; opacity: 0.9;">旧参数</div>
+                    <div style="font-size: 1.8em; font-weight: bold; margin: 5px 0;">
+                        {old_total_profit:+.2f}U
+                    </div>
+                    <div style="font-size: 0.85em; opacity: 0.8;">
+                        {stats['old_captured_count']}个 × {stats['avg_old_captured_profit']:.1f}%
+                    </div>
+                </div>
+                <div style="align-self: center; font-size: 2em; opacity: 0.6;">→</div>
+                <div style="text-align: center; flex: 1;">
+                    <div style="font-size: 0.9em; opacity: 0.9;">新参数</div>
+                    <div style="font-size: 1.8em; font-weight: bold; margin: 5px 0;">
+                        {new_total_profit:+.2f}U
+                    </div>
+                    <div style="font-size: 0.85em; opacity: 0.8;">
+                        {stats['new_captured_count']}个 × {stats['avg_new_captured_profit']:.1f}%
+                    </div>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 15px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3);">
+                <div style="font-size: 0.9em; opacity: 0.9;">总利润提升</div>
+                <div style="font-size: 2.2em; font-weight: bold; margin: 5px 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.2);">
+                    {profit_diff:+.2f}U {'📈' if profit_diff > 0 else ('📉' if profit_diff < 0 else '➡️')}
+                </div>
+                <div style="font-size: 1.1em; opacity: 0.95;">
+                    {'+' if profit_diff_pct > 0 else ''}{profit_diff_pct:.0f}% 变化
+                </div>
+            </div>
+            <div style="margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.15); border-radius: 4px; font-size: 0.85em;">
+                💡 <strong>解读：</strong>
+                {'✅ 新参数显著提升盈利能力' if profit_diff > 5 else ('✅ 新参数小幅改善' if profit_diff > 0 else ('⚠️ 需要进一步优化参数' if profit_diff < 0 else '➡️ 利润持平'))}
+                {'，从亏损转为盈利！' if old_total_profit < 0 and new_total_profit > 0 else ''}
+            </div>
+        </div>
+"""
+                    
                     opportunity_stats_html += f"""
         <p style="margin-top: 10px; padding: 10px; background: #f0f7ff; border-left: 4px solid #2196f3;">
             <strong>📊 总结：</strong>昨日识别到<strong>{stats['total_opportunities']}个</strong>客观机会
