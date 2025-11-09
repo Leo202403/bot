@@ -18343,20 +18343,36 @@ Respond in JSON format ONLY:
   }
 }"""
     else:
-        prompt += """
-【Task】Make the FINAL decision
+        # 【V8.3.18.1】添加Round1 vs Round2对比
+        best_round1 = all_rounds_results[0][1][0] if len(all_rounds_results) > 0 else None
+        best_round2 = all_rounds_results[1][1][0] if len(all_rounds_results) > 1 else None
+        
+        r1_profit = best_round1['result']['avg_profit'] if best_round1 else 0
+        r2_profit = best_round2['result']['avg_profit'] if best_round2 else 0
+        
+        prompt += f"""
+【Task】Make the FINAL decision - Compare ALL rounds and select the BEST
+
+📊 **Round Comparison**:
+- Round 1 Best: avg_profit={r1_profit:.1f}%, score={best_round1['score'] if best_round1 else 0:.4f}
+- Round 2 Best: avg_profit={r2_profit:.1f}%, score={best_round2['score'] if best_round2 else 0:.4f}
+
+🎯 **Decision Rule** (CRITICAL):
+**Always select the round with HIGHEST avg_profit**. Score is secondary.
+
+⚠️ If time_exit=100%, it means all trades timeout (not ideal but acceptable if profit is good).
 
 Respond in JSON format ONLY:
-{
-  "final_decision": {
+{{
+  "final_decision": {{
     "accept_result": true/false,
-    "selected_params": {...},
-    "reasoning": "Why these parameters?",
+    "selected_params": {{...}},  // 🔴 Use params from Round {1 if r1_profit > r2_profit else 2} (highest profit)
+    "reasoning": "Selected Round X because avg_profit={max(r1_profit, r2_profit):.1f}% > Round Y's profit. Time_exit=100% is acceptable.",
     "execution_strategy": "apply_immediately",
-    "monitoring_metrics": ["profit_loss_ratio", "time_exit_rate"],
-    "rollback_conditions": "7-day P/L ratio <1.2"
-  }
-}"""
+    "monitoring_metrics": ["avg_profit", "time_exit_rate", "capture_count"],
+    "rollback_conditions": "7-day avg profit <0.5% OR cumulative loss >3U"
+  }}
+}}"""
     
     try:
         response = requests.post(
