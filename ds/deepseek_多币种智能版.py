@@ -18353,9 +18353,12 @@ def generate_round2_combinations_from_ai(ai_suggestions):
     return test_combinations
 
 
-def call_ai_for_round_decision(round_num, round_results, current_best_params, opportunities_count):
+def call_ai_for_round_decision(round_num, round_results, current_best_params, opportunities_count, all_rounds_results=None):
     """
     【V8.3.18】调用AI分析当前轮次结果并决策
+    
+    Args:
+        all_rounds_results: 【V8.3.18.2】所有轮次结果 [('round1', [...]), ('round2', [...])]
     """
     global deepseek_api_key  # 【修复】声明全局变量
     best_result = round_results[0] if round_results else None
@@ -18607,7 +18610,8 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
         round_num=1,
         round_results=round1_results,
         current_best_params=best_round1['params'],
-        opportunities_count=len(opportunities)
+        opportunities_count=len(opportunities),
+        all_rounds_results=all_rounds_results
     )
     
     print(f"     AI决策: needs_round2={ai_decision_round1.get('needs_round2', False)}")
@@ -18669,7 +18673,8 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
             round_num=2,
             round_results=combined_top_results,
             current_best_params=best_round2['full_params'],
-            opportunities_count=len(opportunities)
+            opportunities_count=len(opportunities),
+            all_rounds_results=all_rounds_results
         )
     else:
         # ========== 不需要第2轮，使用第1轮的AI决策 ==========
