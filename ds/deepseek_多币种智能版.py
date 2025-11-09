@@ -5458,6 +5458,7 @@ def quick_global_search_v8316(data_summary, current_config):
         'best_metric': 0.0,  # 快速探索不计算综合指标
         'baseline_metric': 0.0,
         'total_rounds': 1,  # V8.3.16.7: 修复KeyError
+        'rounds': [{'round_num': 1, 'improved': True, 'metric': 0.0, 'status': 'COMPLETED'}],  # V8.3.16.7: 修复rounds KeyError
         'quick_search_mode': True,
         'found_profitable': found_profitable
     }
