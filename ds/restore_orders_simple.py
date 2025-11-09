@@ -135,7 +135,8 @@ def restore_from_papi(model_name="deepseek"):
     data_dir.mkdir(parents=True, exist_ok=True)
     
     output_file = data_dir / "trades_history.csv"
-    df.to_csv(output_file, index=False, encoding='utf-8')  # 不加BOM
+    # ⚠️ 不能用utf-8-sig，会导致csv.DictReader无法正确读取第一列
+    df.to_csv(output_file, index=False, encoding='utf-8')  # 纯utf-8，无BOM
     
     print(f"\n✅ 已保存: {output_file}")
     print(f"📊 统计: {len(trades)}笔, 盈利{len(df[df['盈亏(U)']>0])}笔, 总盈亏{df['盈亏(U)'].sum():.2f}U")
