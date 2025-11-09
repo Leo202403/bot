@@ -38,10 +38,10 @@ AI_AGGRESSIVENESS_DYNAMIC = True        # 动态AI激进度（根据Time Exit率
 
 def extract_json_from_ai_response(ai_content: str) -> dict:
     """
-    从AI响应中提取JSON对象（鲁棒版本，支持DeepSeek Reasoner）
+    从AI响应中提取JSON对象（鲁棒版本，支持Qwen模型）
     
     尝试顺序：
-    1. 跳过DeepSeek Reasoner的推理标签 (<think>...</think>)
+    1. 跳过Qwen模型的推理标签 (<think>...</think>)
     2. 提取Markdown代码块中的JSON (```json ... ```)
     3. 提取第一个完整的JSON对象（非贪婪匹配）
     4. 尝试解析整个内容为JSON
@@ -57,8 +57,8 @@ def extract_json_from_ai_response(ai_content: str) -> dict:
     """
     ai_content = ai_content.strip()
     
-    # 方法0: 移除DeepSeek Reasoner的推理标签（如果存在）
-    # DeepSeek Reasoner可能返回：<think>推理过程</think>\n{JSON}
+    # 方法0: 移除Qwen模型的推理标签（如果存在）
+    # Qwen模型可能返回：<think>推理过程</think>\n{JSON}
     think_match = re.search(r'<think>.*?</think>\s*', ai_content, re.DOTALL)
     if think_match:
         ai_content = ai_content[think_match.end():].strip()
@@ -326,7 +326,7 @@ class AICallOptimizer:
         time_passed = (datetime.now() - self.last_portfolio_call_time).seconds // 60 if self.last_portfolio_call_time else 0
         
         # 记录详情 + 估算节省成本
-        cost_per_call = 0.014  # DeepSeek API平均成本（元/次，reasoner模式约0.01-0.02）
+        cost_per_call = 0.014  # Qwen API平均成本（元/次，reasoner模式约0.01-0.02）
         self.daily_details['saved_cost_estimate'] += cost_per_call
         self.daily_details['skip_reasons'].append({
             'time': datetime.now().strftime('%H:%M:%S'),
@@ -375,7 +375,7 @@ class AICallOptimizer:
             'api_calls': self.call_stats['forced'] + (self.call_stats['total'] - self.call_stats['saved'] - self.call_stats['forced']),
             'calls_saved': self.call_stats['saved'],
             'save_rate': f"{saved_rate:.1f}%",
-            'cost_reduction': f"约{saved_rate * 0.8:.0f}%",  # 考虑DeepSeek自身缓存
+            'cost_reduction': f"约{saved_rate * 0.8:.0f}%",  # 考虑Qwen自身缓存
         }
     
     def reset_stats(self):
@@ -536,7 +536,7 @@ ai_optimizer = AICallOptimizer()
 
 # ==================== AI调用优化器结束 ====================
 
-# 初始化DeepSeek客户端
+# 初始化Qwen客户端
 qwen_api_key = os.getenv("QWEN_API_KEY")
 if not qwen_api_key:
     raise ValueError("❌ QWEN_API_KEY 环境变量未设置，请检查 .env.qwen 文件")
@@ -728,7 +728,7 @@ SYMBOL_PROFILES = {
     }
 }
 
-# 数据存储路径（DeepSeek专用目录）
+# 数据存储路径（Qwen专用目录）
 DATA_DIR = Path(__file__).parent / "trading_data" / "qwen"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 TRADES_FILE = DATA_DIR / "trades_history.csv"
@@ -745,7 +745,7 @@ signal_history = {}  # 每个币种的信号历史
 
 
 def send_bark_notification(title, content):
-    """发送Bark推送通知（支持多个地址 + DeepSeek分组）"""
+    """发送Bark推送通知（支持多个地址 + Qwen分组）"""
     try:
         from urllib.parse import quote
 
@@ -792,7 +792,7 @@ def send_bark_notification(title, content):
                 encoded_title = quote(title)
                 encoded_content = quote(content)
 
-                # 添加group参数，将推送归类到"DeepSeek"文件夹
+                # 添加group参数，将推送归类到"Qwen"文件夹
                 url = f"https://api.day.app/{bark_key}/{encoded_title}/{encoded_content}?group=Qwen"
                 
                 # 🔧 V7.7.0.16: 检查URL长度
@@ -847,7 +847,7 @@ def send_bark_notification(title, content):
         traceback.print_exc()
 
 
-def send_email_notification(subject, body_html, model_name="DeepSeek"):
+def send_email_notification(subject, body_html, model_name="Qwen"):
     """发送邮件通知（用于AI参数优化详细报告）"""
     try:
         # 邮件配置
@@ -2118,7 +2118,7 @@ def should_pause_trading_v7(config):
             
             # 发送盈利恢复通知
             send_recovery_notification_v7(
-                model_name=os.getenv("MODEL_NAME", "DeepSeek"),
+                model_name=os.getenv("MODEL_NAME", "Qwen"),
                 recovery_type="profit_exit",
                 pause_level=pause_level,
                 new_pause_level=new_pause_level
@@ -2143,7 +2143,7 @@ def should_pause_trading_v7(config):
             
             # 发送恢复通知
             send_recovery_notification_v7(
-                model_name=os.getenv("MODEL_NAME", "DeepSeek"),
+                model_name=os.getenv("MODEL_NAME", "Qwen"),
                 recovery_type="time_based",
                 pause_level=pause_level,
                 new_pause_level=0
@@ -7423,7 +7423,7 @@ def analyze_and_adjust_params():
             
             # 🆕 发送邮件通知（详细版）
             try:
-                model_name = os.getenv("MODEL_NAME", "DeepSeek")
+                model_name = os.getenv("MODEL_NAME", "Qwen")
                 
                 # 构建参数调整详情（HTML格式）- 只显示有变化的参数
                 param_changes_html = ""
@@ -8570,7 +8570,7 @@ def analyze_and_adjust_params():
                 
                 # 发送邮件（复用之前构建的邮件HTML）
                 try:
-                    model_name = os.getenv("MODEL_NAME", "DeepSeek")
+                    model_name = os.getenv("MODEL_NAME", "Qwen")
                     # 构建简化的邮件（无参数变化）
                     # 由于没有参数变化，我们需要重新构建部分HTML
                     # 这里直接复用前面已经构建好的HTML变量（如果存在的话）
@@ -8679,7 +8679,7 @@ def chat_with_ai(user_message, context=None):
 """
         
         response = qwen_client.chat.completions.create(
-            model="qwen3-max",  # DeepSeek模型
+            model="qwen3-max",  # Qwen模型
             messages=[
                 {
                     "role": "system",
@@ -12388,7 +12388,7 @@ While code executes as single position, AI should plan multi-part management:
         }
     
     try:
-        # 🔧 优化System Prompt结构（利于DeepSeek后端缓存）
+        # 🔧 优化System Prompt结构（利于Qwen后端缓存）
         optimized_system_prompt = """You are a professional quantitative portfolio manager AI specializing in multi-asset analysis and capital allocation.
 
 Your core principles:
@@ -12399,7 +12399,7 @@ Your core principles:
 - Always respond in Chinese (中文)"""
         
         response = qwen_client.chat.completions.create(
-            model="qwen3-max",  # DeepSeek模型（思考模式，提升复杂策略分析能力）
+            model="qwen3-max",  # Qwen模型（思考模式，提升复杂策略分析能力）
             messages=[
                 {
                     "role": "system",
@@ -18124,7 +18124,7 @@ IMPORTANT: Be aggressive in recommendations. If Time Exit > 50%, TP is definitel
     return prompt
 
 
-def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_name='deepseek'):
+def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_name='qwen'):
     """
     【V8.3.12.1】调用AI分析exit patterns并给出策略建议
     
@@ -18415,20 +18415,23 @@ Context:
 - If Round 1 found time_exit<90% AND avg_profit>1%, you can skip Round 2
 - If ALL combinations have time_exit≥90%, you MUST run Round 2 with more aggressive params
 
+⚠️ **CRITICAL**: If needs_round2=true, you MUST provide specific `round2_suggestions` with param ranges that will solve the problem!
+
 Respond in JSON format ONLY:
 {
   "needs_round2": true/false,
   "reasoning": "Your analysis",
-  "round2_suggestions": {
-    "strategy": "Brief description",
+  "round2_suggestions": {  // ⚠️ REQUIRED if needs_round2=true
+    "strategy": "Brief description of what to change and why",
     "param_ranges": {
-      "atr_tp_multiplier": [0.3, 0.4, 0.5],
-      "max_holding_hours": [1.5, 2.0, 2.5],
+      "atr_tp_multiplier": [0.3, 0.4, 0.5],  // Example: Wider TP to reduce timeout
+      "max_holding_hours": [1.5, 2.0, 2.5],  // Example: Longer hold time
       "min_signal_score": [70, 80, 90],
       "atr_stop_multiplier": [0.6, 0.8],
       "min_risk_reward": [1.8, 2.2]
-    }
-  },
+    },
+    "rationale": "Why these specific ranges: time_exit={te_rate:.0f}% because [reason], new ranges fix this by [solution]"
+  } or null,  // null only if needs_round2=false
   "final_decision": {
     "accept_result": true,
     "selected_params": {...},

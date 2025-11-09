@@ -96,6 +96,40 @@ echo "  → 3.10 替换max_tokens限制..."
 sed -i '' 's/max_tokens=16000/max_tokens=8000/g' qwen_多币种智能版.py
 sed -i '' 's/max_tokens=16384/max_tokens=8000/g' qwen_多币种智能版.py
 
+# 3.11 替换函数默认参数中的model_name（V8.3.18.7新增）
+echo "  → 3.11 替换函数参数中的model_name..."
+sed -i '' "s/model_name='deepseek'/model_name='qwen'/g" qwen_多币种智能版.py
+sed -i '' 's/model_name="deepseek"/model_name="qwen"/g' qwen_多币种智能版.py
+
+# 3.12 替换注释中的模型名称（V8.3.18.7新增）
+echo "  → 3.12 替换注释中的模型名称..."
+# 替换所有注释中的DeepSeek
+sed -i '' 's/# 初始化DeepSeek客户端/# 初始化Qwen客户端/g' qwen_多币种智能版.py
+sed -i '' 's/DeepSeek专用目录/Qwen专用目录/g' qwen_多币种智能版.py
+sed -i '' 's/DeepSeek分组/Qwen分组/g' qwen_多币种智能版.py
+sed -i '' 's/"DeepSeek"文件夹/"Qwen"文件夹/g' qwen_多币种智能版.py
+sed -i '' 's/DeepSeek后端缓存/Qwen后端缓存/g' qwen_多币种智能版.py
+sed -i '' 's/# DeepSeek模型/# Qwen模型/g' qwen_多币种智能版.py
+sed -i '' 's/DeepSeek Reasoner/Qwen模型/g' qwen_多币种智能版.py
+sed -i '' 's/DeepSeek API/Qwen API/g' qwen_多币种智能版.py
+sed -i '' 's/DeepSeek自身缓存/Qwen自身缓存/g' qwen_多币种智能版.py
+
+# 3.13 替换Bark推送的group参数值（V8.3.18.7新增）
+echo "  → 3.13 替换Bark group参数值..."
+# 替换 group="DeepSeek" -> group="Qwen"
+sed -i '' 's/"group": "DeepSeek"/"group": "Qwen"/g' qwen_多币种智能版.py
+sed -i '' "s/'group': 'DeepSeek'/'group': 'Qwen'/g" qwen_多币种智能版.py
+
+# 3.14 替换 os.getenv("MODEL_NAME", "DeepSeek")（V8.3.18.7新增）
+echo "  → 3.14 替换MODEL_NAME环境变量默认值..."
+sed -i '' 's/os\.getenv("MODEL_NAME", "DeepSeek")/os.getenv("MODEL_NAME", "Qwen")/g' qwen_多币种智能版.py
+sed -i '' "s/os\.getenv('MODEL_NAME', 'DeepSeek')/os.getenv('MODEL_NAME', 'Qwen')/g" qwen_多币种智能版.py
+
+# 3.15 替换函数签名中的 model_name="DeepSeek"（V8.3.18.7新增）
+echo "  → 3.15 替换函数签名中的默认值..."
+sed -i '' 's/model_name="DeepSeek"/model_name="Qwen"/g' qwen_多币种智能版.py
+sed -i '' "s/model_name='DeepSeek'/model_name='Qwen'/g" qwen_多币种智能版.py
+
 echo "✅ 配置替换完成"
 echo ""
 
