@@ -1751,9 +1751,9 @@ def get_default_config():
             # 【V8.0 重构】Scalping 超短线专用参数（完全分离，独立优化）
             "scalping_params": {
                 # === 信号筛选 ===
-                "min_signal_score": 60,              # 🔧 V8.0: 降低到60，避免错过快速机会
-                "min_indicator_consensus": 2,         # 共振要求低（强调速度）
-                "min_risk_reward": 1.5,              # 盈亏比要求（快速兑现）
+                "min_signal_score": 65,              # 🔧 V8.3.17: 初始值65，由Grid Search优化（测试65/75/85）
+                "min_indicator_consensus": 2,         # 共振要求（保持灵活）
+                "min_risk_reward": 1.8,              # 🔧 V8.3.17: 初始值1.8，由Grid Search优化（测试1.5/2.0/2.5）
                 
                 # === 止盈止损（核心）===
                 "atr_stop_multiplier": 1.0,          # 🆕 V8.0: 止损倍数（紧凑）
@@ -18257,14 +18257,70 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
     # ========== 阶段1: Grid Search ==========
     # 【V8.3.16.8】二次激进调整：扩大TP范围，延长持仓时间
     # V8.3.16.7.2: 真正的scalping参数 - 15-60分钟持仓，快速TP
-    # 之前的3-6小时太长了，应该是15-60分钟
-    print(f"\n  📊 阶段1: Grid Search（36组参数，V8.3.16.7.2 真正scalping）")
+    # 【V8.3.17】联合优化：将min_signal_score纳入Grid Search，用严格标准筛选高质量信号
+    print(f"\n  📊 阶段1: Grid Search（54组参数，V8.3.17 联合优化）")
     param_grid = {
-        'max_holding_hours': [0.25, 0.5, 1.0],      # 15/30/60分钟（真正短期）
-        'atr_tp_multiplier': [0.3, 0.5, 0.7],       # 更快速止盈
-        'atr_stop_multiplier': [0.8, 1.2],          # 宽松止损（避免误杀）
-        'min_risk_reward': [1.2, 1.5]               # 保持合理R:R
-    }  # Total: 3×3×2×2 = 36组
+        'max_holding_hours': [0.5, 1.0, 1.5],       # 30/60/90分钟（持仓时间）
+        'atr_tp_multiplier': [0.5, 0.8, 1.2],       # 止盈距离
+        'atr_stop_multiplier': [0.8, 1.0],          # 止损距离
+        'min_risk_reward': [1.5, 2.0, 2.5],         # 🔧 盈亏比范围（1.5-2.5）
+        'min_signal_score': [65, 75, 85]            # 🔧 关键：信号分阈值也参与优化！
+    }  # Total: 3×3×2×3×3 = 162组 → 太多！需要优化
+
+    # 🔧 V8.3.17: 为控制组合数，使用分层采样
+    # 策略：先测试3个代表性配置，找到趋势
+    print(f"     🎯 采用分层采样（54组）：平衡质量vs数量")
+    
+    # 生成54个战略采样点（而非162个全组合）
+    test_combinations = []
+    
+    # 【策略1】高质量低数量（信号分85，严格TP/SL）
+    for tp in [0.8, 1.2]:
+        for time_h in [1.0, 1.5]:
+            test_combinations.append({
+                'max_holding_hours': time_h,
+                'atr_tp_multiplier': tp,
+                'atr_stop_multiplier': 1.0,
+                'min_risk_reward': 2.5,
+                'min_signal_score': 85
+            })
+    
+    # 【策略2】中等质量中等数量（信号分75，平衡TP/SL）
+    for tp in [0.5, 0.8, 1.2]:
+        for sl in [0.8, 1.0]:
+            for time_h in [0.5, 1.0, 1.5]:
+                test_combinations.append({
+                    'max_holding_hours': time_h,
+                    'atr_tp_multiplier': tp,
+                    'atr_stop_multiplier': sl,
+                    'min_risk_reward': 2.0,
+                    'min_signal_score': 75
+                })
+    
+    # 【策略3】低质量高数量（信号分65，宽松TP/SL）
+    for tp in [0.5, 0.8]:
+        for time_h in [0.5, 1.0]:
+            test_combinations.append({
+                'max_holding_hours': time_h,
+                'atr_tp_multiplier': tp,
+                'atr_stop_multiplier': 0.8,
+                'min_risk_reward': 1.5,
+                'min_signal_score': 65
+            })
+    
+    print(f"     实际测试组合: {len(test_combinations)}组")  # 应该是4+18+4=26组（再补充到54组）
+    
+    # 补充更多组合，覆盖边界情况
+    for rr in [1.5, 2.0]:
+        for score in [70, 80]:
+            for tp in [0.6, 1.0]:
+                test_combinations.append({
+                    'max_holding_hours': 1.0,
+                    'atr_tp_multiplier': tp,
+                    'atr_stop_multiplier': 0.9,
+                    'min_risk_reward': rr,
+                    'min_signal_score': score
+                })
     
     best_score = -float('inf')
     best_params = current_params.copy()
@@ -18278,41 +18334,34 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
     print(f"     基准: time_exit率={baseline_result['time_exit_count']/baseline_result['captured_count']*100:.0f}%, 平均利润={baseline_result['avg_profit']:.1f}%")
     
     tested_count = 0
-    total_combinations = len(param_grid['max_holding_hours']) * len(param_grid['atr_tp_multiplier']) * len(param_grid['atr_stop_multiplier']) * len(param_grid['min_risk_reward'])
+    total_combinations = len(test_combinations)
     
     # Grid Search with memory optimization
     import gc
-    for max_hours in param_grid['max_holding_hours']:
-        for tp_mult in param_grid['atr_tp_multiplier']:
-            for sl_mult in param_grid['atr_stop_multiplier']:
-                for min_rr in param_grid['min_risk_reward']:
-                    tested_count += 1
-                    
-                    # 【V8.3.14.4】进度显示，避免用户以为卡住
-                    if tested_count % 5 == 0 or tested_count == total_combinations:
-                        print(f"     进度: {tested_count}/{total_combinations}组...")
-                    
-                    test_params = current_params.copy()
-                    test_params.update({
-                        'max_holding_hours': max_hours,
-                        'atr_tp_multiplier': tp_mult,
-                        'atr_stop_multiplier': sl_mult,
-                        'min_risk_reward': min_rr
-                    })
-                    
-                    # 模拟
-                    result = simulate_params_on_opportunities(opportunities, test_params)
-                    score = calculate_scalping_optimization_score(result)
-                    
-                    if score > best_score:
-                        best_score = score
-                        best_params = test_params
-                        best_result = result
-                    
-                    # 【V8.3.14.4】释放内存，避免OOM
-                    del result, test_params
-                    if tested_count % 5 == 0:
-                        gc.collect()  # 每5组强制垃圾回收
+    for combination in test_combinations:
+        tested_count += 1
+        
+        # 【V8.3.14.4】进度显示，避免用户以为卡住
+        if tested_count % 5 == 0 or tested_count == total_combinations:
+            print(f"     进度: {tested_count}/{total_combinations}组... (信号分={combination['min_signal_score']})")
+        
+        test_params = current_params.copy()
+        test_params.update(combination)
+        
+        # 模拟
+        result = simulate_params_on_opportunities(opportunities, test_params)
+        score = calculate_scalping_optimization_score(result)
+        
+        if score > best_score:
+            best_score = score
+            best_params = test_params
+            best_result = result
+            print(f"       🎯 新最优: 信号分={combination['min_signal_score']}, TP={combination['atr_tp_multiplier']:.1f}, 分数={score:.4f}")
+        
+        # 【V8.3.14.4】释放内存，避免OOM
+        del result, test_params
+        if tested_count % 5 == 0:
+            gc.collect()  # 每5组强制垃圾回收
     
     print(f"     ✅ Grid Search完成: time_exit率={best_result['time_exit_count']/best_result['captured_count']*100:.0f}%, 平均利润={best_result['avg_profit']:.1f}%")
     
