@@ -18327,7 +18327,7 @@ def generate_round1_combinations():
 
 def generate_round2_combinations_from_ai(ai_suggestions):
     """
-    【V8.3.18】根据AI建议生成第2轮测试组合
+    【V8.3.18.8】根据AI建议生成第2轮测试组合（增加参数验证）
     """
     param_ranges = ai_suggestions.get('param_ranges', {})
     
@@ -18339,6 +18339,27 @@ def generate_round2_combinations_from_ai(ai_suggestions):
             'atr_stop_multiplier': [0.6, 0.8],
             'min_risk_reward': [1.8, 2.2]
         }
+    
+    # 【V8.3.18.8】验证和修正参数范围
+    # 超短线定义：max_holding_hours ≤ 2.0
+    if 'max_holding_hours' in param_ranges:
+        valid_hours = [h for h in param_ranges['max_holding_hours'] if h <= 2.0]
+        if not valid_hours:
+            print(f"     ⚠️  AI建议的max_holding_hours全部>2h（不符合超短线定义），自动修正为[1.0, 1.5, 2.0]")
+            param_ranges['max_holding_hours'] = [1.0, 1.5, 2.0]
+        elif len(valid_hours) < len(param_ranges['max_holding_hours']):
+            print(f"     ⚠️  AI建议的部分max_holding_hours>2h，过滤为{valid_hours}")
+            param_ranges['max_holding_hours'] = valid_hours
+    
+    # 验证min_signal_score不能太高（>95基本没信号）
+    if 'min_signal_score' in param_ranges:
+        valid_scores = [s for s in param_ranges['min_signal_score'] if s <= 95]
+        if not valid_scores:
+            print(f"     ⚠️  AI建议的min_signal_score全部>95（太高），自动修正为[70, 80, 90]")
+            param_ranges['min_signal_score'] = [70, 80, 90]
+        elif len(valid_scores) < len(param_ranges['min_signal_score']):
+            print(f"     ⚠️  AI建议的部分min_signal_score>95，过滤为{valid_scores}")
+            param_ranges['min_signal_score'] = valid_scores
     
     test_combinations = []
     from itertools import product
@@ -18374,6 +18395,11 @@ def call_ai_for_round_decision(round_num, round_results, current_best_params, op
 - Round: {round_num} of Grid Search
 - Opportunities: {opportunities_count} scalping opportunities
 - Tested Combinations: {len(round_results)} parameter sets
+
+⚠️ **SCALPING CONSTRAINTS** (MUST respect):
+1. `max_holding_hours` ≤ 2.0 (超短线定义，超过2h属于波段)
+2. `min_signal_score` ≤ 95 (太高会导致captured_count=0)
+3. `atr_tp_multiplier` 0.3-3.0 (合理TP范围)
 
 【Round {round_num} Best Result】
 Parameters: {json.dumps(best_result['params'], ensure_ascii=False) if best_result else 'None'}
@@ -18424,11 +18450,11 @@ Respond in JSON format ONLY:
   "round2_suggestions": {  // ⚠️ REQUIRED if needs_round2=true
     "strategy": "Brief description of what to change and why",
     "param_ranges": {
-      "atr_tp_multiplier": [0.3, 0.4, 0.5],  // Example: Wider TP to reduce timeout
-      "max_holding_hours": [1.5, 2.0, 2.5],  // Example: Longer hold time
-      "min_signal_score": [70, 80, 90],
-      "atr_stop_multiplier": [0.6, 0.8],
-      "min_risk_reward": [1.8, 2.2]
+      "atr_tp_multiplier": [0.5, 0.8, 1.2],  // 0.3-3.0 range
+      "max_holding_hours": [1.0, 1.5, 2.0],  // ⚠️ MUST ≤2.0 (scalping definition)
+      "min_signal_score": [60, 70, 80],  // ⚠️ MUST ≤95
+      "atr_stop_multiplier": [0.8, 1.0, 1.2],
+      "min_risk_reward": [1.5, 2.0, 2.5]
     },
     "rationale": "Why these specific ranges: time_exit={te_rate:.0f}% because [reason], new ranges fix this by [solution]"
   } or null,  // null only if needs_round2=false
@@ -18483,9 +18509,9 @@ Respond in JSON format ONLY:
   "round3_suggestion": {{  // ⚠️ REQUIRED if accept_result=false
     "strategy": "Brief explanation of what to change and why",
     "param_ranges": {{
-      "min_signal_score": [40, 50, 60],  // Example: Lower thresholds to capture more
-      "max_holding_hours": [3.0, 4.0, 5.0],  // Example: Longer hold time
-      "atr_tp_multiplier": [2.0, 2.5, 3.0],  // Example: Wider TP
+      "min_signal_score": [50, 60, 70],  // ⚠️ MUST ≤95
+      "max_holding_hours": [1.5, 2.0],  // ⚠️ MUST ≤2.0 (scalping definition)
+      "atr_tp_multiplier": [1.5, 2.0, 2.5],  // 0.3-3.0 range
       "atr_stop_multiplier": [0.8, 1.0, 1.2],
       "min_risk_reward": [1.2, 1.5, 1.8]
     }},
