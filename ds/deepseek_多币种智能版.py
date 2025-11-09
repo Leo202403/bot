@@ -562,12 +562,30 @@ if EXCHANGE_TYPE == "binance":
         "options": {
             "defaultType": "future",
             "portfolioMargin": USE_PORTFOLIO_MARGIN,  # 统一账户模式
+            "recvWindow": 60000,  # 【修复】增大到60秒，避免系统卡顿时时间戳过期（默认5秒）
         },
         "apiKey": binance_api_key,
         "secret": binance_secret_key,
+        "timeout": 30000,  # 【修复】增大超时时间到30秒（默认10秒）
+        "enableRateLimit": True,  # 【修复】启用速率限制保护
     })
     
     print(f"🔧 币安交易所初始化: {'统一账户模式 (papi)' if USE_PORTFOLIO_MARGIN else '标准合约模式 (fapi)'}")
+    
+    # 【新增】检查时间同步，避免timestamp错误
+    try:
+        server_time = exchange.fetch_time()
+        local_time = int(time.time() * 1000)
+        time_diff = abs(server_time - local_time)
+        if time_diff > 5000:  # 差异超过5秒
+            print(f"⚠️  服务器时间差异: {time_diff}ms (>{5}s)")
+            print(f"   本地时间: {datetime.fromtimestamp(local_time/1000)}")
+            print(f"   币安时间: {datetime.fromtimestamp(server_time/1000)}")
+            print(f"   建议执行: sudo ntpdate -u time.nist.gov")
+        else:
+            print(f"✓ 时间同步正常 (差异{time_diff}ms)")
+    except Exception as e:
+        print(f"⚠️  时间同步检查失败: {e}")
 else:
     # 读取并清理 OKX API keys
     okx_api_key = os.getenv("OKX_API_KEY", "").strip()
@@ -16359,10 +16377,21 @@ def trading_bot():
         
     except Exception as e:
         elapsed = time.time() - start_time
-        print(f"\n❌ 交易循环异常 (耗时: {elapsed:.1f}秒): {e}")
-        send_bark_notification("[DeepSeek]系统异常⚠️", f"交易循环出错 {str(e)}")
+        error_str = str(e)
+        
+        # 【新增】针对时间戳错误的特殊处理
+        if "-1021" in error_str or "Timestamp for this request is outside of the recvWindow" in error_str:
+            print(f"\n⚠️  时间戳错误 (耗时: {elapsed:.1f}秒)")
+            print(f"   错误: {error_str}")
+            print(f"   原因: 系统卡顿导致请求时间超出recvWindow")
+            print(f"   已优化: recvWindow=60秒，应该能解决")
+            print(f"   建议: 检查系统负载 (free -h, top)")
+            # 时间戳错误不发送通知（太频繁）
+        else:
+            print(f"\n❌ 交易循环异常 (耗时: {elapsed:.1f}秒): {e}")
+            send_bark_notification("[DeepSeek]系统异常⚠️", f"交易循环出错 {str(e)}")
+        
         import traceback
-
         traceback.print_exc()
 
 
