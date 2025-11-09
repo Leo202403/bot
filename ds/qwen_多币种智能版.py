@@ -16388,9 +16388,9 @@ def trading_bot():
             print(f"   建议: 检查系统负载 (free -h, top)")
             # 时间戳错误不发送通知（太频繁）
         else:
-            print(f"\n❌ 交易循环异常 (耗时: {elapsed:.1f}秒): {e}")
+        print(f"\n❌ 交易循环异常 (耗时: {elapsed:.1f}秒): {e}")
             send_bark_notification("[通义千问]系统异常⚠️", f"交易循环出错 {str(e)}")
-        
+
         import traceback
         traceback.print_exc()
 
