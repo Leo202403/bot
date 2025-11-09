@@ -48,7 +48,7 @@ def restore_from_papi(model_name="deepseek"):
         print(f"❌ 环境文件不存在: {env_file}")
         return None
     
-    load_dotenv(env_file)
+    load_dotenv(env_file, override=True)  # ⚠️ 必须override=True，否则不会覆盖已有环境变量
     print(f"✓ 加载环境: {env_file}")
     
     api_key = os.getenv("BINANCE_API_KEY")
@@ -90,6 +90,9 @@ def restore_from_papi(model_name="deepseek"):
         return None
     
     print(f"\n✓ 共获取 {len(all_orders)} 笔订单")
+    if all_orders:
+        print(f"   🔍 DEBUG - 首笔: ID={all_orders[0]['orderId']}, Time={all_orders[0]['time']}")
+        print(f"   🔍 DEBUG - 末笔: ID={all_orders[-1]['orderId']}, Time={all_orders[-1]['time']}")
     
     # 配对订单（单向持仓模式）
     print("\n🔄 配对订单...")
