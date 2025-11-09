@@ -5457,6 +5457,7 @@ def quick_global_search_v8316(data_summary, current_config):
         'best_round_num': 1,  # 快速探索视为第1轮
         'best_metric': 0.0,  # 快速探索不计算综合指标
         'baseline_metric': 0.0,
+        'total_rounds': 1,  # 【V8.3.16.7 FIX】快速探索只运行1轮
         'quick_search_mode': True,
         'found_profitable': found_profitable
     }
