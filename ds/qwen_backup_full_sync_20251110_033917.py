@@ -18491,28 +18491,12 @@ Respond in JSON format ONLY:
                 ai_text = ai_text.split('```json')[1].split('```')[0].strip()
             elif '```' in ai_text:
                 ai_text = ai_text.split('```')[1].split('```')[0].strip()
-            
-            # 【V8.3.18.4】添加AI响应日志（用于调试）
-            try:
-                ai_response = json.loads(ai_text)
-                # 打印关键信息（不打印完整JSON，太长）
-                if round_num == 1:
-                    print(f"     🔍 AI响应: needs_round2={ai_response.get('needs_round2', 'N/A')}")
-                else:
-                    fd = ai_response.get('final_decision', {})
-                    print(f"     🔍 AI响应: accept={fd.get('accept_result', 'N/A')}, has_params={bool(fd.get('selected_params'))}")
-                return ai_response
-            except json.JSONDecodeError as json_err:
-                print(f"     ⚠️  AI响应JSON解析失败: {json_err}")
-                print(f"     原始响应（前200字符）: {ai_text[:200]}...")
-                return {"needs_round2": False, "final_decision": {"accept_result": True, "selected_params": current_best_params}}
+            return json.loads(ai_text)
         else:
             print(f"     ⚠️  AI调用失败: {response.status_code}")
             return {"needs_round2": False, "final_decision": {"accept_result": True, "selected_params": current_best_params}}
     except Exception as e:
         print(f"     ⚠️  AI决策异常: {e}")
-        import traceback
-        traceback.print_exc()
         return {"needs_round2": False, "final_decision": {"accept_result": True, "selected_params": current_best_params}}
 
 
@@ -18701,10 +18685,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
     final_decision = final_ai_decision.get('final_decision', {})
     
     # 从AI给出的selected_params中找到对应的完整参数
-    selected_params_partial = final_decision.get('selected_params')
-    if not selected_params_partial or not isinstance(selected_params_partial, dict):
-        print(f"     ⚠️  AI未返回有效参数，使用第1轮最佳结果")
-        selected_params_partial = best_round1['params']
+    selected_params_partial = final_decision.get('selected_params', best_round1['params'])
     
     # 尝试从round1或round2结果中找到匹配的完整参数
     final_params = None
