@@ -1215,7 +1215,7 @@ def trading_positions():
                 raw_positions, '开仓时间', range_type, start_date, end_date
             )
             
-            # 转换中文字段名为英文
+            # 转换中文字段名为英文（包含完整的交易信息）
             positions = []
             for pos in filtered_positions:
                 positions.append({
@@ -1223,7 +1223,15 @@ def trading_positions():
                     'side': pos.get('方向', pos.get('side', '')),
                     'size': float(pos.get('数量', pos.get('size', 0)) or 0),
                     'entry_price': float(pos.get('开仓价', pos.get('entry_price', 0)) or 0),
-                    'unrealized_pnl': float(pos.get('当前盈亏(U)', pos.get('unrealized_pnl', 0)) or 0)
+                    'unrealized_pnl': float(pos.get('当前盈亏(U)', pos.get('unrealized_pnl', 0)) or 0),
+                    # 【新增】完整的交易信息（部分平仓后仍保留）
+                    'open_time': pos.get('开仓时间', ''),
+                    'leverage': float(pos.get('杠杆', pos.get('leverage', 1)) or 1),
+                    'margin': float(pos.get('保证金(U)', pos.get('margin', 0)) or 0),
+                    'stop_loss': float(pos.get('止损', pos.get('stop_loss', 0)) or 0),
+                    'take_profit': float(pos.get('止盈', pos.get('take_profit', 0)) or 0),
+                    'risk_reward': float(pos.get('盈亏比', pos.get('risk_reward', 0)) or 0),
+                    'open_reason': pos.get('开仓理由', pos.get('open_reason', ''))
                 })
             return jsonify({'positions': positions}), 200
         else:

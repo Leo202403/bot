@@ -1106,19 +1106,25 @@ def update_close_position(coin_name, side, close_time, close_price, pnl, close_r
 
 
 def save_positions_snapshot(positions, total_value):
-    """保存当前持仓快照"""
+    """保存当前持仓快照（包含完整交易信息：开仓时间、止盈止损、开仓理由等）"""
     try:
         records = []
         for pos in positions:
             records.append(
                 {
-                    "时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "更新时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "开仓时间": pos.get("open_time", ""),
                     "币种": pos["symbol"].split("/")[0],
                     "方向": "多" if pos["side"] == "long" else "空",
-                        "数量": pos["size"],
+                    "数量": pos["size"],
                     "开仓价": pos["entry_price"],
-                        "当前盈亏(U)": pos["unrealized_pnl"],
+                    "当前盈亏(U)": pos["unrealized_pnl"],
                     "杠杆": pos["leverage"],
+                    "保证金(U)": pos.get("margin", 0),
+                    "止损": pos.get("stop_loss", 0),
+                    "止盈": pos.get("take_profit", 0),
+                    "盈亏比": pos.get("risk_reward", 0),
+                    "开仓理由": pos.get("open_reason", ""),
                 }
             )
         
@@ -1129,13 +1135,19 @@ def save_positions_snapshot(positions, total_value):
             # 无持仓时清空文件
             pd.DataFrame(
                 columns=[
-                    "时间",
+                    "更新时间",
+                    "开仓时间",
                     "币种",
                     "方向",
                     "数量",
                     "开仓价",
                     "当前盈亏(U)",
                     "杠杆",
+                    "保证金(U)",
+                    "止损",
+                    "止盈",
+                    "盈亏比",
+                    "开仓理由",
                 ]
             ).to_csv(POSITIONS_FILE, index=False, encoding="utf-8")
         
@@ -10906,7 +10918,7 @@ def get_ohlcv_data(symbol):
 
 
 def get_trade_info_from_csv(symbol, side):
-    """从CSV文件中获取开仓时间和杠杆率"""
+    """从CSV文件中获取完整的交易信息（开仓时间、杠杆、止盈止损、开仓理由等）"""
     try:
         if TRADES_FILE.exists():
             df = pd.read_csv(TRADES_FILE)
@@ -10930,6 +10942,11 @@ def get_trade_info_from_csv(symbol, side):
                     "leverage": (
                         int(row.get("杠杆率", 1)) if pd.notna(row.get("杠杆率")) else 1
                     ),
+                    "stop_loss": float(row.get("止损", 0)) if pd.notna(row.get("止损")) else 0,
+                    "take_profit": float(row.get("止盈", 0)) if pd.notna(row.get("止盈")) else 0,
+                    "risk_reward": float(row.get("盈亏比", 0)) if pd.notna(row.get("盈亏比")) else 0,
+                    "margin": float(row.get("仓位(U)", 0)) if pd.notna(row.get("仓位(U)")) else 0,
+                    "open_reason": str(row.get("开仓理由", "")) if pd.notna(row.get("开仓理由")) else "",
                 }
     except Exception as e:
         print(f"读取交易信息失败: {e}")
@@ -10958,7 +10975,7 @@ def get_all_positions():
         
         for pos in all_positions:
             if pos["contracts"] and float(pos["contracts"]) > 0:
-                # 从CSV获取开仓时间和杠杆率（准确数据）
+                # 从CSV获取完整交易信息（包括开仓时间、杠杆、止盈止损、开仓理由等）
                 trade_info = get_trade_info_from_csv(pos["symbol"], pos["side"])
                 open_time = trade_info["open_time"] if trade_info else None
                 leverage = (
@@ -10981,7 +10998,13 @@ def get_all_positions():
                     ),
                     "leverage": leverage,  # 使用CSV中记录的准确杠杆率
                     "notional": float(pos["notional"]) if pos["notional"] else 0,
-                        "open_time": open_time,  # 新增：开仓时间
+                    "open_time": open_time,  # 开仓时间
+                    # 【新增】完整的交易信息（部分平仓后仍保留）
+                    "stop_loss": trade_info.get("stop_loss", 0) if trade_info else 0,
+                    "take_profit": trade_info.get("take_profit", 0) if trade_info else 0,
+                    "risk_reward": trade_info.get("risk_reward", 0) if trade_info else 0,
+                    "margin": trade_info.get("margin", 0) if trade_info else 0,
+                    "open_reason": trade_info.get("open_reason", "") if trade_info else "",
                 }
                 active_positions.append(position_info)
                 # 计算仓位价值（名义价值/杠杆）
