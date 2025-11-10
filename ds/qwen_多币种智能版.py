@@ -18667,21 +18667,26 @@ def analyze_signal_type_performance(opportunities):
     for opp in opportunities:
         snapshot = opp.get('snapshot', {})
         
-        # 提取各信号类型评分
-        pin_bar_score = snapshot.get('pin_bar_score', 0)
-        engulfing_score = snapshot.get('engulfing_score', 0)
+        # 【V8.3.19修复】从实际保存的字段识别信号类型
+        # 快照中保存的是字符串形态，不是评分
+        pin_bar_str = snapshot.get('pin_bar', '')
+        engulfing_str = snapshot.get('engulfing', '')
         breakout_score = snapshot.get('breakout_score', 0)
         volume_surge_score = snapshot.get('volume_surge_score', 0)
         
-        # 识别主要信号类型（使用评分阈值）
+        # 识别主要信号类型（从字符串和评分）
         signal_types = []
-        if pin_bar_score > 15:
+        # Pin Bar: 任何包含"pin"的形态
+        if pin_bar_str and 'pin' in pin_bar_str.lower():
             signal_types.append('pin_bar')
-        if engulfing_score > 15:
+        # Engulfing: 任何包含"engulfing"的形态
+        if engulfing_str and 'engulfing' in engulfing_str.lower():
             signal_types.append('engulfing')
-        if breakout_score > 15:
+        # Breakout: 评分>10即可（降低阈值）
+        if breakout_score > 10:
             signal_types.append('breakout')
-        if volume_surge_score > 20:
+        # Volume Surge: 评分>15即可（降低阈值）
+        if volume_surge_score > 15:
             signal_types.append('volume_surge')
         if not signal_types:
             signal_types.append('other')
