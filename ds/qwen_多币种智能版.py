@@ -19249,10 +19249,48 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
                     print(f"     • {param_name}: {sensitivity['importance']} "
                           f"(影响={sensitivity['avg_impact']:+.3f})")
             
+            # 【V8.3.21修复】计算old_result/new_result以兼容邮件/bark
+            print(f"\n  📊 计算前后对比（兼容性）...")
+            baseline_result = simulate_params_on_opportunities(opportunities, current_params)
+            optimized_result = simulate_params_on_opportunities(
+                opportunities, 
+                v8321_result['optimized_params']
+            )
+            
+            # 【V8.3.21修复】构建完全兼容的返回结构
             return {
                 'optimized_params': v8321_result['optimized_params'],
-                'improvement': v8321_result['top_10_configs'][0]['metrics'],
-                'v8321_full_result': v8321_result  # 保留完整结果供调试
+                
+                # 兼容字段（邮件/bark需要）
+                'old_result': baseline_result,
+                'new_result': optimized_result,
+                'old_time_exit_rate': baseline_result['time_exit_count']/baseline_result['captured_count'] if baseline_result['captured_count'] > 0 else 0,
+                'new_time_exit_rate': optimized_result['time_exit_count']/optimized_result['captured_count'] if optimized_result['captured_count'] > 0 else 0,
+                'old_avg_profit': baseline_result['avg_profit'],
+                'new_avg_profit': optimized_result['avg_profit'],
+                'exit_analysis': None,  # V8.3.21不需要
+                
+                # AI建议（格式化为旧版兼容格式）
+                'ai_suggestions': {
+                    'method': 'v8321_local_analysis',
+                    'key_insights': v8321_result['context_analysis'].get('key_insights', []),
+                    'param_sensitivity': v8321_result['statistics'].get('param_sensitivity', {}),
+                    'anomalies': v8321_result.get('anomalies', []),
+                    'recommendation': f"V8.3.21建议使用Top 1配置（分数{v8321_result['top_10_configs'][0]['score']:.3f}）"
+                },
+                
+                # improvement字段（兼容格式）
+                'improvement': {
+                    'method': 'v8321',
+                    'rounds': 1,  # V8.3.21是单轮优化
+                    'v8321_score': v8321_result['top_10_configs'][0]['score'],
+                    'v8321_capture_rate': v8321_result['top_10_configs'][0]['metrics']['capture_rate'],
+                    'v8321_insights': v8321_result['context_analysis'].get('key_insights', [])[:3],
+                    'cost_saved': v8321_result['cost_saved']
+                },
+                
+                # 保留V8.3.21完整结果（供调试）
+                'v8321_full_result': v8321_result
             }
         
         except Exception as e:
@@ -19635,10 +19673,48 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, use_v
                     print(f"     • {param_name}: {sensitivity['importance']} "
                           f"(影响={sensitivity['avg_impact']:+.3f})")
             
+            # 【V8.3.21修复】计算old_result/new_result以兼容邮件/bark
+            print(f"\n  📊 计算前后对比（兼容性）...")
+            baseline_result = simulate_params_on_opportunities(opportunities, current_params)
+            optimized_result = simulate_params_on_opportunities(
+                opportunities, 
+                v8321_result['optimized_params']
+            )
+            
+            # 【V8.3.21修复】构建完全兼容的返回结构
             return {
                 'optimized_params': v8321_result['optimized_params'],
-                'improvement': v8321_result['top_10_configs'][0]['metrics'],
-                'v8321_full_result': v8321_result  # 保留完整结果供调试
+                
+                # 兼容字段（邮件/bark需要）
+                'old_result': baseline_result,
+                'new_result': optimized_result,
+                'old_avg_profit': baseline_result['avg_profit'],
+                'new_avg_profit': optimized_result['avg_profit'],
+                'old_capture_rate': baseline_result['capture_rate'],
+                'new_capture_rate': optimized_result['capture_rate'],
+                'exit_analysis': None,  # V8.3.21不需要
+                
+                # AI建议（格式化为旧版兼容格式）
+                'ai_suggestions': {
+                    'method': 'v8321_local_analysis',
+                    'key_insights': v8321_result['context_analysis'].get('key_insights', []),
+                    'param_sensitivity': v8321_result['statistics'].get('param_sensitivity', {}),
+                    'anomalies': v8321_result.get('anomalies', []),
+                    'recommendation': f"V8.3.21建议使用Top 1配置（分数{v8321_result['top_10_configs'][0]['score']:.3f}）"
+                },
+                
+                # improvement字段（兼容格式）
+                'improvement': {
+                    'method': 'v8321',
+                    'rounds': 1,  # V8.3.21是单轮优化
+                    'v8321_score': v8321_result['top_10_configs'][0]['score'],
+                    'v8321_capture_rate': v8321_result['top_10_configs'][0]['metrics']['capture_rate'],
+                    'v8321_insights': v8321_result['context_analysis'].get('key_insights', [])[:3],
+                    'cost_saved': v8321_result['cost_saved']
+                },
+                
+                # 保留V8.3.21完整结果（供调试）
+                'v8321_full_result': v8321_result
             }
         
         except Exception as e:
