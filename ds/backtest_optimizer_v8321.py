@@ -372,7 +372,32 @@ def simulate_params_with_v8321_filter(opportunities: List[Dict], params: Dict) -
     # 计算利润（使用actual_profit_pct作为模拟利润）
     profits = [c['actual_profit_pct'] for c in captured]
     avg_profit = np.mean(profits)
-    win_rate = len([p for p in profits if p > 0]) / len(profits)
+    
+    # 【V8.3.21风控】分离盈利和亏损
+    wins = [p for p in profits if p > 0]
+    losses = [p for p in profits if p <= 0]
+    
+    win_rate = len(wins) / len(profits) if len(profits) > 0 else 0
+    avg_win = np.mean(wins) if len(wins) > 0 else 0
+    avg_loss = np.mean(losses) if len(losses) > 0 else 0
+    
+    # 盈亏比（赚的时候赚多少 / 亏的时候亏多少）
+    profit_loss_ratio = abs(avg_win / avg_loss) if avg_loss != 0 else 999
+    
+    # 期望收益（考虑胜率和盈亏比）
+    expectancy = (win_rate * avg_win) + ((1 - win_rate) * avg_loss)
+    
+    # 最大回撤（连续亏损的最大值）
+    max_drawdown = 0
+    cumulative = 0
+    peak = 0
+    for p in profits:
+        cumulative += p
+        if cumulative > peak:
+            peak = cumulative
+        drawdown = peak - cumulative
+        if drawdown > max_drawdown:
+            max_drawdown = drawdown
     
     return {
         'total_opportunities': len(opportunities),
@@ -382,7 +407,16 @@ def simulate_params_with_v8321_filter(opportunities: List[Dict], params: Dict) -
         'win_rate': win_rate,
         'time_exit_rate': 0.5,  # 简化：假设50% time_exit
         'missed_reasons': missed_reasons,
-        'captured_details': captured  # 详细数据（用于进一步分析）
+        'captured_details': captured,  # 详细数据（用于进一步分析）
+        
+        # 【V8.3.21风控】新增风控指标
+        'avg_win': avg_win,                    # 盈利时平均赚多少
+        'avg_loss': avg_loss,                  # 亏损时平均亏多少
+        'profit_loss_ratio': profit_loss_ratio, # 盈亏比
+        'expectancy': expectancy,              # 期望收益
+        'max_drawdown': max_drawdown,          # 最大回撤
+        'win_count': len(wins),                # 盈利笔数
+        'loss_count': len(losses)              # 亏损笔数
     }
 
 
@@ -714,46 +748,62 @@ def detect_anomalies_local(all_results: List[Dict], param_sensitivity: Dict) -> 
 
 def calculate_v8321_optimization_score(result: Dict) -> float:
     """
-    【V8.3.21利润最大化】评分函数
+    【V8.3.21利润最大化+风控】评分函数
     
-    核心目标：总利润最大化
-    总利润 = 捕获率 × 胜率 × 平均利润
+    核心目标：利润最大 + 亏损最小
     
-    权重（对齐利润最大化目标）：
-    - 总利润率（capture × win × profit）: 70%
-    - 捕获率（确保不过度保守）: 20%
-    - 胜率（风控）: 10%
+    关键指标：
+    1. 期望收益 = (胜率 × 平均盈利) + (败率 × 平均亏损)
+       - 综合考虑盈利和亏损
+    2. 盈亏比 = 平均盈利 / |平均亏损|
+       - 赚的时候赚多少 vs 亏的时候亏多少
+    3. 最大回撤
+       - 连续亏损的最大幅度（风险指标）
+    4. 捕获率
+       - 确保不过度保守
+    
+    权重设计（对齐"利润最大+亏损最小"）：
+    - 期望收益: 40%（核心，已包含盈亏）
+    - 盈亏比: 30%（赚多亏少）
+    - 捕获率: 20%（不过度保守）
+    - 回撤惩罚: -10%（控制风险）
     
     示例：
-    - 配置A: 5%利润 × 20%捕获 × 90%胜率 = 9.0%总利润
-    - 配置B: 3%利润 × 50%捕获 × 80%胜率 = 12.0%总利润 ✅更优
+    - 配置A: 3%期望 + 2.0盈亏比 + 50%捕获 - 5%回撤 = 高分
+    - 配置B: 3%期望 + 1.2盈亏比 + 50%捕获 - 8%回撤 = 低分（亏损大）
     """
     if result['captured_count'] == 0:
         return 0.0
     
-    # 1. 总利润率（核心指标）
-    # = 捕获率 × 胜率 × 平均利润
-    # 归一化：avg_profit通常0-10%，除以10归一化到0-1
-    total_profit_rate = (
-        result['capture_rate'] * 
-        result['win_rate'] * 
-        (result['avg_profit'] / 10)  # 归一化
-    )
+    # 1. 期望收益（核心指标）
+    # = (胜率 × 盈利) + (败率 × 亏损)
+    # 归一化：expectancy通常-5%到+10%，映射到0-1
+    expectancy = result.get('expectancy', 0)
+    expectancy_score = min(1.0, max(0, (expectancy + 5) / 15))  # -5%~+10% → 0~1
     
-    # 2. 捕获率（确保不过度保守）
+    # 2. 盈亏比（赚多亏少）
+    # 盈亏比通常1.0-5.0，>=2.0为优秀
+    profit_loss_ratio = result.get('profit_loss_ratio', 1.0)
+    plr_score = min(1.0, profit_loss_ratio / 3.0)  # 3.0为满分
+    
+    # 3. 捕获率（确保不过度保守）
     capture_score = result['capture_rate']
     
-    # 3. 胜率（风控）
-    win_score = result['win_rate']
+    # 4. 最大回撤惩罚（控制风险）
+    # 回撤越大，扣分越多
+    max_drawdown = result.get('max_drawdown', 0)
+    # 回撤10%扣满分，线性惩罚
+    drawdown_penalty = min(1.0, abs(max_drawdown) / 10)
     
-    # 加权（总利润为核心）
+    # 加权（利润最大+亏损最小）
     total_score = (
-        total_profit_rate * 0.70 +   # 总利润率 70%
-        capture_score * 0.20 +        # 捕获率 20%
-        win_score * 0.10              # 胜率 10%
+        expectancy_score * 0.40 +      # 期望收益 40%
+        plr_score * 0.30 +              # 盈亏比 30%
+        capture_score * 0.20 +          # 捕获率 20%
+        - drawdown_penalty * 0.10       # 回撤惩罚 -10%
     )
     
-    return total_score
+    return max(0, total_score)  # 确保非负
 
 
 def extract_key_metrics(result: Dict) -> Dict:
