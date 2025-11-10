@@ -445,7 +445,7 @@ def export_date(date_str, output_dirs):
             if is_all_bullish or is_all_bearish:
                 indicator_consensus += 1
             
-            # 【V7.8关键修复】计算盈亏比（risk_reward）
+            # 【V8.3.20】增强版R:R计算 - 基于趋势强度动态调整
             atr = row.atr if pd.notna(row.atr) and row.atr > 0 else 0
             price = row.close
             resistance = row.resistance if pd.notna(row.resistance) else price * 1.02
@@ -455,24 +455,34 @@ def export_date(date_str, output_dirs):
                 # 止损距离：2倍ATR（与系统默认一致）
                 stop_distance = atr * 2.0
                 
-                # 止盈目标：多头看阻力，空头看支撑，取较大值
-                if row.trend_15m in ['多头', '多头转弱']:
-                    target_distance = max(
-                        abs(resistance - price),
-                        atr * 3.0
-                    )
-                elif row.trend_15m in ['空头', '空头转弱']:
-                    target_distance = max(
-                        abs(price - support),
-                        atr * 3.0
-                    )
+                # 【关键修复】基于趋势强度动态调整止盈目标
+                # 1. 判断趋势强度
+                is_strong_trend = (
+                    ("多头" in str(row.trend_15m) and "多头" in str(row.trend_1h) and "多头" in str(row.trend_4h)) or
+                    ("空头" in str(row.trend_15m) and "空头" in str(row.trend_1h) and "空头" in str(row.trend_4h))
+                )
+                is_medium_trend = "多头" in str(row.trend_15m) or "空头" in str(row.trend_15m)
+                
+                # 2. 动态目标倍数
+                if is_strong_trend:
+                    target_multiplier = 6.0  # 强趋势：三框架一致
+                elif is_medium_trend:
+                    target_multiplier = 4.5  # 中等趋势：15m趋势明确
                 else:
-                    # 震荡市：取支撑阻力距离和3倍ATR的最大值
-                    target_distance = max(
-                        abs(resistance - price),
-                        abs(price - support),
-                        atr * 3.0
-                    )
+                    target_multiplier = 3.0  # 弱趋势/震荡
+                
+                # 3. 考虑成交量激增（进一步提高预期）
+                if position >= 20:
+                    recent_vol = df.iloc[max(0, position-20):position]['volume'].mean()
+                    if recent_vol > 0 and row.volume > recent_vol * 2.0:
+                        target_multiplier *= 1.3  # 巨量额外加30%
+                
+                # 4. 考虑指标共振
+                if indicator_consensus >= 4:
+                    target_multiplier *= 1.2  # 强共振额外加20%
+                
+                # 5. 计算目标距离
+                target_distance = atr * target_multiplier
                 
                 # 计算盈亏比
                 risk_reward = round(target_distance / stop_distance, 2) if stop_distance > 0 else 0

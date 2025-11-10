@@ -2477,46 +2477,37 @@ def save_market_snapshot_v7(market_data_list):
                     'volume_confirmed_score': 0
                 }
             
-            # 【V8.3.20】增强版R:R计算 - 基于趋势强度动态调整
+            # 【V7.8关键修复】计算盈亏比（risk_reward）
             atr_value = (data.get("atr") or {}).get("atr_14", 0)
             price = data.get("current_price", 0)
             resistance = ((data.get("support_resistance") or {}).get("nearest_resistance") or {}).get("price", 0)
             support = ((data.get("support_resistance") or {}).get("nearest_support") or {}).get("price", 0)
             trend_15m = data.get("trend_15m", "")
-            trend_1h = mid_term.get("trend", "")
-            trend_4h = data.get("trend_4h", "")
             
             if atr_value > 0 and price > 0:
                 # 止损距离：使用当前配置的ATR倍数
                 stop_distance = atr_value * config.get("atr_stop_multiplier", 2.0)
                 
-                # 【关键修复】基于趋势强度动态调整止盈目标
-                # 1. 判断趋势强度
-                is_strong_trend = (
-                    ("多头" in trend_15m and "多头" in trend_1h and "多头" in trend_4h) or
-                    ("空头" in trend_15m and "空头" in trend_1h and "空头" in trend_4h)
-                )
-                is_medium_trend = "多头" in trend_15m or "空头" in trend_15m
-                
-                # 2. 动态目标倍数
-                if is_strong_trend:
-                    target_multiplier = 6.0  # 强趋势：三框架一致
-                elif is_medium_trend:
-                    target_multiplier = 4.5  # 中等趋势：15m趋势明确
+                # 止盈目标：根据趋势方向计算
+                if "多头" in trend_15m:
+                    # 多头：目标阻力位或3倍ATR（取较大值）
+                    target_distance = max(
+                        abs(resistance - price) if resistance > 0 else 0,
+                        atr_value * 3.0
+                    )
+                elif "空头" in trend_15m:
+                    # 空头：目标支撑位或3倍ATR（取较大值）
+                    target_distance = max(
+                        abs(price - support) if support > 0 else 0,
+                        atr_value * 3.0
+                    )
                 else:
-                    target_multiplier = 3.0  # 弱趋势/震荡
-                
-                # 3. 考虑成交量激增
-                vol = data.get("volume_analysis", {})
-                if vol.get("ratio", 0) >= 2.0:
-                    target_multiplier *= 1.3  # 巨量额外加30%
-                
-                # 4. 考虑指标共振
-                if indicator_consensus >= 4:
-                    target_multiplier *= 1.2  # 强共振额外加20%
-                
-                # 5. 计算目标距离
-                target_distance = atr_value * target_multiplier
+                    # 震荡：取支撑/阻力距离和3倍ATR的最大值
+                    target_distance = max(
+                        abs(resistance - price) if resistance > 0 else 0,
+                        abs(price - support) if support > 0 else 0,
+                        atr_value * 3.0
+                    )
                 
                 risk_reward = round(target_distance / stop_distance, 2) if stop_distance > 0 else 0
             else:
