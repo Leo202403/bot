@@ -19173,22 +19173,30 @@ def analyze_signal_type_performance(opportunities):
     return result
 
 
-def optimize_scalping_params(scalping_data, current_params, initial_params=None):
+def optimize_scalping_params(scalping_data, current_params, initial_params=None, use_v8321=True):
     """
-    【V8.3.12.1 + V8.3.16】超短线参数优化 - Grid Search + Exit Analysis + 条件AI优化
+    【V8.3.21】超短线参数优化 - V8.3.21增强版 + 旧版Grid Search（可选）
     
     优化流程：
-    1. Grid Search找到最优参数（54组参数）
-    2. Exit Analysis分析最优参数的问题
-    3. 条件AI调用：只在Time Exit>80%时调用AI（V8.3.16）
-    4. 动态激进度：根据Time Exit率调整AI建议采纳度（V8.3.16技术债3）
+    - V8.3.21增强版（默认）：
+      1. 11维度参数Grid Search（200组采样）
+      2. V8.3.21上下文过滤（4层：基础→K线→结构→S/R）
+      3. 本地统计分析（参数敏感度、异常检测）
+      4. 成本优化（节省89%）
     
-    目标：降低time_exit率，提高平均利润
+    - 旧版Grid Search（use_v8321=False）：
+      1. Grid Search找到最优参数（54组参数）
+      2. Exit Analysis分析最优参数的问题
+      3. 条件AI调用：只在Time Exit>80%时调用AI（V8.3.16）
+      4. 动态激进度：根据Time Exit率调整AI建议采纳度（V8.3.16技术债3）
+    
+    目标：降低time_exit率，提高平均利润，提高捕获率
     
     Args:
         scalping_data: 超短线机会数据
         current_params: 当前配置的策略参数
-        initial_params: 【V8.3.16新增】V7.7.0快速探索提供的初始参数（技术债1）
+        initial_params: 【V8.3.16】V7.7.0快速探索提供的初始参数（技术债1）
+        use_v8321: 【V8.3.21新增】是否使用V8.3.21增强优化器（默认True）
     """
     opportunities = scalping_data['opportunities']
     
@@ -19198,6 +19206,63 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
             'optimized_params': current_params,
             'improvement': None
         }
+    
+    # ===== 【V8.3.21】使用增强优化器 =====
+    if use_v8321:
+        try:
+            from backtest_optimizer_v8321 import optimize_params_v8321_lightweight
+            
+            print(f"\n  🚀 【V8.3.21】使用增强优化器（{len(opportunities)}个机会）")
+            print(f"     • 11维度参数搜索")
+            print(f"     • 4层上下文过滤")
+            print(f"     • 成本优化（节省89%）")
+            
+            v8321_result = optimize_params_v8321_lightweight(
+                opportunities=opportunities,
+                current_params=current_params,
+                signal_type='scalping',
+                max_combinations=200  # 2核2G环境优化
+            )
+            
+            print(f"\n  ✅ V8.3.21优化完成")
+            print(f"     最优分数: {v8321_result['top_10_configs'][0]['score']:.3f}")
+            print(f"     捕获率: {v8321_result['top_10_configs'][0]['metrics']['capture_rate']*100:.0f}%")
+            print(f"     平均利润: {v8321_result['top_10_configs'][0]['metrics']['avg_profit']:.1f}%")
+            print(f"     胜率: {v8321_result['top_10_configs'][0]['metrics']['win_rate']*100:.0f}%")
+            print(f"     💰 成本节省: ${v8321_result['cost_saved']:.4f}")
+            
+            # 打印关键洞察
+            if v8321_result['context_analysis'].get('key_insights'):
+                print(f"\n  💡 关键发现:")
+                for insight in v8321_result['context_analysis']['key_insights'][:3]:
+                    print(f"     {insight}")
+            
+            # 打印参数敏感度（Top 3）
+            if v8321_result['statistics'].get('param_sensitivity'):
+                print(f"\n  📊 参数敏感度（影响最大的3个）:")
+                sorted_params = sorted(
+                    v8321_result['statistics']['param_sensitivity'].items(),
+                    key=lambda x: abs(x[1]['avg_impact']),
+                    reverse=True
+                )[:3]
+                for param_name, sensitivity in sorted_params:
+                    print(f"     • {param_name}: {sensitivity['importance']} "
+                          f"(影响={sensitivity['avg_impact']:+.3f})")
+            
+            return {
+                'optimized_params': v8321_result['optimized_params'],
+                'improvement': v8321_result['top_10_configs'][0]['metrics'],
+                'v8321_full_result': v8321_result  # 保留完整结果供调试
+            }
+        
+        except Exception as e:
+            print(f"\n  ⚠️  V8.3.21优化器失败: {e}")
+            print(f"  ↪️  降级到旧版Grid Search...")
+            use_v8321 = False  # 降级到旧逻辑
+    
+    # ===== 【旧版】Grid Search逻辑（保留作为fallback） =====
+    if not use_v8321:
+        print(f"\n  🔍 使用旧版Grid Search（54组参数）")
     
     # ========== 【V8.3.19 NEW】信号类型分析 ==========
     print(f"\n  📊 【V8.3.19】分析信号类型表现（共{len(opportunities)}个机会）...")
@@ -19494,22 +19559,30 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
 
 
 
-def optimize_swing_params(swing_data, current_params, initial_params=None):
+def optimize_swing_params(swing_data, current_params, initial_params=None, use_v8321=True):
     """
-    【V8.3.12.1 + V8.3.16】波段参数优化 - Grid Search + Exit Analysis + 条件AI优化
+    【V8.3.21】波段参数优化 - V8.3.21增强版 + 旧版Grid Search（可选）
     
     优化流程：
-    1. Grid Search找到最优参数（54组参数）
-    2. Exit Analysis分析最优参数的问题
-    3. 条件AI调用：只在Time Exit>80%时调用AI（V8.3.16）
-    4. 动态激进度：根据Time Exit率调整AI建议采纳度（V8.3.16技术债3）
+    - V8.3.21增强版（默认）：
+      1. 11维度参数Grid Search（200组采样）
+      2. V8.3.21上下文过滤（4层：基础→K线→结构→S/R）
+      3. 本地统计分析（参数敏感度、异常检测）
+      4. 成本优化（节省89%）
+    
+    - 旧版Grid Search（use_v8321=False）：
+      1. Grid Search找到最优参数（54组参数）
+      2. Exit Analysis分析最优参数的问题
+      3. 条件AI调用：只在Time Exit>80%时调用AI（V8.3.16）
+      4. 动态激进度：根据Time Exit率调整AI建议采纳度（V8.3.16技术债3）
     
     目标：提高平均利润，保持捕获率
     
     Args:
         swing_data: 波段机会数据
         current_params: 当前配置的策略参数
-        initial_params: 【V8.3.16新增】V7.7.0快速探索提供的初始参数（技术债1）
+        initial_params: 【V8.3.16】V7.7.0快速探索提供的初始参数（技术债1）
+        use_v8321: 【V8.3.21新增】是否使用V8.3.21增强优化器（默认True）
     """
     opportunities = swing_data['opportunities']
     
@@ -19519,6 +19592,63 @@ def optimize_swing_params(swing_data, current_params, initial_params=None):
             'optimized_params': current_params,
             'improvement': None
         }
+    
+    # ===== 【V8.3.21】使用增强优化器 =====
+    if use_v8321:
+        try:
+            from backtest_optimizer_v8321 import optimize_params_v8321_lightweight
+            
+            print(f"\n  🚀 【V8.3.21】使用增强优化器（{len(opportunities)}个机会）")
+            print(f"     • 11维度参数搜索")
+            print(f"     • 4层上下文过滤")
+            print(f"     • 成本优化（节省89%）")
+            
+            v8321_result = optimize_params_v8321_lightweight(
+                opportunities=opportunities,
+                current_params=current_params,
+                signal_type='swing',
+                max_combinations=200  # 2核2G环境优化
+            )
+            
+            print(f"\n  ✅ V8.3.21优化完成")
+            print(f"     最优分数: {v8321_result['top_10_configs'][0]['score']:.3f}")
+            print(f"     捕获率: {v8321_result['top_10_configs'][0]['metrics']['capture_rate']*100:.0f}%")
+            print(f"     平均利润: {v8321_result['top_10_configs'][0]['metrics']['avg_profit']:.1f}%")
+            print(f"     胜率: {v8321_result['top_10_configs'][0]['metrics']['win_rate']*100:.0f}%")
+            print(f"     💰 成本节省: ${v8321_result['cost_saved']:.4f}")
+            
+            # 打印关键洞察
+            if v8321_result['context_analysis'].get('key_insights'):
+                print(f"\n  💡 关键发现:")
+                for insight in v8321_result['context_analysis']['key_insights'][:3]:
+                    print(f"     {insight}")
+            
+            # 打印参数敏感度（Top 3）
+            if v8321_result['statistics'].get('param_sensitivity'):
+                print(f"\n  📊 参数敏感度（影响最大的3个）:")
+                sorted_params = sorted(
+                    v8321_result['statistics']['param_sensitivity'].items(),
+                    key=lambda x: abs(x[1]['avg_impact']),
+                    reverse=True
+                )[:3]
+                for param_name, sensitivity in sorted_params:
+                    print(f"     • {param_name}: {sensitivity['importance']} "
+                          f"(影响={sensitivity['avg_impact']:+.3f})")
+            
+            return {
+                'optimized_params': v8321_result['optimized_params'],
+                'improvement': v8321_result['top_10_configs'][0]['metrics'],
+                'v8321_full_result': v8321_result  # 保留完整结果供调试
+            }
+        
+        except Exception as e:
+            print(f"\n  ⚠️  V8.3.21优化器失败: {e}")
+            print(f"  ↪️  降级到旧版Grid Search...")
+            use_v8321 = False  # 降级到旧逻辑
+    
+    # ===== 【旧版】Grid Search逻辑（保留作为fallback） =====
+    if not use_v8321:
+        print(f"\n  🔍 使用旧版Grid Search（54组参数）")
     
     # 【V8.3.16】使用initial_params作为Grid Search的起点
     if initial_params:
