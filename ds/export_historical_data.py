@@ -93,6 +93,266 @@ SYMBOLS = [
     "LTC/USDT:USDT",
 ]
 
+
+# ============================================================
+# 【V8.3.21】数据增强辅助函数（方案B）
+# ============================================================
+
+def get_kline_context(klines, count=10):
+    """
+    【V8.3.21 - 盲点1】获取K线序列上下文
+    
+    让AI看到最近N根K线的统计信息，理解"来龙去脉"
+    
+    Args:
+        klines: K线列表，每个元素是dict {"open": float, "high": float, "low": float, "close": float, "volume": float}
+        count: 分析最近几根K线（默认10）
+    
+    Returns:
+        dict: K线上下文信息
+    """
+    try:
+        if not klines or len(klines) < 2:
+            return None
+        
+        # 取最近N根K线
+        recent = klines[-min(count, len(klines)):]
+        
+        highs = [k['high'] for k in recent]
+        lows = [k['low'] for k in recent]
+        opens = [k['open'] for k in recent]
+        closes = [k['close'] for k in recent]
+        volumes = [k['volume'] for k in recent]
+        
+        # 计算K线特征
+        bodies = [abs(c - o) for c, o in zip(closes, opens)]
+        ranges = [h - l for h, l in zip(highs, lows)]
+        
+        # 阳线/阴线数量
+        bullish = sum(1 for c, o in zip(closes, opens) if c > o)
+        bearish = len(recent) - bullish
+        
+        # 价格变化
+        price_change_pct = (closes[-1] - closes[0]) / closes[0] * 100 if closes[0] > 0 else 0
+        
+        # 趋势判断
+        is_trending_up = False
+        is_trending_down = False
+        if len(closes) >= 5:
+            is_trending_up = closes[-1] > closes[0] and closes[-1] > closes[-5]
+            is_trending_down = closes[-1] < closes[0] and closes[-1] < closes[-5]
+        
+        return {
+            "count": len(recent),
+            "highest_high": max(highs),
+            "lowest_low": min(lows),
+            "avg_body_size": sum(bodies) / len(bodies) if bodies else 0,
+            "avg_range_size": sum(ranges) / len(ranges) if ranges else 0,
+            "avg_volume": sum(volumes) / len(volumes) if volumes else 0,
+            "bullish_count": bullish,
+            "bearish_count": bearish,
+            "bullish_ratio": bullish / len(recent) if recent else 0,
+            "price_change_pct": round(price_change_pct, 2),
+            "is_trending_up": is_trending_up,
+            "is_trending_down": is_trending_down,
+            "volatility_pct": ((max(highs) - min(lows)) / min(lows) * 100) if min(lows) > 0 else 0
+        }
+    except Exception as e:
+        print(f"⚠️ get_kline_context失败: {e}")
+        return None
+
+
+def analyze_market_structure(klines, timeframe_hours=0.25):
+    """
+    【V8.3.21 - 盲点2】分析市场结构
+    
+    识别高低点序列、趋势年龄、位置等结构信息
+    
+    Args:
+        klines: K线列表
+        timeframe_hours: 时间框架（小时），15m=0.25, 1h=1.0, 4h=4.0
+    
+    Returns:
+        dict: 市场结构信息
+    """
+    try:
+        if not klines or len(klines) < 10:
+            return None
+        
+        closes = [k['close'] for k in klines]
+        highs = [k['high'] for k in klines]
+        lows = [k['low'] for k in klines]
+        
+        # 识别swing高低点（简化版：局部极值）
+        swing_highs = []
+        swing_lows = []
+        
+        for i in range(2, len(klines)-2):
+            high = highs[i]
+            low = lows[i]
+            
+            # Swing High: 比前后2根都高
+            if high >= max(highs[i-1], highs[i-2], highs[i+1], highs[i+2]):
+                swing_highs.append((i, high))
+            
+            # Swing Low: 比前后2根都低
+            if low <= min(lows[i-1], lows[i-2], lows[i+1], lows[i+2]):
+                swing_lows.append((i, low))
+        
+        # 判断结构类型
+        structure = "unknown"
+        trend_strength = "weak"
+        
+        if len(swing_highs) >= 2 and len(swing_lows) >= 2:
+            last_2_highs = [h for _, h in swing_highs[-2:]]
+            last_2_lows = [l for _, l in swing_lows[-2:]]
+            
+            # HH-HL (上升结构)
+            if last_2_highs[-1] > last_2_highs[0] and last_2_lows[-1] > last_2_lows[0]:
+                structure = "HH-HL"
+                trend_strength = "strong_bullish"
+            # LL-LH (下降结构)
+            elif last_2_highs[-1] < last_2_highs[0] and last_2_lows[-1] < last_2_lows[0]:
+                structure = "LL-LH"
+                trend_strength = "strong_bearish"
+            # 混乱结构
+            else:
+                structure = "choppy"
+                trend_strength = "weak"
+        
+        # 计算趋势年龄（从最近的swing点开始）
+        current_price = closes[-1]
+        trend_age_candles = 0
+        
+        if swing_highs or swing_lows:
+            all_swings = [(i, 'high') for i, _ in swing_highs] + [(i, 'low') for i, _ in swing_lows]
+            all_swings.sort()
+            if all_swings:
+                last_swing_idx = all_swings[-1][0]
+                trend_age_candles = len(klines) - last_swing_idx - 1
+        
+        # 计算趋势累计涨跌幅
+        if trend_age_candles > 0 and trend_age_candles < len(closes):
+            trend_start_price = closes[-(trend_age_candles+1)]
+            trend_move_pct = ((current_price - trend_start_price) / trend_start_price * 100) if trend_start_price > 0 else 0
+        else:
+            trend_move_pct = 0
+        
+        # 当前价格在区间的位置（0=最低，1=最高）
+        recent_high = max(highs[-20:]) if len(highs) >= 20 else max(highs)
+        recent_low = min(lows[-20:]) if len(lows) >= 20 else min(lows)
+        position_in_range = ((current_price - recent_low) / (recent_high - recent_low)) if (recent_high - recent_low) > 0 else 0.5
+        
+        # 距离高低点的距离
+        distance_from_high = ((recent_high - current_price) / current_price * 100) if current_price > 0 else 0
+        distance_from_low = ((current_price - recent_low) / current_price * 100) if current_price > 0 else 0
+        
+        return {
+            "swing_structure": structure,
+            "trend_strength": trend_strength,
+            "trend_age_candles": trend_age_candles,
+            "trend_age_hours": round(trend_age_candles * timeframe_hours, 1),
+            "trend_move_pct": round(trend_move_pct, 2),
+            "last_swing_high": swing_highs[-1][1] if swing_highs else 0,
+            "last_swing_low": swing_lows[-1][1] if swing_lows else 0,
+            "position_in_range": round(position_in_range, 2),
+            "distance_from_high_pct": round(distance_from_high, 2),
+            "distance_from_low_pct": round(distance_from_low, 2)
+        }
+    except Exception as e:
+        print(f"⚠️ analyze_market_structure失败: {e}")
+        return None
+
+
+def analyze_sr_history(klines, sr_price, sr_type='resistance', tolerance_pct=0.5):
+    """
+    【V8.3.21 - 盲点3】分析支撑/阻力的历史测试情况
+    
+    识别这个支撑/阻力被测试过几次、反应如何
+    
+    Args:
+        klines: K线列表（建议至少50-100根）
+        sr_price: 支撑/阻力价格
+        sr_type: 'support' or 'resistance'
+        tolerance_pct: 容差百分比（默认0.5%，即价格在±0.5%范围内算"测试"）
+    
+    Returns:
+        dict: S/R历史信息
+    """
+    try:
+        if not klines or not sr_price or sr_price <= 0:
+            return None
+        
+        test_count = 0
+        reactions = []  # 记录每次测试后的价格反应
+        last_test_ago_candles = None
+        false_breakouts = 0
+        
+        for i, kline in enumerate(klines):
+            high = kline['high']
+            low = kline['low']
+            close = kline['close']
+            
+            # 判断是否"测试"了S/R
+            tested = False
+            
+            if sr_type == 'resistance':
+                # 阻力测试：最高价接近或突破阻力位
+                if high >= sr_price * (1 - tolerance_pct/100):
+                    tested = True
+                    # 记录反应：收盘价相对阻力位的距离
+                    reaction_pct = ((close - sr_price) / sr_price * 100)
+                    reactions.append(reaction_pct)
+                    
+                    # 假突破：最高价突破但收盘回落
+                    if high > sr_price and close < sr_price:
+                        false_breakouts += 1
+            
+            elif sr_type == 'support':
+                # 支撑测试：最低价接近或跌破支撑位
+                if low <= sr_price * (1 + tolerance_pct/100):
+                    tested = True
+                    # 记录反应：收盘价相对支撑位的距离
+                    reaction_pct = ((close - sr_price) / sr_price * 100)
+                    reactions.append(reaction_pct)
+                    
+                    # 假跌破：最低价跌破但收盘反弹
+                    if low < sr_price and close > sr_price:
+                        false_breakouts += 1
+            
+            if tested:
+                test_count += 1
+                last_test_ago_candles = len(klines) - i - 1
+        
+        if test_count == 0:
+            return None
+        
+        # 计算平均/最大反应
+        if sr_type == 'resistance':
+            avg_reaction = sum(reactions) / len(reactions) if reactions else 0
+            max_rejection = min(reactions) if reactions else 0  # 最大回调（负数）
+            description = f"被测试{test_count}次"
+            if false_breakouts > 0:
+                description += f"，{false_breakouts}次假突破"
+        else:  # support
+            avg_reaction = sum(reactions) / len(reactions) if reactions else 0
+            max_bounce = max(reactions) if reactions else 0  # 最大反弹（正数）
+            description = f"被测试{test_count}次"
+            if false_breakouts > 0:
+                description += f"，{false_breakouts}次假跌破"
+        
+        return {
+            "test_count": test_count,
+            "last_test_ago_candles": last_test_ago_candles if last_test_ago_candles is not None else 999,
+            "avg_reaction_pct": round(avg_reaction, 2),
+            "max_rejection_pct": round(max_rejection, 2) if sr_type == 'resistance' else round(max_bounce, 2),
+            "false_breakouts": false_breakouts,
+            "description": description
+        }
+    except Exception as e:
+        print(f"⚠️ analyze_sr_history失败: {e}")
+        return None
+
 def calculate_rsi(series, period=14):
     """计算RSI"""
     delta = series.diff()

@@ -2275,6 +2275,266 @@ def _check_profit_during_cooldown(pause_start, pause_level=1):
         return False
 
 
+# ============================================================
+# 【V8.3.21】数据增强辅助函数（方案B）
+# ============================================================
+
+def get_kline_context(klines, count=10):
+    """
+    【V8.3.21 - 盲点1】获取K线序列上下文
+    
+    让AI看到最近N根K线的统计信息，理解"来龙去脉"
+    
+    Args:
+        klines: K线列表，每个元素是dict {"open": float, "high": float, "low": float, "close": float, "volume": float}
+        count: 分析最近几根K线（默认10）
+    
+    Returns:
+        dict: K线上下文信息
+    """
+    try:
+        if not klines or len(klines) < 2:
+            return None
+        
+        # 取最近N根K线
+        recent = klines[-min(count, len(klines)):]
+        
+        highs = [k['high'] for k in recent]
+        lows = [k['low'] for k in recent]
+        opens = [k['open'] for k in recent]
+        closes = [k['close'] for k in recent]
+        volumes = [k['volume'] for k in recent]
+        
+        # 计算K线特征
+        bodies = [abs(c - o) for c, o in zip(closes, opens)]
+        ranges = [h - l for h, l in zip(highs, lows)]
+        
+        # 阳线/阴线数量
+        bullish = sum(1 for c, o in zip(closes, opens) if c > o)
+        bearish = len(recent) - bullish
+        
+        # 价格变化
+        price_change_pct = (closes[-1] - closes[0]) / closes[0] * 100 if closes[0] > 0 else 0
+        
+        # 趋势判断
+        is_trending_up = False
+        is_trending_down = False
+        if len(closes) >= 5:
+            is_trending_up = closes[-1] > closes[0] and closes[-1] > closes[-5]
+            is_trending_down = closes[-1] < closes[0] and closes[-1] < closes[-5]
+        
+        return {
+            "count": len(recent),
+            "highest_high": max(highs),
+            "lowest_low": min(lows),
+            "avg_body_size": sum(bodies) / len(bodies) if bodies else 0,
+            "avg_range_size": sum(ranges) / len(ranges) if ranges else 0,
+            "avg_volume": sum(volumes) / len(volumes) if volumes else 0,
+            "bullish_count": bullish,
+            "bearish_count": bearish,
+            "bullish_ratio": bullish / len(recent) if recent else 0,
+            "price_change_pct": round(price_change_pct, 2),
+            "is_trending_up": is_trending_up,
+            "is_trending_down": is_trending_down,
+            "volatility_pct": ((max(highs) - min(lows)) / min(lows) * 100) if min(lows) > 0 else 0
+        }
+    except Exception as e:
+        print(f"⚠️ get_kline_context失败: {e}")
+        return None
+
+
+def analyze_market_structure(klines, timeframe_hours=0.25):
+    """
+    【V8.3.21 - 盲点2】分析市场结构
+    
+    识别高低点序列、趋势年龄、位置等结构信息
+    
+    Args:
+        klines: K线列表
+        timeframe_hours: 时间框架（小时），15m=0.25, 1h=1.0, 4h=4.0
+    
+    Returns:
+        dict: 市场结构信息
+    """
+    try:
+        if not klines or len(klines) < 10:
+            return None
+        
+        closes = [k['close'] for k in klines]
+        highs = [k['high'] for k in klines]
+        lows = [k['low'] for k in klines]
+        
+        # 识别swing高低点（简化版：局部极值）
+        swing_highs = []
+        swing_lows = []
+        
+        for i in range(2, len(klines)-2):
+            high = highs[i]
+            low = lows[i]
+            
+            # Swing High: 比前后2根都高
+            if high >= max(highs[i-1], highs[i-2], highs[i+1], highs[i+2]):
+                swing_highs.append((i, high))
+            
+            # Swing Low: 比前后2根都低
+            if low <= min(lows[i-1], lows[i-2], lows[i+1], lows[i+2]):
+                swing_lows.append((i, low))
+        
+        # 判断结构类型
+        structure = "unknown"
+        trend_strength = "weak"
+        
+        if len(swing_highs) >= 2 and len(swing_lows) >= 2:
+            last_2_highs = [h for _, h in swing_highs[-2:]]
+            last_2_lows = [l for _, l in swing_lows[-2:]]
+            
+            # HH-HL (上升结构)
+            if last_2_highs[-1] > last_2_highs[0] and last_2_lows[-1] > last_2_lows[0]:
+                structure = "HH-HL"
+                trend_strength = "strong_bullish"
+            # LL-LH (下降结构)
+            elif last_2_highs[-1] < last_2_highs[0] and last_2_lows[-1] < last_2_lows[0]:
+                structure = "LL-LH"
+                trend_strength = "strong_bearish"
+            # 混乱结构
+            else:
+                structure = "choppy"
+                trend_strength = "weak"
+        
+        # 计算趋势年龄（从最近的swing点开始）
+        current_price = closes[-1]
+        trend_age_candles = 0
+        
+        if swing_highs or swing_lows:
+            all_swings = [(i, 'high') for i, _ in swing_highs] + [(i, 'low') for i, _ in swing_lows]
+            all_swings.sort()
+            if all_swings:
+                last_swing_idx = all_swings[-1][0]
+                trend_age_candles = len(klines) - last_swing_idx - 1
+        
+        # 计算趋势累计涨跌幅
+        if trend_age_candles > 0 and trend_age_candles < len(closes):
+            trend_start_price = closes[-(trend_age_candles+1)]
+            trend_move_pct = ((current_price - trend_start_price) / trend_start_price * 100) if trend_start_price > 0 else 0
+        else:
+            trend_move_pct = 0
+        
+        # 当前价格在区间的位置（0=最低，1=最高）
+        recent_high = max(highs[-20:]) if len(highs) >= 20 else max(highs)
+        recent_low = min(lows[-20:]) if len(lows) >= 20 else min(lows)
+        position_in_range = ((current_price - recent_low) / (recent_high - recent_low)) if (recent_high - recent_low) > 0 else 0.5
+        
+        # 距离高低点的距离
+        distance_from_high = ((recent_high - current_price) / current_price * 100) if current_price > 0 else 0
+        distance_from_low = ((current_price - recent_low) / current_price * 100) if current_price > 0 else 0
+        
+        return {
+            "swing_structure": structure,
+            "trend_strength": trend_strength,
+            "trend_age_candles": trend_age_candles,
+            "trend_age_hours": round(trend_age_candles * timeframe_hours, 1),
+            "trend_move_pct": round(trend_move_pct, 2),
+            "last_swing_high": swing_highs[-1][1] if swing_highs else 0,
+            "last_swing_low": swing_lows[-1][1] if swing_lows else 0,
+            "position_in_range": round(position_in_range, 2),
+            "distance_from_high_pct": round(distance_from_high, 2),
+            "distance_from_low_pct": round(distance_from_low, 2)
+        }
+    except Exception as e:
+        print(f"⚠️ analyze_market_structure失败: {e}")
+        return None
+
+
+def analyze_sr_history(klines, sr_price, sr_type='resistance', tolerance_pct=0.5):
+    """
+    【V8.3.21 - 盲点3】分析支撑/阻力的历史测试情况
+    
+    识别这个支撑/阻力被测试过几次、反应如何
+    
+    Args:
+        klines: K线列表（建议至少50-100根）
+        sr_price: 支撑/阻力价格
+        sr_type: 'support' or 'resistance'
+        tolerance_pct: 容差百分比（默认0.5%，即价格在±0.5%范围内算"测试"）
+    
+    Returns:
+        dict: S/R历史信息
+    """
+    try:
+        if not klines or not sr_price or sr_price <= 0:
+            return None
+        
+        test_count = 0
+        reactions = []  # 记录每次测试后的价格反应
+        last_test_ago_candles = None
+        false_breakouts = 0
+        
+        for i, kline in enumerate(klines):
+            high = kline['high']
+            low = kline['low']
+            close = kline['close']
+            
+            # 判断是否"测试"了S/R
+            tested = False
+            
+            if sr_type == 'resistance':
+                # 阻力测试：最高价接近或突破阻力位
+                if high >= sr_price * (1 - tolerance_pct/100):
+                    tested = True
+                    # 记录反应：收盘价相对阻力位的距离
+                    reaction_pct = ((close - sr_price) / sr_price * 100)
+                    reactions.append(reaction_pct)
+                    
+                    # 假突破：最高价突破但收盘回落
+                    if high > sr_price and close < sr_price:
+                        false_breakouts += 1
+            
+            elif sr_type == 'support':
+                # 支撑测试：最低价接近或跌破支撑位
+                if low <= sr_price * (1 + tolerance_pct/100):
+                    tested = True
+                    # 记录反应：收盘价相对支撑位的距离
+                    reaction_pct = ((close - sr_price) / sr_price * 100)
+                    reactions.append(reaction_pct)
+                    
+                    # 假跌破：最低价跌破但收盘反弹
+                    if low < sr_price and close > sr_price:
+                        false_breakouts += 1
+            
+            if tested:
+                test_count += 1
+                last_test_ago_candles = len(klines) - i - 1
+        
+        if test_count == 0:
+            return None
+        
+        # 计算平均/最大反应
+        if sr_type == 'resistance':
+            avg_reaction = sum(reactions) / len(reactions) if reactions else 0
+            max_rejection = min(reactions) if reactions else 0  # 最大回调（负数）
+            description = f"被测试{test_count}次"
+            if false_breakouts > 0:
+                description += f"，{false_breakouts}次假突破"
+        else:  # support
+            avg_reaction = sum(reactions) / len(reactions) if reactions else 0
+            max_bounce = max(reactions) if reactions else 0  # 最大反弹（正数）
+            description = f"被测试{test_count}次"
+            if false_breakouts > 0:
+                description += f"，{false_breakouts}次假跌破"
+        
+        return {
+            "test_count": test_count,
+            "last_test_ago_candles": last_test_ago_candles if last_test_ago_candles is not None else 999,
+            "avg_reaction_pct": round(avg_reaction, 2),
+            "max_rejection_pct": round(max_rejection, 2) if sr_type == 'resistance' else round(max_bounce, 2),
+            "false_breakouts": false_breakouts,
+            "description": description
+        }
+    except Exception as e:
+        print(f"⚠️ analyze_sr_history失败: {e}")
+        return None
+
+
 def save_market_snapshot_v7(market_data_list):
     """保存市场快照（每15分钟）供复盘分析"""
     try:
@@ -2477,6 +2737,58 @@ def save_market_snapshot_v7(market_data_list):
                     'volume_confirmed_score': 0
                 }
             
+            # 【V8.3.21】数据增强：获取K线上下文、市场结构、S/R历史
+            # 盲点1：K线序列上下文
+            kline_context_15m = None
+            if kline_list and len(kline_list) >= 10:
+                # 转换为标准格式
+                standard_klines = []
+                for kline in kline_list:
+                    standard_klines.append({
+                        'open': kline.get('open', 0),
+                        'high': kline.get('high', 0),
+                        'low': kline.get('low', 0),
+                        'close': kline.get('close', 0),
+                        'volume': kline.get('volume', 0)
+                    })
+                kline_context_15m = get_kline_context(standard_klines, count=10)
+            
+            # 盲点2：市场结构（15m级别）
+            market_structure_15m = None
+            if kline_list and len(kline_list) >= 20:
+                standard_klines = []
+                for kline in kline_list:
+                    standard_klines.append({
+                        'open': kline.get('open', 0),
+                        'high': kline.get('high', 0),
+                        'low': kline.get('low', 0),
+                        'close': kline.get('close', 0),
+                        'volume': kline.get('volume', 0)
+                    })
+                market_structure_15m = analyze_market_structure(standard_klines, timeframe_hours=0.25)
+            
+            # 盲点3：支撑阻力历史
+            resistance_history = None
+            support_history = None
+            resistance = ((data.get("support_resistance") or {}).get("nearest_resistance") or {}).get("price", 0)
+            support = ((data.get("support_resistance") or {}).get("nearest_support") or {}).get("price", 0)
+            
+            if kline_list and len(kline_list) >= 50:
+                standard_klines = []
+                for kline in kline_list:
+                    standard_klines.append({
+                        'open': kline.get('open', 0),
+                        'high': kline.get('high', 0),
+                        'low': kline.get('low', 0),
+                        'close': kline.get('close', 0),
+                        'volume': kline.get('volume', 0)
+                    })
+                
+                if resistance > 0:
+                    resistance_history = analyze_sr_history(standard_klines, resistance, sr_type='resistance')
+                if support > 0:
+                    support_history = analyze_sr_history(standard_klines, support, sr_type='support')
+            
             # 【V8.3.20】增强版R:R计算 - 基于趋势强度动态调整
             atr_value = (data.get("atr") or {}).get("atr_14", 0)
             price = data.get("current_price", 0)
@@ -2596,6 +2908,49 @@ def save_market_snapshot_v7(market_data_list):
                 "resistance_strength": ((data.get("support_resistance") or {}).get("nearest_resistance") or {}).get("strength", 1),  # 阻力强度1-5
                 "resistance_polarity_switched": ((data.get("support_resistance") or {}).get("nearest_resistance") or {}).get("is_switched_polarity", False),
                 "resistance_fast_rejection": ((data.get("support_resistance") or {}).get("nearest_resistance") or {}).get("is_fast_rejection", False),
+                
+                # === 【V8.3.21】数据增强字段（方案B）===
+                # 盲点1：K线序列上下文（15m）
+                "kline_ctx_count": kline_context_15m.get("count", 0) if kline_context_15m else 0,
+                "kline_ctx_highest": kline_context_15m.get("highest_high", 0) if kline_context_15m else 0,
+                "kline_ctx_lowest": kline_context_15m.get("lowest_low", 0) if kline_context_15m else 0,
+                "kline_ctx_avg_body": kline_context_15m.get("avg_body_size", 0) if kline_context_15m else 0,
+                "kline_ctx_avg_range": kline_context_15m.get("avg_range_size", 0) if kline_context_15m else 0,
+                "kline_ctx_bullish_cnt": kline_context_15m.get("bullish_count", 0) if kline_context_15m else 0,
+                "kline_ctx_bearish_cnt": kline_context_15m.get("bearish_count", 0) if kline_context_15m else 0,
+                "kline_ctx_bullish_ratio": kline_context_15m.get("bullish_ratio", 0) if kline_context_15m else 0,
+                "kline_ctx_price_chg_pct": kline_context_15m.get("price_change_pct", 0) if kline_context_15m else 0,
+                "kline_ctx_is_up": kline_context_15m.get("is_trending_up", False) if kline_context_15m else False,
+                "kline_ctx_is_down": kline_context_15m.get("is_trending_down", False) if kline_context_15m else False,
+                "kline_ctx_volatility": kline_context_15m.get("volatility_pct", 0) if kline_context_15m else 0,
+                
+                # 盲点2：市场结构（15m）
+                "mkt_struct_swing": market_structure_15m.get("swing_structure", "") if market_structure_15m else "",
+                "mkt_struct_trend_strength": market_structure_15m.get("trend_strength", "") if market_structure_15m else "",
+                "mkt_struct_age_candles": market_structure_15m.get("trend_age_candles", 0) if market_structure_15m else 0,
+                "mkt_struct_age_hours": market_structure_15m.get("trend_age_hours", 0) if market_structure_15m else 0,
+                "mkt_struct_move_pct": market_structure_15m.get("trend_move_pct", 0) if market_structure_15m else 0,
+                "mkt_struct_last_high": market_structure_15m.get("last_swing_high", 0) if market_structure_15m else 0,
+                "mkt_struct_last_low": market_structure_15m.get("last_swing_low", 0) if market_structure_15m else 0,
+                "mkt_struct_pos_in_range": market_structure_15m.get("position_in_range", 0) if market_structure_15m else 0,
+                "mkt_struct_dist_high_pct": market_structure_15m.get("distance_from_high_pct", 0) if market_structure_15m else 0,
+                "mkt_struct_dist_low_pct": market_structure_15m.get("distance_from_low_pct", 0) if market_structure_15m else 0,
+                
+                # 盲点3：阻力历史
+                "resist_hist_test_cnt": resistance_history.get("test_count", 0) if resistance_history else 0,
+                "resist_hist_last_test_ago": resistance_history.get("last_test_ago_candles", 999) if resistance_history else 999,
+                "resist_hist_avg_reaction": resistance_history.get("avg_reaction_pct", 0) if resistance_history else 0,
+                "resist_hist_max_rejection": resistance_history.get("max_rejection_pct", 0) if resistance_history else 0,
+                "resist_hist_false_bo": resistance_history.get("false_breakouts", 0) if resistance_history else 0,
+                "resist_hist_desc": resistance_history.get("description", "") if resistance_history else "",
+                
+                # 盲点3：支撑历史
+                "support_hist_test_cnt": support_history.get("test_count", 0) if support_history else 0,
+                "support_hist_last_test_ago": support_history.get("last_test_ago_candles", 999) if support_history else 999,
+                "support_hist_avg_reaction": support_history.get("avg_reaction_pct", 0) if support_history else 0,
+                "support_hist_max_bounce": support_history.get("max_rejection_pct", 0) if support_history else 0,
+                "support_hist_false_bd": support_history.get("false_breakouts", 0) if support_history else 0,
+                "support_hist_desc": support_history.get("description", "") if support_history else "",
             })
         
         # 追加到文件（添加quoting参数避免字段解析错误）
