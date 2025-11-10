@@ -17648,7 +17648,7 @@ def analyze_opportunities_with_new_params(market_snapshots, actual_trades, new_c
                 'date': opp_date,  # 🆕 V7.9.2: 添加日期字段
                 'direction': direction,
                 'entry_price': entry_price,
-                    'signal_score': int(signal_score),
+                'signal_score': int(signal_score),
                 'consensus': int(consensus),
                 'risk_reward': round(risk_reward, 2),
                 'signal_type': opp_type,
@@ -17656,13 +17656,60 @@ def analyze_opportunities_with_new_params(market_snapshots, actual_trades, new_c
                 'was_traded': was_traded,
                 # 旧参数模拟结果
                 'old_can_entry': old_sim['can_entry'],
-                    'old_captured_profit': round(old_sim['profit'], 1) if old_sim['can_entry'] else 0,
+                'old_captured_profit': round(old_sim['profit'], 1) if old_sim['can_entry'] else 0,
                 'old_exit_type': old_sim.get('exit_type', 'N/A') if old_sim['can_entry'] else 'N/A',
                 # 新参数模拟结果
                 'new_can_entry': new_sim['can_entry'],
-                    'new_captured_profit': round(new_sim['profit'], 1) if new_sim['can_entry'] else 0,
+                'new_captured_profit': round(new_sim['profit'], 1) if new_sim['can_entry'] else 0,
                 'new_exit_type': new_sim.get('exit_type', 'N/A') if new_sim['can_entry'] else 'N/A',
-                    }
+                
+                # ===== 【V8.3.21新增】完整上下文数据 =====
+                # 用于Grid Search和参数优化的额外数据
+                'atr': float(atr),
+                'future_data': later_24h,  # 用于模拟的未来数据
+                
+                # K线序列上下文（12个字段）
+                'kline_ctx_count': int(current.get('kline_ctx_count', 0)),
+                'kline_ctx_highest': float(current.get('kline_ctx_highest', 0)),
+                'kline_ctx_lowest': float(current.get('kline_ctx_lowest', 0)),
+                'kline_ctx_avg_body': float(current.get('kline_ctx_avg_body', 0)),
+                'kline_ctx_avg_range': float(current.get('kline_ctx_avg_range', 0)),
+                'kline_ctx_bullish_cnt': int(current.get('kline_ctx_bullish_cnt', 0)),
+                'kline_ctx_bearish_cnt': int(current.get('kline_ctx_bearish_cnt', 0)),
+                'kline_ctx_bullish_ratio': float(current.get('kline_ctx_bullish_ratio', 0)),
+                'kline_ctx_price_chg_pct': float(current.get('kline_ctx_price_chg_pct', 0)),
+                'kline_ctx_is_up': bool(current.get('kline_ctx_is_up', False)),
+                'kline_ctx_is_down': bool(current.get('kline_ctx_is_down', False)),
+                'kline_ctx_volatility': float(current.get('kline_ctx_volatility', 0)),
+                
+                # 市场结构（10个字段）
+                'mkt_struct_swing': str(current.get('mkt_struct_swing', '')),
+                'mkt_struct_trend_strength': str(current.get('mkt_struct_trend_strength', '')),
+                'mkt_struct_age_candles': int(current.get('mkt_struct_age_candles', 0)),
+                'mkt_struct_age_hours': float(current.get('mkt_struct_age_hours', 0)),
+                'mkt_struct_move_pct': float(current.get('mkt_struct_move_pct', 0)),
+                'mkt_struct_last_high': float(current.get('mkt_struct_last_high', 0)),
+                'mkt_struct_last_low': float(current.get('mkt_struct_last_low', 0)),
+                'mkt_struct_pos_in_range': float(current.get('mkt_struct_pos_in_range', 0.5)),
+                'mkt_struct_dist_high_pct': float(current.get('mkt_struct_dist_high_pct', 0)),
+                'mkt_struct_dist_low_pct': float(current.get('mkt_struct_dist_low_pct', 0)),
+                
+                # 阻力历史（6个字段）
+                'resist_hist_test_cnt': int(current.get('resist_hist_test_cnt', 0)),
+                'resist_hist_last_test_ago': int(current.get('resist_hist_last_test_ago', 999)),
+                'resist_hist_avg_reaction': float(current.get('resist_hist_avg_reaction', 0)),
+                'resist_hist_max_rejection': float(current.get('resist_hist_max_rejection', 0)),
+                'resist_hist_false_bo': int(current.get('resist_hist_false_bo', 0)),
+                'resist_hist_desc': str(current.get('resist_hist_desc', '')),
+                
+                # 支撑历史（6个字段）
+                'support_hist_test_cnt': int(current.get('support_hist_test_cnt', 0)),
+                'support_hist_last_test_ago': int(current.get('support_hist_last_test_ago', 999)),
+                'support_hist_avg_reaction': float(current.get('support_hist_avg_reaction', 0)),
+                'support_hist_max_bounce': float(current.get('support_hist_max_bounce', 0)),
+                'support_hist_false_bd': int(current.get('support_hist_false_bd', 0)),
+                'support_hist_desc': str(current.get('support_hist_desc', ''))
+            }
             
             # 计算捕获效率
             if old_sim['can_entry'] and actual_profit > 0:
