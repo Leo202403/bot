@@ -749,6 +749,36 @@ def export_date(date_str, output_dirs):
             else:
                 risk_reward = 0
             
+            # 【V8.3.21】数据增强：调用新函数获取上下文数据
+            kline_context_15m = None
+            market_structure_15m = None
+            resistance_history = None
+            support_history = None
+            
+            # 构建标准K线格式（用于数据增强函数）
+            if position >= 10:  # 确保有足够的历史数据
+                standard_klines = []
+                start_pos = max(0, position - 100)  # 取最近100根K线（用于S/R历史分析）
+                for i in range(start_pos, position + 1):
+                    candle = df.iloc[i]
+                    standard_klines.append({
+                        'open': candle['open'],
+                        'high': candle['high'],
+                        'low': candle['low'],
+                        'close': candle['close'],
+                        'volume': candle['volume']
+                    })
+                
+                # 调用三个数据增强函数
+                if len(standard_klines) >= 10:
+                    kline_context_15m = get_kline_context(standard_klines, count=10)
+                if len(standard_klines) >= 20:
+                    market_structure_15m = analyze_market_structure(standard_klines, timeframe_hours=0.25)
+                if len(standard_klines) >= 50 and resistance > 0:
+                    resistance_history = analyze_sr_history(standard_klines, resistance, sr_type='resistance')
+                if len(standard_klines) >= 50 and support > 0:
+                    support_history = analyze_sr_history(standard_klines, support, sr_type='support')
+            
             csv_row = {
                 'time': time_str,
                 'coin': coin_name,
@@ -842,6 +872,49 @@ def export_date(date_str, output_dirs):
                 'resistance_strength': 5,
                 'resistance_polarity_switched': 'True',
                 'resistance_fast_rejection': 'True',
+                
+                # === 【V8.3.21】数据增强字段（方案B）===
+                # 盲点1：K线序列上下文（15m）
+                'kline_ctx_count': kline_context_15m.get("count", 0) if kline_context_15m else 0,
+                'kline_ctx_highest': kline_context_15m.get("highest_high", 0) if kline_context_15m else 0,
+                'kline_ctx_lowest': kline_context_15m.get("lowest_low", 0) if kline_context_15m else 0,
+                'kline_ctx_avg_body': kline_context_15m.get("avg_body_size", 0) if kline_context_15m else 0,
+                'kline_ctx_avg_range': kline_context_15m.get("avg_range_size", 0) if kline_context_15m else 0,
+                'kline_ctx_bullish_cnt': kline_context_15m.get("bullish_count", 0) if kline_context_15m else 0,
+                'kline_ctx_bearish_cnt': kline_context_15m.get("bearish_count", 0) if kline_context_15m else 0,
+                'kline_ctx_bullish_ratio': kline_context_15m.get("bullish_ratio", 0) if kline_context_15m else 0,
+                'kline_ctx_price_chg_pct': kline_context_15m.get("price_change_pct", 0) if kline_context_15m else 0,
+                'kline_ctx_is_up': kline_context_15m.get("is_trending_up", False) if kline_context_15m else False,
+                'kline_ctx_is_down': kline_context_15m.get("is_trending_down", False) if kline_context_15m else False,
+                'kline_ctx_volatility': kline_context_15m.get("volatility_pct", 0) if kline_context_15m else 0,
+                
+                # 盲点2：市场结构（15m）
+                'mkt_struct_swing': market_structure_15m.get("swing_structure", "") if market_structure_15m else "",
+                'mkt_struct_trend_strength': market_structure_15m.get("trend_strength", "") if market_structure_15m else "",
+                'mkt_struct_age_candles': market_structure_15m.get("trend_age_candles", 0) if market_structure_15m else 0,
+                'mkt_struct_age_hours': market_structure_15m.get("trend_age_hours", 0) if market_structure_15m else 0,
+                'mkt_struct_move_pct': market_structure_15m.get("trend_move_pct", 0) if market_structure_15m else 0,
+                'mkt_struct_last_high': market_structure_15m.get("last_swing_high", 0) if market_structure_15m else 0,
+                'mkt_struct_last_low': market_structure_15m.get("last_swing_low", 0) if market_structure_15m else 0,
+                'mkt_struct_pos_in_range': market_structure_15m.get("position_in_range", 0) if market_structure_15m else 0,
+                'mkt_struct_dist_high_pct': market_structure_15m.get("distance_from_high_pct", 0) if market_structure_15m else 0,
+                'mkt_struct_dist_low_pct': market_structure_15m.get("distance_from_low_pct", 0) if market_structure_15m else 0,
+                
+                # 盲点3：阻力历史
+                'resist_hist_test_cnt': resistance_history.get("test_count", 0) if resistance_history else 0,
+                'resist_hist_last_test_ago': resistance_history.get("last_test_ago_candles", 999) if resistance_history else 999,
+                'resist_hist_avg_reaction': resistance_history.get("avg_reaction_pct", 0) if resistance_history else 0,
+                'resist_hist_max_rejection': resistance_history.get("max_rejection_pct", 0) if resistance_history else 0,
+                'resist_hist_false_bo': resistance_history.get("false_breakouts", 0) if resistance_history else 0,
+                'resist_hist_desc': resistance_history.get("description", "") if resistance_history else "",
+                
+                # 盲点3：支撑历史
+                'support_hist_test_cnt': support_history.get("test_count", 0) if support_history else 0,
+                'support_hist_last_test_ago': support_history.get("last_test_ago_candles", 999) if support_history else 999,
+                'support_hist_avg_reaction': support_history.get("avg_reaction_pct", 0) if support_history else 0,
+                'support_hist_max_bounce': support_history.get("max_rejection_pct", 0) if support_history else 0,
+                'support_hist_false_bd': support_history.get("false_breakouts", 0) if support_history else 0,
+                'support_hist_desc': support_history.get("description", "") if support_history else "",
             }
             
             all_rows.append(csv_row)
