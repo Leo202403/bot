@@ -2557,7 +2557,13 @@ def save_market_snapshot_v7(market_data_list):
                 "pin_bar": price_action.get("pin_bar", ""),
                 "engulfing": price_action.get("engulfing", ""),
                 "pullback_type": pullback.get("type", "") if isinstance(pullback, dict) else "",
-                    "pullback_depth": pullback.get("depth_pct", 0) if isinstance(pullback, dict) else 0,
+                "pullback_depth": pullback.get("depth_pct", 0) if isinstance(pullback, dict) else 0,
+                
+                # === 【V8.3.19.2】信号评分维度（用于信号类型识别）===
+                "volume_surge_type": components.get("volume_surge_type", ""),
+                "volume_surge_score": components.get("volume_surge_score", 0),
+                "has_breakout": components.get("has_breakout", False),
+                "breakout_score": components.get("breakout_score", 0),
                 
                 # === YTC增强字段（V7.5新增，用于复盘分析）===
                 "momentum_slope": price_action.get("momentum_slope", 0),  # 动能斜率
