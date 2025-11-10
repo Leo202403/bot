@@ -548,6 +548,13 @@ def export_date(date_str, output_dirs):
                 'engulfing': '',
                 'pullback_type': 'simple_pullback' if abs(row.close - row.open) / row.open > 0.002 else '',
                 'pullback_depth': round(abs(row.high - row.low) / row.open, 8),
+                
+                # === 【V8.3.19.2】信号评分维度（用于信号类型识别）===
+                'volume_surge_type': components.get('volume_surge_type', ''),
+                'volume_surge_score': components.get('volume_surge_score', 0),
+                'has_breakout': components.get('has_breakout', False),
+                'breakout_score': components.get('breakout_score', 0),
+                
                 'momentum_slope': round((row.close - row.open) / row.open, 8),
                 'pullback_weakness_score': 0.4,
                 'lwp_long': round(row.support, 8) if pd.notna(row.support) else row.low,
