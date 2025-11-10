@@ -18341,15 +18341,15 @@ def generate_round2_combinations_from_ai(ai_suggestions):
             'min_risk_reward': [1.8, 2.2]
         }
     
-    # 【V8.3.18.10】验证和修正参数范围
-    # 超短线定义：max_holding_hours ≤ 3.0（V8.3.18.10从2.0放宽到3.0）
+    # 【V8.3.19】验证和修正参数范围
+    # 超短线定义：max_holding_hours ≤ 8.0（V8.3.19从3.0放宽到8.0，基于信号分析数据）
     if 'max_holding_hours' in param_ranges:
-        valid_hours = [h for h in param_ranges['max_holding_hours'] if h <= 3.0]
+        valid_hours = [h for h in param_ranges['max_holding_hours'] if h <= 8.0]
         if not valid_hours:
-            print(f"     ⚠️  AI建议的max_holding_hours全部>3h（不符合超短线定义），自动修正为[2.0, 2.5, 3.0]")
-            param_ranges['max_holding_hours'] = [2.0, 2.5, 3.0]
+            print(f"     ⚠️  AI建议的max_holding_hours全部>8h（不符合超短线定义），自动修正为[5.0, 6.0, 8.0]")
+            param_ranges['max_holding_hours'] = [5.0, 6.0, 8.0]
         elif len(valid_hours) < len(param_ranges['max_holding_hours']):
-            print(f"     ⚠️  AI建议的部分max_holding_hours>3h，过滤为{valid_hours}")
+            print(f"     ⚠️  AI建议的部分max_holding_hours>8h，过滤为{valid_hours}")
             param_ranges['max_holding_hours'] = valid_hours
     
     # 验证min_signal_score不能太高（>95基本没信号）
@@ -18380,15 +18380,44 @@ def generate_round2_combinations_from_ai(ai_suggestions):
     return test_combinations
 
 
-def call_ai_for_round_decision(round_num, round_results, current_best_params, opportunities_count, all_rounds_results=None):
+def call_ai_for_round_decision(round_num, round_results, current_best_params, opportunities_count, all_rounds_results=None, signal_performance=None):
     """
-    【V8.3.18】调用AI分析当前轮次结果并决策
+    【V8.3.19】调用AI分析当前轮次结果并决策（增强信号类型指导）
     
     Args:
-        all_rounds_results: 【V8.3.18.2】所有轮次结果 [('round1', [...]), ('round2', [...])]
+        round_num: 轮次编号
+        round_results: 当前轮次测试结果
+        current_best_params: 当前最佳参数
+        opportunities_count: 机会数量
+        all_rounds_results: 【V8.3.18.2】所有轮次结果
+        signal_performance: 【V8.3.19 NEW】信号类型分析结果
     """
     global deepseek_api_key  # 【修复】声明全局变量
     best_result = round_results[0] if round_results else None
+    
+    # 【V8.3.19】构建信号类型提示
+    signal_hint = ""
+    if signal_performance:
+        signal_hint = f"""
+📊 **【V8.3.19 DATA-DRIVEN】Historical Signal Type Analysis** ({opportunities_count} opportunities):
+"""
+        for sig_type, perf in sorted(signal_performance.items(), key=lambda x: x[1]['count'], reverse=True)[:3]:
+            signal_hint += f"""  • {sig_type}: {perf['count']} ({perf['ratio']*100:.0f}%)
+    - Avg Profit: {perf['avg_profit']:.1f}% | Avg Time: {perf['avg_time']:.1f}h
+    - **Typical TP Distance: {perf['typical_tp_atr']:.2f}× ATR** ← KEY METRIC!
+    - Successful Exit Rate: {perf['successful_exit_rate']*100:.0f}% (non-timeout)
+"""
+        
+        dominant_sig = max(signal_performance.items(), key=lambda x: x[1]['count'])[0]
+        dominant_perf = signal_performance[dominant_sig]
+        
+        signal_hint += f"""
+💡 **Data-Driven Recommendation** (based on dominant signal: {dominant_sig}):
+  - Suggested TP Range: {dominant_perf['typical_tp_atr']*0.8:.2f} - {dominant_perf['typical_tp_atr']*1.2:.2f}× ATR
+  - Suggested Time Window: ≤{dominant_perf['max_time']:.0f}h (90th percentile of actual holding times)
+  - **DON'T blindly use 0.15×! Use {dominant_perf['typical_tp_atr']:.2f}× based on {dominant_perf['count']} historical samples!**
+  - If {dominant_sig} dominates (>{dominant_perf['ratio']*100:.0f}%), prioritize these data-driven ranges!
+"""
     
     prompt = f"""You are a quantitative trading strategy optimization expert.
 
@@ -18396,18 +18425,18 @@ def call_ai_for_round_decision(round_num, round_results, current_best_params, op
 - Round: {round_num} of Grid Search
 - Opportunities: {opportunities_count} scalping opportunities
 - Tested Combinations: {len(round_results)} parameter sets
-
+{signal_hint}
 ⚠️ **SCALPING CONSTRAINTS** (MUST respect):
-1. `max_holding_hours` ≤ 3.0 (超短线定义，超过3h属于波段)
+1. `max_holding_hours` ≤ 8.0 (超短线定义，根据信号分析可放宽到8h)
 2. `min_signal_score` ≤ 95 (太高会导致captured_count=0)
-3. `atr_tp_multiplier` 0.1-3.0 (允许极度紧凑TP)
+3. `atr_tp_multiplier`: **USE signal_performance data, NOT random guessing!**
 
-💡 **CRITICAL INSIGHT for time_exit=100%**:
-- If time_exit=100%, it means TP/SL are TOO FAR, not too tight!
-- Scalping trades are SHORT (≤3h), market micro-movements are small
-- **Solution**: AGGRESSIVELY TIGHTEN TP/SL to 0.1-0.3× ATR for micro-scalping
-- Example: If current TP is 0.5-0.8×, try 0.15-0.25× for immediate exits
-- Lower R:R (1.0-1.2) is acceptable for such tight targets
+💡 **V8.3.19 CRITICAL STRATEGY CHANGE**:
+- **OLD (V8.3.18.10)**: Blindly tighten to 0.15×ATR → 100% time_exit FAILURE
+- **NEW (V8.3.19)**: Use signal_performance.typical_tp_atr from historical data!
+- Example: If pin_bar.typical_tp_atr=0.35×, test 0.25-0.45× (±30%)
+- Example: If breakout.typical_tp_atr=0.65×, test 0.5-0.8× (±25%)
+- Time window: Match avg_time + buffer (e.g., 3.5h avg → 5-6h window)
 
 【Round {round_num} Best Result】
 Parameters: {json.dumps(best_result['params'], ensure_ascii=False) if best_result else 'None'}
@@ -18459,7 +18488,7 @@ Respond in JSON format ONLY:
     "strategy": "Brief description of what to change and why",
     "param_ranges": {
       "atr_tp_multiplier": [0.15, 0.2, 0.25],  // 💡 EXTREME tightening for micro-scalping!
-      "max_holding_hours": [2.0, 2.5, 3.0],  // ⚠️ MUST ≤3.0 (scalping definition)
+      "max_holding_hours": [4.0, 6.0, 8.0],  // ⚠️ MUST ≤8.0 (V8.3.19: 基于信号分析数据)
       "min_signal_score": [60, 65, 70],  // ⚠️ MUST ≤95, relax for volume
       "atr_stop_multiplier": [0.4, 0.5, 0.6],  // 💡 Very tight SL for immediate feedback
       "min_risk_reward": [1.0, 1.2, 1.5]  // Very low R:R for micro-movements
@@ -18518,7 +18547,7 @@ Respond in JSON format ONLY:
     "strategy": "Brief explanation of what to change and why",
     "param_ranges": {{
       "min_signal_score": [55, 60, 65],  // ⚠️ MUST ≤95, relax further
-      "max_holding_hours": [2.5, 3.0],  // ⚠️ MUST ≤3.0 (scalping definition)
+      "max_holding_hours": [6.0, 8.0],  // ⚠️ MUST ≤8.0 (V8.3.19: 基于信号分析数据)
       "atr_tp_multiplier": [0.1, 0.15, 0.2],  // 💡 ULTIMATE tightening - catch micro-movements
       "atr_stop_multiplier": [0.3, 0.4, 0.5],  // 💡 Extremely tight SL
       "min_risk_reward": [0.8, 1.0, 1.2]  // Ultra-low R:R for ultra-short trades
@@ -18600,6 +18629,99 @@ def calculate_swing_optimization_score(sim_result):
     return total_score
 
 
+def analyze_signal_type_performance(opportunities):
+    """
+    【V8.3.19】分析不同信号类型的历史表现
+    
+    从快照中提取各信号类型的评分，统计：
+    - 数量、占比
+    - 平均利润、平均持仓时间
+    - 典型TP达到距离（用于指导atr_tp_multiplier）
+    - 建议的时间窗口（90分位数）
+    
+    返回:
+        dict: {
+            'pin_bar': {
+                'count': 320,
+                'ratio': 0.26,
+                'avg_profit': 2.1,
+                'avg_time': 3.5,
+                'typical_tp_atr': 0.35,
+                'max_time': 5.2,
+                'successful_exit_rate': 0.15
+            },
+            ...
+        }
+    """
+    from collections import defaultdict
+    import numpy as np
+    
+    signal_stats = defaultdict(lambda: {
+        'count': 0,
+        'profits': [],
+        'times': [],
+        'tp_distances': [],
+        'successful_exits': 0
+    })
+    
+    for opp in opportunities:
+        snapshot = opp.get('snapshot', {})
+        
+        # 提取各信号类型评分
+        pin_bar_score = snapshot.get('pin_bar_score', 0)
+        engulfing_score = snapshot.get('engulfing_score', 0)
+        breakout_score = snapshot.get('breakout_score', 0)
+        volume_surge_score = snapshot.get('volume_surge_score', 0)
+        
+        # 识别主要信号类型（使用评分阈值）
+        signal_types = []
+        if pin_bar_score > 15:
+            signal_types.append('pin_bar')
+        if engulfing_score > 15:
+            signal_types.append('engulfing')
+        if breakout_score > 15:
+            signal_types.append('breakout')
+        if volume_surge_score > 20:
+            signal_types.append('volume_surge')
+        if not signal_types:
+            signal_types.append('other')
+        
+        # 统计数据
+        profit = opp.get('actual_profit', 0)
+        time_hours = opp.get('holding_hours', 0)
+        atr = snapshot.get('atr', 1)
+        exit_reason = opp.get('exit_reason', 'time_exit')
+        
+        for sig_type in signal_types:
+            signal_stats[sig_type]['count'] += 1
+            if profit > 0:
+                signal_stats[sig_type]['profits'].append(profit)
+                signal_stats[sig_type]['times'].append(time_hours)
+                if atr > 0:
+                    # 计算TP距离：实际利润 / ATR
+                    signal_stats[sig_type]['tp_distances'].append(profit / atr)
+            if exit_reason != 'time_exit':
+                signal_stats[sig_type]['successful_exits'] += 1
+    
+    # 计算汇总统计
+    result = {}
+    total_count = len(opportunities)
+    
+    for sig_type, stats in signal_stats.items():
+        if stats['count'] > 0:
+            result[sig_type] = {
+                'count': stats['count'],
+                'ratio': stats['count'] / total_count,
+                'avg_profit': np.mean(stats['profits']) if stats['profits'] else 0,
+                'avg_time': np.mean(stats['times']) if stats['times'] else 0,
+                'typical_tp_atr': np.median(stats['tp_distances']) if stats['tp_distances'] else 0.5,
+                'max_time': np.percentile(stats['times'], 90) if len(stats['times']) > 0 else 3,
+                'successful_exit_rate': stats['successful_exits'] / stats['count']
+            }
+    
+    return result
+
+
 def optimize_scalping_params(scalping_data, current_params, initial_params=None):
     """
     【V8.3.12.1 + V8.3.16】超短线参数优化 - Grid Search + Exit Analysis + 条件AI优化
@@ -18626,10 +18748,34 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
             'improvement': None
         }
     
+    # ========== 【V8.3.19 NEW】信号类型分析 ==========
+    print(f"\n  📊 【V8.3.19】分析信号类型表现（共{len(opportunities)}个机会）...")
+    signal_performance = analyze_signal_type_performance(opportunities)
+    
+    # 打印关键发现
+    print(f"  📈 信号类型分布:")
+    for sig_type, perf in sorted(signal_performance.items(), key=lambda x: x[1]['count'], reverse=True)[:5]:
+        print(f"     • {sig_type}: {perf['count']}个({perf['ratio']*100:.0f}%) | "
+              f"平均{perf['avg_profit']:.1f}%利润 | "
+              f"{perf['avg_time']:.1f}h | "
+              f"典型TP={perf['typical_tp_atr']:.2f}×ATR | "
+              f"成功出场率{perf['successful_exit_rate']*100:.0f}%")
+    
+    # 确定主导信号类型
+    if signal_performance:
+        dominant_signal = max(signal_performance.items(), key=lambda x: x[1]['count'])[0]
+        dominant_perf = signal_performance[dominant_signal]
+        
+        print(f"\n  💡 主导信号: {dominant_signal} ({dominant_perf['ratio']*100:.0f}%)")
+        print(f"     建议TP范围: {dominant_perf['typical_tp_atr']*0.8:.2f}-{dominant_perf['typical_tp_atr']*1.2:.2f}×ATR")
+        print(f"     建议时间窗口: ≤{dominant_perf['max_time']:.0f}h (90分位数)")
+        print(f"     数据驱动策略: 基于{dominant_perf['count']}个历史样本")
+    
     # 【V8.3.16】使用initial_params作为Grid Search的起点
     if initial_params:
-        print(f"     ℹ️  应用V7.7.0初始参数到Grid Search")
+        print(f"\n     ℹ️  应用V7.7.0初始参数到Grid Search")
         # 将initial_params合并到current_params
+    
     # ========== 存储所有轮次的结果 ==========
     all_rounds_results = []
     final_ai_decision = None
@@ -18683,7 +18829,8 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
         round_results=round1_results,
         current_best_params=best_round1['params'],
         opportunities_count=len(opportunities),
-        all_rounds_results=all_rounds_results
+        all_rounds_results=all_rounds_results,
+        signal_performance=signal_performance  # 【V8.3.19】传递信号分析
     )
     
     print(f"     AI决策: needs_round2={ai_decision_round1.get('needs_round2', False)}")
@@ -18746,7 +18893,8 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
             round_results=combined_top_results,
             current_best_params=best_round2['full_params'],
             opportunities_count=len(opportunities),
-            all_rounds_results=all_rounds_results
+            all_rounds_results=all_rounds_results,
+            signal_performance=signal_performance  # 【V8.3.19】传递信号分析
         )
     else:
         # ========== 不需要第2轮，使用第1轮的AI决策 ==========
