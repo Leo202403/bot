@@ -15,11 +15,17 @@
 
 import os
 import gc
-import psutil
 import random
 import numpy as np
 from typing import Dict, List, Tuple, Any
 from datetime import datetime
+
+# 尝试导入psutil（可选）
+try:
+    import psutil
+    HAS_PSUTIL = True
+except ImportError:
+    HAS_PSUTIL = False
 
 
 # ============================================================
@@ -63,7 +69,10 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
     print(f"【V8.3.21回测优化】轻量级参数搜索（{signal_type}）")
     print(f"  机会数: {len(opportunities)}")
     print(f"  测试组数: {max_combinations}")
-    print(f"  内存限制: 检测到{psutil.virtual_memory().total / (1024**3):.1f}G，将主动控制")
+    if HAS_PSUTIL:
+        print(f"  内存限制: 检测到{psutil.virtual_memory().total / (1024**3):.1f}G，将主动控制")
+    else:
+        print(f"  资源监控: 不可用（psutil未安装）")
     print(f"{'='*60}\n")
     
     # ===== 阶段1：定义搜索空间 =====
@@ -84,7 +93,7 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
     
     for i, params in enumerate(sampled_params):
         # 内存检查（每10组检查一次）
-        if i % 10 == 0:
+        if i % 10 == 0 and HAS_PSUTIL:
             mem_usage = psutil.Process().memory_info().rss / (1024**2)
             if mem_usage > 300:  # 超过300MB则GC
                 gc.collect()
