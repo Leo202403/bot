@@ -19257,6 +19257,30 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
                 v8321_result['optimized_params']
             )
             
+            # 【V8.3.21 AI迭代】提取AI决策（如果有）
+            ai_decision = v8321_result.get('ai_decision', None)
+            ai_insights_zh = []
+            ai_recommendation_zh = f"V8.3.21建议使用Top 1配置（分数{v8321_result['top_10_configs'][0]['score']:.3f}）"
+            
+            if ai_decision:
+                # AI参与了迭代决策
+                print(f"  🤖 AI迭代决策:")
+                print(f"     选择: Rank {ai_decision.get('selected_rank', 1)}")
+                print(f"     调整: {'是' if ai_decision.get('needs_adjustment') else '否'}")
+                
+                # 使用AI转换的中文洞察
+                ai_insights_zh = ai_decision.get('key_insights_zh', [])
+                
+                # AI推荐（英文转中文）
+                if ai_decision.get('reasoning_en'):
+                    ai_recommendation_zh = f"AI建议: {ai_decision['reasoning_en']}"
+                    # 简单翻译关键词
+                    ai_recommendation_zh = ai_recommendation_zh.replace("Rank 1 is optimal", "Top 1配置最优")
+                    ai_recommendation_zh = ai_recommendation_zh.replace("best balance", "最佳平衡")
+            else:
+                # 使用本地分析的洞察（中文）
+                ai_insights_zh = v8321_result['context_analysis'].get('key_insights', [])
+            
             # 【V8.3.21修复】构建完全兼容的返回结构
             return {
                 'optimized_params': v8321_result['optimized_params'],
@@ -19270,23 +19294,25 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
                 'new_avg_profit': optimized_result['avg_profit'],
                 'exit_analysis': None,  # V8.3.21不需要
                 
-                # AI建议（格式化为旧版兼容格式）
+                # AI建议（中文，给用户看）
                 'ai_suggestions': {
-                    'method': 'v8321_local_analysis',
-                    'key_insights': v8321_result['context_analysis'].get('key_insights', []),
+                    'method': 'v8321_ai_iterative' if ai_decision else 'v8321_local_analysis',
+                    'key_insights': ai_insights_zh,  # 中文洞察
                     'param_sensitivity': v8321_result['statistics'].get('param_sensitivity', {}),
                     'anomalies': v8321_result.get('anomalies', []),
-                    'recommendation': f"V8.3.21建议使用Top 1配置（分数{v8321_result['top_10_configs'][0]['score']:.3f}）"
+                    'recommendation': ai_recommendation_zh,  # 中文推荐
+                    'ai_decision_en': ai_decision  # 保留英文原始决策（供调试）
                 },
                 
                 # improvement字段（兼容格式）
                 'improvement': {
-                    'method': 'v8321',
-                    'rounds': 1,  # V8.3.21是单轮优化
+                    'method': 'v8321_with_ai' if ai_decision else 'v8321',
+                    'rounds': 1 + (1 if ai_decision else 0),  # AI迭代算作第2轮
                     'v8321_score': v8321_result['top_10_configs'][0]['score'],
                     'v8321_capture_rate': v8321_result['top_10_configs'][0]['metrics']['capture_rate'],
-                    'v8321_insights': v8321_result['context_analysis'].get('key_insights', [])[:3],
-                    'cost_saved': v8321_result['cost_saved']
+                    'v8321_insights': ai_insights_zh[:3],  # 中文洞察
+                    'cost_saved': v8321_result['cost_saved'],
+                    'ai_enhanced': ai_decision is not None
                 },
                 
                 # 保留V8.3.21完整结果（供调试）
@@ -19681,6 +19707,30 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, use_v
                 v8321_result['optimized_params']
             )
             
+            # 【V8.3.21 AI迭代】提取AI决策（如果有）
+            ai_decision = v8321_result.get('ai_decision', None)
+            ai_insights_zh = []
+            ai_recommendation_zh = f"V8.3.21建议使用Top 1配置（分数{v8321_result['top_10_configs'][0]['score']:.3f}）"
+            
+            if ai_decision:
+                # AI参与了迭代决策
+                print(f"  🤖 AI迭代决策:")
+                print(f"     选择: Rank {ai_decision.get('selected_rank', 1)}")
+                print(f"     调整: {'是' if ai_decision.get('needs_adjustment') else '否'}")
+                
+                # 使用AI转换的中文洞察
+                ai_insights_zh = ai_decision.get('key_insights_zh', [])
+                
+                # AI推荐（英文转中文）
+                if ai_decision.get('reasoning_en'):
+                    ai_recommendation_zh = f"AI建议: {ai_decision['reasoning_en']}"
+                    # 简单翻译关键词
+                    ai_recommendation_zh = ai_recommendation_zh.replace("Rank 1 is optimal", "Top 1配置最优")
+                    ai_recommendation_zh = ai_recommendation_zh.replace("best balance", "最佳平衡")
+            else:
+                # 使用本地分析的洞察（中文）
+                ai_insights_zh = v8321_result['context_analysis'].get('key_insights', [])
+            
             # 【V8.3.21修复】构建完全兼容的返回结构
             return {
                 'optimized_params': v8321_result['optimized_params'],
@@ -19694,23 +19744,25 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, use_v
                 'new_capture_rate': optimized_result['capture_rate'],
                 'exit_analysis': None,  # V8.3.21不需要
                 
-                # AI建议（格式化为旧版兼容格式）
+                # AI建议（中文，给用户看）
                 'ai_suggestions': {
-                    'method': 'v8321_local_analysis',
-                    'key_insights': v8321_result['context_analysis'].get('key_insights', []),
+                    'method': 'v8321_ai_iterative' if ai_decision else 'v8321_local_analysis',
+                    'key_insights': ai_insights_zh,  # 中文洞察
                     'param_sensitivity': v8321_result['statistics'].get('param_sensitivity', {}),
                     'anomalies': v8321_result.get('anomalies', []),
-                    'recommendation': f"V8.3.21建议使用Top 1配置（分数{v8321_result['top_10_configs'][0]['score']:.3f}）"
+                    'recommendation': ai_recommendation_zh,  # 中文推荐
+                    'ai_decision_en': ai_decision  # 保留英文原始决策（供调试）
                 },
                 
                 # improvement字段（兼容格式）
                 'improvement': {
-                    'method': 'v8321',
-                    'rounds': 1,  # V8.3.21是单轮优化
+                    'method': 'v8321_with_ai' if ai_decision else 'v8321',
+                    'rounds': 1 + (1 if ai_decision else 0),  # AI迭代算作第2轮
                     'v8321_score': v8321_result['top_10_configs'][0]['score'],
                     'v8321_capture_rate': v8321_result['top_10_configs'][0]['metrics']['capture_rate'],
-                    'v8321_insights': v8321_result['context_analysis'].get('key_insights', [])[:3],
-                    'cost_saved': v8321_result['cost_saved']
+                    'v8321_insights': ai_insights_zh[:3],  # 中文洞察
+                    'cost_saved': v8321_result['cost_saved'],
+                    'ai_enhanced': ai_decision is not None
                 },
                 
                 # 保留V8.3.21完整结果（供调试）

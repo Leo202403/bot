@@ -158,8 +158,62 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
     print(f"      压缩后: ~{estimated_tokens} tokens")
     print(f"      💰 预计节省: ${cost_saved:.4f}")
     
+    # ===== 阶段5：AI迭代决策（可选）=====
+    ai_decision = None
+    ai_adjusted_params = None
+    
+    if max_combinations >= 100:  # 只有大规模搜索才值得AI介入
+        print(f"\n🤖 阶段5: AI迭代决策...")
+        try:
+            ai_decision = call_ai_for_iterative_optimization(
+                top_10_configs=top_10,
+                param_sensitivity=param_sensitivity,
+                context_analysis=context_analysis,
+                anomalies=anomalies,
+                compressed_data=compressed_data,
+                signal_type=signal_type
+            )
+            
+            if ai_decision and ai_decision.get('needs_adjustment'):
+                print(f"   🔧 AI建议调整参数...")
+                ai_adjusted_params = apply_ai_adjustments(
+                    base_params=top_10[0]['params'],
+                    adjustments=ai_decision['param_adjustments']
+                )
+                
+                # 验证AI调整后的参数
+                ai_result = simulate_params_with_v8321_filter(opportunities, ai_adjusted_params)
+                ai_score = calculate_v8321_optimization_score(ai_result)
+                
+                print(f"   📊 AI调整效果:")
+                print(f"      Grid最优: {top_10[0]['score']:.3f}")
+                print(f"      AI调整后: {ai_score:.3f} ({ai_score-top_10[0]['score']:+.3f})")
+                
+                # 如果AI调整后更好，使用AI参数
+                if ai_score > top_10[0]['score']:
+                    print(f"   ✅ AI调整有效，采纳AI建议")
+                    final_params = ai_adjusted_params
+                    final_score = ai_score
+                    cost_saved += 0.01  # AI调用成本约$0.01
+                else:
+                    print(f"   ⚠️  AI调整效果不佳，保持Grid结果")
+                    final_params = top_10[0]['params']
+                    final_score = top_10[0]['score']
+            else:
+                print(f"   ✅ AI认为当前参数已是最优")
+                final_params = top_10[0]['params']
+                final_score = top_10[0]['score']
+                
+        except Exception as e:
+            print(f"   ⚠️  AI决策失败: {e}")
+            final_params = top_10[0]['params']
+            final_score = top_10[0]['score']
+    else:
+        final_params = top_10[0]['params']
+        final_score = top_10[0]['score']
+    
     return {
-        'optimized_params': top_10[0]['params'],
+        'optimized_params': final_params,
         'top_10_configs': top_10,
         'statistics': {
             'param_sensitivity': param_sensitivity,
@@ -168,7 +222,9 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
         'context_analysis': context_analysis,
         'anomalies': anomalies,
         'compressed_data': compressed_data,
-        'cost_saved': cost_saved
+        'cost_saved': cost_saved,
+        'ai_decision': ai_decision,  # AI决策（英文）
+        'ai_adjusted_params': ai_adjusted_params  # AI调整后的参数
     }
 
 
@@ -760,7 +816,278 @@ def estimate_token_count(data: Dict) -> int:
 # 主函数示例
 # ============================================================
 
+# ============================================================
+# 【AI迭代决策层】英文通信，用于多轮优化
+# ============================================================
+
+def call_ai_for_iterative_optimization(top_10_configs: List[Dict],
+                                        param_sensitivity: Dict,
+                                        context_analysis: Dict,
+                                        anomalies: List[Dict],
+                                        compressed_data: Dict,
+                                        signal_type: str) -> Dict:
+    """
+    【V8.3.21 AI迭代】Call AI for iterative parameter optimization
+    
+    Communication: English (efficient for AI)
+    Output: English (internal use only, translated to Chinese for users)
+    
+    Args:
+        top_10_configs: Top 10 parameter configurations from Grid Search
+        param_sensitivity: Parameter sensitivity analysis
+        context_analysis: Market context analysis
+        anomalies: Detected anomalies
+        compressed_data: Compressed optimization data
+        signal_type: 'scalping' or 'swing'
+    
+    Returns:
+        AI decision dict (English)
+    """
+    
+    # 构建英文Prompt
+    prompt = build_ai_optimization_prompt_en(
+        top_10_configs=top_10_configs,
+        param_sensitivity=param_sensitivity,
+        context_analysis=context_analysis,
+        anomalies=anomalies,
+        signal_type=signal_type
+    )
+    
+    # 调用AI（英文通信）
+    ai_response = call_deepseek_for_optimization(prompt)
+    
+    # 解析AI响应（英文）
+    ai_decision = parse_ai_optimization_response(ai_response)
+    
+    # 转换关键洞察为中文（给用户看）
+    if ai_decision:
+        ai_decision['key_insights_zh'] = translate_insights_to_chinese(
+            ai_decision.get('key_insights_en', [])
+        )
+    
+    return ai_decision
+
+
+def build_ai_optimization_prompt_en(top_10_configs: List[Dict],
+                                      param_sensitivity: Dict,
+                                      context_analysis: Dict,
+                                      anomalies: List[Dict],
+                                      signal_type: str) -> str:
+    """
+    Build English prompt for AI optimization
+    
+    English communication is more efficient for AI reasoning
+    """
+    
+    # Format Top 3 configs
+    top_3_str = ""
+    for i, config in enumerate(top_10_configs[:3], 1):
+        top_3_str += f"\nRank {i}:\n"
+        top_3_str += f"  Score: {config['score']:.3f}\n"
+        top_3_str += f"  Capture Rate: {config['metrics']['capture_rate']*100:.0f}%\n"
+        top_3_str += f"  Avg Profit: {config['metrics']['avg_profit']:.1f}%\n"
+        top_3_str += f"  Win Rate: {config['metrics']['win_rate']*100:.0f}%\n"
+        # Show key params
+        params = config['params']
+        top_3_str += f"  Key Params: signal≥{params.get('min_signal_score', 60)}, "
+        top_3_str += f"consensus≥{params.get('min_consensus', 3)}, "
+        top_3_str += f"RR≥{params.get('min_risk_reward', 2.0):.1f}\n"
+    
+    # Format parameter sensitivity (Top 3)
+    sensitivity_str = ""
+    sorted_params = sorted(
+        param_sensitivity.items(),
+        key=lambda x: abs(x[1]['avg_impact']),
+        reverse=True
+    )[:3]
+    for param_name, sensitivity in sorted_params:
+        sensitivity_str += f"\n  • {param_name}: {sensitivity['importance']} importance"
+        sensitivity_str += f" (impact={sensitivity['avg_impact']:+.3f})"
+    
+    # Format context insights
+    insights_str = "\n".join([f"  • {insight}" for insight in context_analysis.get('key_insights', [])[:3]])
+    
+    # Format anomalies
+    anomalies_str = ""
+    for anomaly in anomalies[:2]:
+        anomalies_str += f"\n  • {anomaly.get('type', 'unknown')}: {anomaly.get('description', 'N/A')}"
+    
+    # Construct prompt (English)
+    prompt = f"""You are an expert in trading parameter optimization. Analyze the Grid Search results and provide iterative improvement suggestions.
+
+Signal Type: {signal_type.upper()}
+
+=== Grid Search Results (200 combinations tested) ===
+
+Top 3 Configurations:
+{top_3_str}
+
+=== Parameter Sensitivity Analysis ===
+{sensitivity_str}
+
+=== Market Context Insights ===
+{insights_str}
+
+=== Detected Anomalies ===
+{anomalies_str if anomalies_str else "  None"}
+
+=== Your Task ===
+
+Based on the above analysis:
+
+1. Should we accept Rank 1, or try a different configuration?
+2. Can we make micro-adjustments to improve the score further?
+3. What are the key risks in the current market context?
+4. Any recommendations for next iteration?
+
+Please respond in JSON format:
+
+{{
+    "needs_adjustment": true/false,
+    "selected_rank": 1,  // 1-3
+    "param_adjustments": {{
+        // Only specify params that need adjustment
+        // Example: "min_signal_score": 65
+    }},
+    "reasoning_en": "Brief explanation why this choice is optimal",
+    "key_insights_en": [
+        "Insight 1",
+        "Insight 2"
+    ],
+    "risk_warning_en": "Market risk assessment"
+}}
+
+Respond with ONLY the JSON, no additional text."""
+
+    return prompt
+
+
+def call_deepseek_for_optimization(prompt: str) -> str:
+    """
+    Call DeepSeek API for optimization decision
+    
+    Uses existing call_deepseek function from main file
+    """
+    try:
+        # 尝试导入主文件的call_deepseek函数
+        import sys
+        import os
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        
+        # 动态导入（避免循环依赖）
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("main", "qwen_多币种智能版.py")
+        if spec and spec.loader:
+            main_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(main_module)
+            
+            if hasattr(main_module, 'call_deepseek'):
+                response = main_module.call_deepseek(
+                    prompt=prompt,
+                    max_tokens=500,
+                    temperature=0.3
+                )
+                return response
+        
+        # 如果导入失败，返回None（跳过AI决策）
+        return None
+        
+    except Exception as e:
+        print(f"⚠️  AI API调用失败: {e}")
+        return None
+
+
+def parse_ai_optimization_response(ai_response: str) -> Dict:
+    """
+    Parse AI response (JSON format)
+    
+    Returns English decision dict
+    """
+    if not ai_response:
+        return None
+    
+    try:
+        import json
+        import re
+        
+        # 提取JSON（AI可能会返回额外的文字）
+        json_match = re.search(r'\{.*\}', ai_response, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(0)
+            decision = json.loads(json_str)
+            return decision
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"⚠️  AI响应解析失败: {e}")
+        return None
+
+
+def apply_ai_adjustments(base_params: Dict, adjustments: Dict) -> Dict:
+    """
+    Apply AI-suggested parameter adjustments
+    
+    Args:
+        base_params: Base parameter configuration
+        adjustments: AI-suggested adjustments (can be partial)
+    
+    Returns:
+        Adjusted parameters
+    """
+    adjusted = base_params.copy()
+    
+    # 应用AI建议的调整
+    for param_name, new_value in adjustments.items():
+        if param_name in adjusted:
+            adjusted[param_name] = new_value
+    
+    return adjusted
+
+
+def translate_insights_to_chinese(insights_en: List[str]) -> List[str]:
+    """
+    Translate English insights to Chinese for user display
+    
+    Simple keyword-based translation for common patterns
+    """
+    insights_zh = []
+    
+    for insight in insights_en:
+        # 简单的关键词翻译（可以扩展）
+        insight_zh = insight
+        
+        # 常见模式翻译
+        replacements = {
+            "bullish ratio": "阳线比例",
+            "best performance": "效果最好",
+            "average profit": "平均利润",
+            "HH-HL structure": "HH-HL结构",
+            "LL-LH structure": "LL-LH结构",
+            "support/resistance": "支撑/阻力",
+            "test": "测试",
+            "times": "次",
+            "when": "时",
+            "Rank 1 is optimal": "Top 1配置最优",
+            "No adjustment needed": "无需调整",
+            "Micro-adjust": "微调",
+            "Market volatility": "市场波动",
+            "Risk": "风险"
+        }
+        
+        for en, zh in replacements.items():
+            insight_zh = insight_zh.replace(en, zh)
+        
+        insights_zh.append(f"💡 {insight_zh}")
+    
+    return insights_zh
+
+
+# ============================================================
+# 主函数
+# ============================================================
+
 if __name__ == "__main__":
-    print("V8.3.21回测优化模块")
+    print("V8.3.21回测优化模块（含AI迭代）")
     print("使用方法：从主程序导入 optimize_params_v8321_lightweight")
 
