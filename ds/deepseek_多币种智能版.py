@@ -18270,27 +18270,39 @@ def calculate_scalping_optimization_score(sim_result):
 
 def generate_round1_combinations():
     """
-    【V8.3.18】生成第1轮Grid Search的测试组合
+    【V8.3.18.9】生成第1轮Grid Search的测试组合 - 包含紧凑TP/SL用于超短线
     
-    使用V8.3.17的分层采样策略：34组参数
+    使用V8.3.17的分层采样策略 + 紧凑TP/SL测试：34组参数
     """
     test_combinations = []
     
-    # 【策略1】高质量低数量（信号分85，严格TP/SL）- 4组
-    for tp in [0.8, 1.2]:
-        for time_h in [1.0, 1.5]:
+    # 【策略1】紧凑TP/SL测试（针对time_exit=100%问题）- 6组
+    for tp in [0.3, 0.4, 0.5]:
+        for time_h in [1.0, 2.0]:
             test_combinations.append({
                 'max_holding_hours': time_h,
                 'atr_tp_multiplier': tp,
-                'atr_stop_multiplier': 1.0,
-                'min_risk_reward': 2.5,
-                'min_signal_score': 85
+                'atr_stop_multiplier': 0.6,
+                'min_risk_reward': 1.2,
+                'min_signal_score': 70
             })
     
-    # 【策略2】中等质量中等数量（信号分75，平衡TP/SL）- 18组
-    for tp in [0.5, 0.8, 1.2]:
+    # 【策略2】中等紧凑（平衡）- 12组
+    for tp in [0.5, 0.6, 0.7]:
+        for sl in [0.7, 0.8]:
+            for time_h in [1.0, 1.5]:
+                test_combinations.append({
+                    'max_holding_hours': time_h,
+                    'atr_tp_multiplier': tp,
+                    'atr_stop_multiplier': sl,
+                    'min_risk_reward': 1.5,
+                    'min_signal_score': 75
+                })
+    
+    # 【策略3】传统范围（原V8.3.17）- 8组
+    for tp in [0.8, 1.0]:
         for sl in [0.8, 1.0]:
-            for time_h in [0.5, 1.0, 1.5]:
+            for time_h in [1.0, 1.5]:
                 test_combinations.append({
                     'max_holding_hours': time_h,
                     'atr_tp_multiplier': tp,
@@ -18299,25 +18311,14 @@ def generate_round1_combinations():
                     'min_signal_score': 75
                 })
     
-    # 【策略3】低质量高数量（信号分65，宽松TP/SL）- 4组
-    for tp in [0.5, 0.8]:
-        for time_h in [0.5, 1.0]:
-            test_combinations.append({
-                'max_holding_hours': time_h,
-                'atr_tp_multiplier': tp,
-                'atr_stop_multiplier': 0.8,
-                'min_risk_reward': 1.5,
-                'min_signal_score': 65
-            })
-    
     # 补充边界情况 - 8组
-    for rr in [1.5, 2.0]:
-        for score in [70, 80]:
-            for tp in [0.6, 1.0]:
+    for rr in [1.2, 1.8]:
+        for score in [65, 80]:
+            for tp in [0.4, 0.6]:
                 test_combinations.append({
-                    'max_holding_hours': 1.0,
+                    'max_holding_hours': 1.5,
                     'atr_tp_multiplier': tp,
-                    'atr_stop_multiplier': 0.9,
+                    'atr_stop_multiplier': 0.7,
                     'min_risk_reward': rr,
                     'min_signal_score': score
                 })
@@ -18401,6 +18402,12 @@ def call_ai_for_round_decision(round_num, round_results, current_best_params, op
 2. `min_signal_score` ≤ 95 (太高会导致captured_count=0)
 3. `atr_tp_multiplier` 0.3-3.0 (合理TP范围)
 
+💡 **CRITICAL INSIGHT for time_exit=100%**:
+- If time_exit=100%, it means TP/SL are TOO FAR, not too tight!
+- Scalping trades are SHORT (<2h), market doesn't move enough to hit distant targets
+- **Solution**: TIGHTEN (reduce) TP/SL distances to 0.3-0.6× ATR, NOT expand them
+- Example: If current TP is 0.8-1.2×, try 0.3-0.5× for faster exits
+
 【Round {round_num} Best Result】
 Parameters: {json.dumps(best_result['params'], ensure_ascii=False) if best_result else 'None'}
 """
@@ -18450,11 +18457,11 @@ Respond in JSON format ONLY:
   "round2_suggestions": {  // ⚠️ REQUIRED if needs_round2=true
     "strategy": "Brief description of what to change and why",
     "param_ranges": {
-      "atr_tp_multiplier": [0.5, 0.8, 1.2],  // 0.3-3.0 range
+      "atr_tp_multiplier": [0.3, 0.4, 0.5],  // 💡 If time_exit=100%, TIGHTEN (reduce) TP distance!
       "max_holding_hours": [1.0, 1.5, 2.0],  // ⚠️ MUST ≤2.0 (scalping definition)
       "min_signal_score": [60, 70, 80],  // ⚠️ MUST ≤95
-      "atr_stop_multiplier": [0.8, 1.0, 1.2],
-      "min_risk_reward": [1.5, 2.0, 2.5]
+      "atr_stop_multiplier": [0.6, 0.8, 1.0],  // 💡 TIGHTEN SL too for faster exits
+      "min_risk_reward": [1.2, 1.5, 2.0]  // Lower R:R acceptable for faster exits
     },
     "rationale": "Why these specific ranges: time_exit={te_rate:.0f}% because [reason], new ranges fix this by [solution]"
   } or null,  // null only if needs_round2=false
@@ -18511,9 +18518,9 @@ Respond in JSON format ONLY:
     "param_ranges": {{
       "min_signal_score": [50, 60, 70],  // ⚠️ MUST ≤95
       "max_holding_hours": [1.5, 2.0],  // ⚠️ MUST ≤2.0 (scalping definition)
-      "atr_tp_multiplier": [1.5, 2.0, 2.5],  // 0.3-3.0 range
-      "atr_stop_multiplier": [0.8, 1.0, 1.2],
-      "min_risk_reward": [1.2, 1.5, 1.8]
+      "atr_tp_multiplier": [0.25, 0.3, 0.35],  // 💡 Even TIGHTER if Round 2 still 100%
+      "atr_stop_multiplier": [0.5, 0.6, 0.7],  // 💡 Very tight SL for quick exits
+      "min_risk_reward": [1.0, 1.2, 1.5]  // Lower R:R OK for micro-scalping
     }},
     "rationale": "Why these ranges should work: time_exit was 100% because [specific reason], new ranges address this by [specific solution]"
   }} or null  // Only null if accept_result=true
