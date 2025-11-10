@@ -714,26 +714,43 @@ def detect_anomalies_local(all_results: List[Dict], param_sensitivity: Dict) -> 
 
 def calculate_v8321_optimization_score(result: Dict) -> float:
     """
-    【V8.3.21】多维度评分函数
+    【V8.3.21利润最大化】评分函数
     
-    权重：
-    - 平均利润: 40%
-    - 捕获率: 35%
-    - 胜率: 25%
+    核心目标：总利润最大化
+    总利润 = 捕获率 × 胜率 × 平均利润
+    
+    权重（对齐利润最大化目标）：
+    - 总利润率（capture × win × profit）: 70%
+    - 捕获率（确保不过度保守）: 20%
+    - 胜率（风控）: 10%
+    
+    示例：
+    - 配置A: 5%利润 × 20%捕获 × 90%胜率 = 9.0%总利润
+    - 配置B: 3%利润 × 50%捕获 × 80%胜率 = 12.0%总利润 ✅更优
     """
     if result['captured_count'] == 0:
         return 0.0
     
-    # 归一化指标
-    profit_score = min(1.0, max(0, result['avg_profit'] / 10))  # 10%为满分
-    capture_score = result['capture_rate']  # 已经是0-1
-    win_score = result['win_rate']  # 已经是0-1
+    # 1. 总利润率（核心指标）
+    # = 捕获率 × 胜率 × 平均利润
+    # 归一化：avg_profit通常0-10%，除以10归一化到0-1
+    total_profit_rate = (
+        result['capture_rate'] * 
+        result['win_rate'] * 
+        (result['avg_profit'] / 10)  # 归一化
+    )
     
-    # 加权
+    # 2. 捕获率（确保不过度保守）
+    capture_score = result['capture_rate']
+    
+    # 3. 胜率（风控）
+    win_score = result['win_rate']
+    
+    # 加权（总利润为核心）
     total_score = (
-        profit_score * 0.40 +
-        capture_score * 0.35 +
-        win_score * 0.25
+        total_profit_rate * 0.70 +   # 总利润率 70%
+        capture_score * 0.20 +        # 捕获率 20%
+        win_score * 0.10              # 胜率 10%
     )
     
     return total_score
