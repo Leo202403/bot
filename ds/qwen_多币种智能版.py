@@ -13099,6 +13099,35 @@ def calculate_signal_score_components(market_data, signal_type='scalping'):
             else:
                 components['trend_alignment_score'] = 0
             
+            # 【V8.3.20修复】swing也需要考虑成交量、突破、动量（通用维度）
+            # 2.1. 放量程度（对swing也很重要！）
+            volume_surge = pa.get("volume_surge")
+            if volume_surge and isinstance(volume_surge, dict) and volume_surge.get("type") == "extreme_surge":
+                components['volume_surge_type'] = 'extreme_surge'
+                components['volume_surge_score'] = 35
+            elif volume_surge:
+                components['volume_surge_type'] = 'normal'
+                components['volume_surge_score'] = 20
+            else:
+                components['volume_surge_type'] = 'none'
+                components['volume_surge_score'] = 0
+            
+            # 2.2. 突破检测
+            components['has_breakout'] = bool(pa.get("breakout"))
+            components['breakout_score'] = 25 if components['has_breakout'] else 0
+            
+            # 2.3. 动量强度
+            momentum = abs(pa.get("momentum_slope", 0))
+            components['momentum_value'] = round(momentum, 4)
+            if momentum > 0.015:
+                components['momentum_score'] = 20
+            elif momentum > 0.01:
+                components['momentum_score'] = 15
+            elif momentum > 0.005:
+                components['momentum_score'] = 10
+            else:
+                components['momentum_score'] = 0
+            
             # 3. 4小时趋势强度
             trend_4h = lt.get("trend", "")
             if "强势多头" in trend_4h or "强势空头" in trend_4h:
