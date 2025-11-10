@@ -17400,6 +17400,17 @@ def analyze_opportunities_with_new_params(market_snapshots, actual_trades, new_c
     if market_snapshots is None or market_snapshots.empty:
         return {'all_opportunities': [], 'old_captured': [], 'new_captured': [], 'missed': [], 'stats': {}}
     
+    # 【V8.3.21修复】清理NaN值，避免类型转换错误
+    market_snapshots = market_snapshots.copy()
+    
+    # 数值列填充NaN为0
+    numeric_cols = market_snapshots.select_dtypes(include=[np.number]).columns
+    market_snapshots[numeric_cols] = market_snapshots[numeric_cols].fillna(0)
+    
+    # 字符串列填充NaN为空字符串
+    str_cols = market_snapshots.select_dtypes(include=['object']).columns
+    market_snapshots[str_cols] = market_snapshots[str_cols].fillna('')
+    
     all_opportunities = []
     
     # 【V8.0→V8.1】辅助函数：根据信号类型获取参数（含时间/频率）
