@@ -18181,6 +18181,14 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     consensus = int(float(current.get('indicator_consensus', 0)))
                     risk_reward = float(current.get('risk_reward', 0))
                     atr = float(current.get('atr', 0))
+                    signal_score = float(current.get('signal_score', 50))  # 【V8.3.21】添加signal_score
+                    
+                    # 【V8.3.21】获取上下文字段（用于4层过滤）
+                    kline_ctx_bullish_ratio = float(current.get('kline_ctx_bullish_ratio', 0.5))
+                    kline_ctx_price_chg_pct = float(current.get('kline_ctx_price_chg_pct', 0))
+                    mkt_struct_swing = str(current.get('mkt_struct_swing', ''))
+                    sr_hist_test_count = int(float(current.get('sr_hist_test_count', 0)))
+                    sr_hist_avg_reaction = float(current.get('sr_hist_avg_reaction', 0))
                     
                     # 获取信号分类信息
                     signal_type = str(current.get('signal_type', 'swing')).lower()
@@ -18227,10 +18235,17 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         'consensus': consensus,
                         'risk_reward': risk_reward,
                         'atr': atr,
+                        'signal_score': signal_score,  # 【V8.3.21】添加signal_score字段
                         'signal_type': signal_type,
                         'signal_name': signal_name,
                         'objective_profit': objective_profit,
-                        'future_data': future_summary  # 【V8.3.21】使用摘要代替完整DataFrame
+                        'future_data': future_summary,  # 【V8.3.21】使用摘要代替完整DataFrame
+                        # 【V8.3.21】添加上下文字段（用于4层过滤）
+                        'kline_ctx_bullish_ratio': kline_ctx_bullish_ratio,
+                        'kline_ctx_price_chg_pct': kline_ctx_price_chg_pct,
+                        'mkt_struct_swing': mkt_struct_swing,
+                        'sr_hist_test_count': sr_hist_test_count,
+                        'sr_hist_avg_reaction': sr_hist_avg_reaction
                     }
                     
                     if signal_type == 'scalping':

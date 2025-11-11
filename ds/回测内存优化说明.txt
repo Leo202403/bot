@@ -157,3 +157,4 @@ future_summary 结构：
   - _simulate_trade_with_params (line 17874)  
   - _simulate_with_summary (line 17971, 新增)
 
+
