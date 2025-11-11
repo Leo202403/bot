@@ -376,9 +376,18 @@ def simulate_params_with_v8321_filter(opportunities: List[Dict], params: Dict) -
             'missed_reasons': missed_reasons
         }
     
-    # 计算利润（使用actual_profit_pct作为模拟利润）
-    profits = [c['actual_profit_pct'] for c in captured]
-    avg_profit = np.mean(profits)
+    # 【V8.3.21.1修复】计算利润（兼容不同字段名）
+    # 优先使用actual_profit_pct，如果没有则使用objective_profit
+    profits = []
+    for c in captured:
+        if 'actual_profit_pct' in c:
+            profits.append(c['actual_profit_pct'])
+        elif 'objective_profit' in c:
+            profits.append(c['objective_profit'])
+        else:
+            profits.append(0)  # 默认值
+    
+    avg_profit = np.mean(profits) if len(profits) > 0 else 0
     
     # 【V8.3.21风控】分离盈利和亏损
     wins = [p for p in profits if p > 0]
