@@ -318,41 +318,48 @@ def calculate_total_combinations(grid: Dict) -> int:
 
 def simulate_params_with_v8321_filter(opportunities: List[Dict], params: Dict) -> Dict:
     """
-    【V8.3.21】使用上下文过滤参数模拟交易
+    【V8.3.21→V8.3.21.1】使用上下文过滤参数模拟交易（修复过度过滤）
     
     过滤层次：
-    1. 基础过滤（signal_score/consensus/risk_reward）
-    2. K线上下文过滤（阳线比例、价格变化）
-    3. 市场结构过滤（swing类型、趋势年龄）
-    4. S/R历史过滤（测试次数、假突破）
+    1. 基础过滤（signal_score/consensus/risk_reward）- 必须
+    2. K线上下文过滤（阳线比例、价格变化）- 可选
+    3. 市场结构过滤（swing类型、趋势年龄）- 可选
+    4. S/R历史过滤（测试次数、假突破）- 可选
+    
+    【V8.3.21.1修复】：Layer 2-4默认不启用，避免过度过滤历史数据
     """
     captured = []
     missed_reasons = {}
     
+    # 【V8.3.21.1修复】高级过滤器默认不启用
+    enable_advanced_filters = params.get('enable_advanced_filters', False)
+    
     for opp in opportunities:
-        # 第1层：基础过滤
+        # 第1层：基础过滤（必须）
         if not passes_basic_filter(opp, params):
             reason = 'basic_params'
             missed_reasons[reason] = missed_reasons.get(reason, 0) + 1
             continue
         
-        # 第2层：K线上下文过滤
-        if not passes_kline_context_filter(opp, params):
-            reason = 'kline_context'
-            missed_reasons[reason] = missed_reasons.get(reason, 0) + 1
-            continue
-        
-        # 第3层：市场结构过滤
-        if not passes_market_structure_filter(opp, params):
-            reason = 'market_structure'
-            missed_reasons[reason] = missed_reasons.get(reason, 0) + 1
-            continue
-        
-        # 第4层：S/R历史过滤
-        if not passes_sr_history_filter(opp, params):
-            reason = 'sr_history'
-            missed_reasons[reason] = missed_reasons.get(reason, 0) + 1
-            continue
+        # 【V8.3.21.1修复】第2-4层：高级过滤（可选，默认不启用）
+        if enable_advanced_filters:
+            # 第2层：K线上下文过滤
+            if not passes_kline_context_filter(opp, params):
+                reason = 'kline_context'
+                missed_reasons[reason] = missed_reasons.get(reason, 0) + 1
+                continue
+            
+            # 第3层：市场结构过滤
+            if not passes_market_structure_filter(opp, params):
+                reason = 'market_structure'
+                missed_reasons[reason] = missed_reasons.get(reason, 0) + 1
+                continue
+            
+            # 第4层：S/R历史过滤
+            if not passes_sr_history_filter(opp, params):
+                reason = 'sr_history'
+                missed_reasons[reason] = missed_reasons.get(reason, 0) + 1
+                continue
         
         # 通过所有过滤，记录
         captured.append(opp)
