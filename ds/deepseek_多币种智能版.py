@@ -21,10 +21,10 @@ from typing import Dict, List, Any, Optional
 import re  # 🔧 V7.6.7: 用于AI响应解析
 from urllib.parse import urlencode
 
-# 🔧 明确指定 .env.deepseek 文件路径
-_env_file = Path(__file__).parent / '.env.deepseek'
+# 🔧 明确指定 .env 文件路径
+_env_file = Path(__file__).parent / '.env'
 if not _env_file.exists():
-    raise FileNotFoundError(f"❌ 找不到 .env.deepseek 文件: {_env_file}")
+    raise FileNotFoundError(f"❌ 找不到 .env 文件: {_env_file}")
 load_dotenv(_env_file, override=True)
 
 # ==================== 【V8.3.16】优化配置开关 ====================
@@ -38,10 +38,10 @@ AI_AGGRESSIVENESS_DYNAMIC = True        # 动态AI激进度（根据Time Exit率
 
 def extract_json_from_ai_response(ai_content: str) -> dict:
     """
-    从AI响应中提取JSON对象（鲁棒版本，支持DeepSeek模型）
+    从AI响应中提取JSON对象（鲁棒版本，支持DeepSeek Reasoner）
     
     尝试顺序：
-    1. 跳过DeepSeek模型的推理标签 (<think>...</think>)
+    1. 跳过DeepSeek Reasoner的推理标签 (<think>...</think>)
     2. 提取Markdown代码块中的JSON (```json ... ```)
     3. 提取第一个完整的JSON对象（非贪婪匹配）
     4. 尝试解析整个内容为JSON
@@ -57,8 +57,8 @@ def extract_json_from_ai_response(ai_content: str) -> dict:
     """
     ai_content = ai_content.strip()
     
-    # 方法0: 移除DeepSeek模型的推理标签（如果存在）
-    # DeepSeek模型可能返回：<think>推理过程</think>\n{JSON}
+    # 方法0: 移除DeepSeek Reasoner的推理标签（如果存在）
+    # DeepSeek Reasoner可能返回：<think>推理过程</think>\n{JSON}
     think_match = re.search(r'<think>.*?</think>\s*', ai_content, re.DOTALL)
     if think_match:
         ai_content = ai_content[think_match.end():].strip()
@@ -539,7 +539,7 @@ ai_optimizer = AICallOptimizer()
 # 初始化DeepSeek客户端
 deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
 if not deepseek_api_key:
-    raise ValueError("❌ DEEPSEEK_API_KEY 环境变量未设置，请检查 .env.deepseek 文件")
+    raise ValueError("❌ DEEPSEEK_API_KEY 环境变量未设置，请检查 .env 文件")
 # 去除可能的空格和换行符
 deepseek_api_key = deepseek_api_key.strip()
 deepseek_client = OpenAI(
@@ -3970,7 +3970,7 @@ You are a professional quantitative trading parameter optimization expert. Analy
 
         # 调用AI分析
         response = deepseek_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-reasoner",
             messages=[
                 {
                     "role": "system",
@@ -4715,7 +4715,7 @@ This metric balances three dimensions:
 """
 
         response = deepseek_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-reasoner",
             messages=[
                 {
                     "role": "system",
@@ -4896,7 +4896,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
             # 调用AI（直接使用全局deepseek_client）
             try:
                 response = deepseek_client.chat.completions.create(
-                    model="deepseek-chat",
+                    model="deepseek-reasoner",
                     messages=[{"role": "user", "content": ai_prompt}],
                     temperature=0.7,
                     max_tokens=4000  # 🔧 V7.7.0.12: 增加到4000，避免JSON被截断
@@ -5010,7 +5010,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
             
             try:
                 response = deepseek_client.chat.completions.create(
-                    model="deepseek-chat",
+                    model="deepseek-reasoner",
                     messages=[{"role": "user", "content": ai_deep_prompt}],
                     temperature=0.8,  # 更高温度鼓励创新
                     max_tokens=2000
@@ -5084,7 +5084,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
             
             try:
                 response = deepseek_client.chat.completions.create(
-                    model="deepseek-chat",
+                    model="deepseek-reasoner",
                     messages=[{"role": "user", "content": emergency_prompt}],
                     temperature=0.9,  # 最高温度，最大创新
                     max_tokens=2000
@@ -5462,7 +5462,7 @@ JSON (4 test points):
     
     try:
         response = deepseek_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-reasoner",
             messages=[{"role": "user", "content": ai_fine_tune_prompt}],
             temperature=0.3,
             max_tokens=8000  # 🔧 V7.7.0.14: 增至8000（充分放宽，避免截断）
@@ -6303,7 +6303,7 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
             try:
                 # 调用AI
                 ai_response = deepseek_client.chat.completions.create(
-                    model="deepseek-chat",
+                    model="deepseek-reasoner",
                     messages=[
                         {"role": "system", "content": "You are a professional quantitative trading analyst specializing in parameter optimization and profitability discovery. Respond in Chinese for designated fields."},
                             {"role": "user", "content": profit_discovery_prompt}
@@ -6510,7 +6510,7 @@ Based on the results above, design a BETTER 5-point sampling strategy.
             import re
             
             response = deepseek_client.chat.completions.create(
-                model="deepseek-chat",
+                model="deepseek-reasoner",
                 messages=[{"role": "user", "content": resample_prompt}],
                 temperature=0.1
             )
@@ -6655,7 +6655,7 @@ Based on the 5 strategic sampling points above:
     # 调用AI分析（使用已有的deepseek_client）
     try:
         response = deepseek_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-reasoner",
             messages=[{"role": "user", "content": ai_analysis_prompt}],
             temperature=0.1
         )
@@ -9049,7 +9049,7 @@ def chat_with_ai(user_message, context=None):
 """
         
         response = deepseek_client.chat.completions.create(
-            model="deepseek-chat",  # DeepSeek模型
+            model="deepseek-reasoner",  # DeepSeek模型
             messages=[
                 {
                     "role": "system",
@@ -11638,7 +11638,7 @@ Output JSON only:
     try:
         print(f"正在请求AI评估仓位调整...")
         response = deepseek_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-reasoner",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=2000,  # 增加token限制，为reasoner思考过程预留空间
             temperature=0.3
@@ -12769,7 +12769,7 @@ Your core principles:
 - Always respond in Chinese (中文)"""
         
         response = deepseek_client.chat.completions.create(
-            model="deepseek-chat",  # DeepSeek模型（思考模式，提升复杂策略分析能力）
+            model="deepseek-reasoner",  # DeepSeek模型（思考模式，提升复杂策略分析能力）
             messages=[
                 {
                     "role": "system",
@@ -14176,7 +14176,7 @@ Return JSON (reason MUST be in Chinese):
         
         # 调用AI
         response = deepseek_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-reasoner",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=300,
             temperature=0.7
@@ -14297,7 +14297,7 @@ Return JSON:
         
         # 调用AI
         response = deepseek_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-reasoner",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=400,
             temperature=0.7
@@ -18604,7 +18604,7 @@ def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_
         
         # 调用AI
         response = deepseek_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-reasoner",
             messages=[
                 {
                     "role": "system",
