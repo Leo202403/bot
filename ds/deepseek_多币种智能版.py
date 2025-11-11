@@ -19400,6 +19400,42 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
                 # 使用本地分析的洞察（中文）
                 ai_insights_zh = v8321_result['context_analysis'].get('key_insights', [])
             
+            # 🆕 V8.3.21.2: 保存V8.3.21洞察到 compressed_insights，供实时AI决策使用
+            try:
+                config = load_learning_config()
+                if 'compressed_insights' not in config:
+                    config['compressed_insights'] = {}
+                if 'v8321_insights' not in config['compressed_insights']:
+                    config['compressed_insights']['v8321_insights'] = {}
+                
+                # 提取参数敏感度（Top 3）
+                param_sensitivity_summary = {}
+                if v8321_result['statistics'].get('param_sensitivity'):
+                    sorted_params = sorted(
+                        v8321_result['statistics']['param_sensitivity'].items(),
+                        key=lambda x: abs(x[1]['avg_impact']),
+                        reverse=True
+                    )[:3]
+                    for param_name, sensitivity in sorted_params:
+                        param_sensitivity_summary[param_name] = f"{sensitivity['importance']} ({sensitivity['avg_impact']:+.3f})"
+                
+                # 保存超短线洞察
+                config['compressed_insights']['v8321_insights']['scalping'] = {
+                    'best_contexts': v8321_result['context_analysis'].get('key_insights', [])[:3],
+                    'param_sensitivity': param_sensitivity_summary,
+                    'performance': {
+                        'score': v8321_result['top_10_configs'][0]['score'],
+                        'capture_rate': v8321_result['top_10_configs'][0]['metrics']['capture_rate'],
+                        'avg_profit': v8321_result['top_10_configs'][0]['metrics']['avg_profit'] / 100,  # 转为小数
+                        'win_rate': v8321_result['top_10_configs'][0]['metrics']['win_rate']
+                    },
+                    'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
+                save_learning_config(config)
+                print(f"  ✅ V8.3.21超短线洞察已保存到 compressed_insights")
+            except Exception as e:
+                print(f"  ⚠️  保存V8.3.21洞察失败: {e}")
+            
             # 【V8.3.21修复】构建完全兼容的返回结构
             return {
                 'optimized_params': v8321_result['optimized_params'],
@@ -19841,6 +19877,42 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, use_v
             else:
                 # 使用本地分析的洞察（中文）
                 ai_insights_zh = v8321_result['context_analysis'].get('key_insights', [])
+            
+            # 🆕 V8.3.21.2: 保存V8.3.21洞察到 compressed_insights，供实时AI决策使用
+            try:
+                config = load_learning_config()
+                if 'compressed_insights' not in config:
+                    config['compressed_insights'] = {}
+                if 'v8321_insights' not in config['compressed_insights']:
+                    config['compressed_insights']['v8321_insights'] = {}
+                
+                # 提取参数敏感度（Top 3）
+                param_sensitivity_summary = {}
+                if v8321_result['statistics'].get('param_sensitivity'):
+                    sorted_params = sorted(
+                        v8321_result['statistics']['param_sensitivity'].items(),
+                        key=lambda x: abs(x[1]['avg_impact']),
+                        reverse=True
+                    )[:3]
+                    for param_name, sensitivity in sorted_params:
+                        param_sensitivity_summary[param_name] = f"{sensitivity['importance']} ({sensitivity['avg_impact']:+.3f})"
+                
+                # 保存波段洞察
+                config['compressed_insights']['v8321_insights']['swing'] = {
+                    'best_contexts': v8321_result['context_analysis'].get('key_insights', [])[:3],
+                    'param_sensitivity': param_sensitivity_summary,
+                    'performance': {
+                        'score': v8321_result['top_10_configs'][0]['score'],
+                        'capture_rate': v8321_result['top_10_configs'][0]['metrics']['capture_rate'],
+                        'avg_profit': v8321_result['top_10_configs'][0]['metrics']['avg_profit'] / 100,  # 转为小数
+                        'win_rate': v8321_result['top_10_configs'][0]['metrics']['win_rate']
+                    },
+                    'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
+                save_learning_config(config)
+                print(f"  ✅ V8.3.21波段洞察已保存到 compressed_insights")
+            except Exception as e:
+                print(f"  ⚠️  保存V8.3.21洞察失败: {e}")
             
             # 【V8.3.21修复】构建完全兼容的返回结构
             return {
@@ -20850,6 +20922,34 @@ def build_decision_context(current_positions=None):
                 context += f"- {lesson}\n"
             if insights.get('focus'):
                 context += f"**Strategy Focus**: {insights['focus']}\n"
+        
+        # 🆕 V8.3.21.2: 传递V8.3.21优化洞察给AI（约80-100 tokens）
+        v8321 = insights.get('v8321_insights', {})
+        if v8321:
+            context += f"\n## 🔬 Optimized Context Patterns (V8.3.21)\n"
+            context += f"*Data-driven insights from {len(v8321)} backtested strategies*\n\n"
+            
+            # 超短线洞察
+            if 'scalping' in v8321:
+                s = v8321['scalping']
+                perf = s.get('performance', {})
+                context += f"**Scalping** (Score: {perf.get('score', 0):.3f}, "
+                context += f"Capture: {perf.get('capture_rate', 0)*100:.0f}%, "
+                context += f"Profit: {perf.get('avg_profit', 0)*100:.1f}%)\n"
+                for ctx in s.get('best_contexts', [])[:2]:  # 只显示前2条
+                    context += f"  • {ctx}\n"
+            
+            # 波段洞察
+            if 'swing' in v8321:
+                w = v8321['swing']
+                perf = w.get('performance', {})
+                context += f"**Swing** (Score: {perf.get('score', 0):.3f}, "
+                context += f"Capture: {perf.get('capture_rate', 0)*100:.0f}%, "
+                context += f"Profit: {perf.get('avg_profit', 0)*100:.1f}%)\n"
+                for ctx in w.get('best_contexts', [])[:2]:  # 只显示前2条
+                    context += f"  • {ctx}\n"
+            
+            context += f"\n*Use these patterns to evaluate current market context quality.*\n"
     except Exception as e:
         print(f"⚠️ Failed to read compressed insights: {e}")
     
