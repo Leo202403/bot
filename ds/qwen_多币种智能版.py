@@ -18044,12 +18044,20 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         print(f"  📊 分析历史快照: {len(market_snapshots)}条记录")
         
         # 按币种分组
-        for coin in market_snapshots['coin'].unique():
+        coins_list = list(market_snapshots['coin'].unique())
+        total_coins = len(coins_list)
+        
+        for coin_idx, coin in enumerate(coins_list, 1):
+            print(f"  🔍 [{coin_idx}/{total_coins}] 分析 {coin}...", end='', flush=True)
             coin_data = market_snapshots[market_snapshots['coin'] == coin].sort_values('time')
             coin_data = coin_data.reset_index(drop=True)
             
             # 遍历每个点位
-            for idx in range(len(coin_data) - 96):  # 至少需要96根K线（24小时）
+            total_points = len(coin_data) - 96
+            for idx in range(total_points):  # 至少需要96根K线（24小时）
+                # 每处理100个点显示一次进度
+                if idx > 0 and idx % 100 == 0:
+                    print(f"\r  🔍 [{coin_idx}/{total_coins}] 分析 {coin}... {idx}/{total_points} ({idx*100//total_points}%)", end='', flush=True)
                 current = coin_data.iloc[idx]
                 
                 # 安全获取数据
@@ -18115,8 +18123,11 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                 
                 except (ValueError, TypeError, KeyError) as e:
                     continue
+            
+            # 每个币种完成后换行
+            print(f"\r  ✓ [{coin_idx}/{total_coins}] {coin} 分析完成 ({total_points}个点位)")
         
-        print(f"  ⚡ 超短线机会: {len(scalping_opps)}个")
+        print(f"\n  ⚡ 超短线机会: {len(scalping_opps)}个")
         print(f"  🌊 波段机会: {len(swing_opps)}个")
         
         # 分析超短线表现
