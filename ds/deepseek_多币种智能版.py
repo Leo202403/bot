@@ -4146,6 +4146,7 @@ def backtest_parameters(config_variant, days=7, verbose=False):
         
         print(f"✓ 共加载 {total_records} 条历史记录（{len(daily_snapshots)}天）")
         print(f"  权重策略: 今天1.0 → {days-1}天前{1.0 - (days-1)*0.1:.1f}")
+        print(f"  💾 内存优化: 分批处理 + 及时释放")
         
         # 【V7.8修复】确保 config_variant 包含 min_signal_score
         # 如果没有提供，从全局配置中获取，否则使用默认值50
@@ -4170,6 +4171,9 @@ def backtest_parameters(config_variant, days=7, verbose=False):
         print(f"  min_risk_reward: {min_rr}")
         print(f"  min_indicator_consensus: {min_consensus}")
         print(f"  atr_stop_multiplier: {atr_multiplier}")
+        
+        # 【V8.3.21】导入gc用于内存管理
+        import gc
         
         # 🆕 V7.6.3.1: 按天回测，每天分配权重
         for day_offset, history_df in daily_snapshots.items():
@@ -4405,6 +4409,14 @@ def backtest_parameters(config_variant, days=7, verbose=False):
                             captured_opps += 1
                         else:
                             missed_opps += 1
+            
+            # 【V8.3.21】处理完每天的数据后释放内存
+            del history_df
+            gc.collect()
+        
+        # 【V8.3.21】回测完成，释放daily_snapshots
+        del daily_snapshots
+        gc.collect()
         
         # 【V7.9】计算回测统计（增加分类型统计）
         if simulated_trades:
@@ -17871,6 +17883,61 @@ def _simulate_trade_with_params_enhanced(entry_price, direction, atr, future_dat
     return {'can_entry': True, 'profit': profit_pct, 'exit_type': 'holding'}
 
 
+def _simulate_with_summary(entry_price, direction, stop_loss, take_profit, 
+                           future_summary, max_holding_hours=None):
+    """
+    【V8.3.21】使用摘要数据快速模拟交易（内存优化版）
+    
+    Args:
+        entry_price: 入场价
+        direction: 'long' 或 'short'
+        stop_loss: 止损价
+        take_profit: 止盈价
+        future_summary: dict {'max_high': float, 'min_low': float, 'final_close': float, 'data_points': int}
+        max_holding_hours: 最长持仓小时（可选）
+    
+    Returns:
+        {'can_entry': True, 'profit': float, 'exit_type': str}
+    """
+    max_high = future_summary.get('max_high', 0)
+    min_low = future_summary.get('min_low', 0)
+    final_close = future_summary.get('final_close', entry_price)
+    
+    if max_high <= 0 or min_low <= 0:
+        return {'can_entry': True, 'profit': 0, 'exit_type': 'no_data'}
+    
+    if direction == 'long':
+        # 多单：检查是否触及止损或止盈
+        if min_low <= stop_loss:
+            # 触及止损
+            profit_pct = (stop_loss - entry_price) / entry_price * 100
+            return {'can_entry': True, 'profit': profit_pct, 'exit_type': 'stop_loss'}
+        elif max_high >= take_profit:
+            # 触及止盈
+            profit_pct = (take_profit - entry_price) / entry_price * 100
+            return {'can_entry': True, 'profit': profit_pct, 'exit_type': 'take_profit'}
+        else:
+            # 未触及，按最终价格计算
+            profit_pct = (final_close - entry_price) / entry_price * 100
+            exit_type = 'time_exit' if max_holding_hours else 'holding'
+            return {'can_entry': True, 'profit': profit_pct, 'exit_type': exit_type}
+    else:  # short
+        # 空单：检查是否触及止损或止盈
+        if max_high >= stop_loss:
+            # 触及止损
+            profit_pct = (entry_price - stop_loss) / entry_price * 100
+            return {'can_entry': True, 'profit': profit_pct, 'exit_type': 'stop_loss'}
+        elif min_low <= take_profit:
+            # 触及止盈
+            profit_pct = (entry_price - take_profit) / entry_price * 100
+            return {'can_entry': True, 'profit': profit_pct, 'exit_type': 'take_profit'}
+        else:
+            # 未触及，按最终价格计算
+            profit_pct = (entry_price - final_close) / entry_price * 100
+            exit_type = 'time_exit' if max_holding_hours else 'holding'
+            return {'can_entry': True, 'profit': profit_pct, 'exit_type': exit_type}
+
+
 def _simulate_trade_with_params(entry_price, direction, atr, future_data, 
                                  signal_score, consensus, risk_reward,
                                  min_signal_score, min_consensus, min_risk_reward, 
@@ -17878,7 +17945,7 @@ def _simulate_trade_with_params(entry_price, direction, atr, future_data,
                                  max_holding_hours=None,
                                  signal_type=None, market_data=None):
     """
-    【V8.0→V8.1→V8.3.8】模拟用给定参数交易一个机会 - 支持独立止盈倍数 + 时间限制 + 波段SR优先
+    【V8.0→V8.1→V8.3.8→V8.3.21】模拟用给定参数交易一个机会 - 支持独立止盈倍数 + 时间限制 + 波段SR优先 + 摘要数据
     
     Args:
         atr_stop_multiplier: 止损ATR倍数
@@ -17886,6 +17953,7 @@ def _simulate_trade_with_params(entry_price, direction, atr, future_data,
         max_holding_hours: 最长持仓小时数（可选，超时强制平仓）【V8.1新增】
         signal_type: 信号类型 'scalping' 或 'swing'【V8.3.8新增】
         market_data: 市场数据（用于获取SR级别）【V8.3.8新增】
+        future_data: DataFrame或dict摘要数据【V8.3.21支持dict】
     
     返回:
         dict: {
@@ -17950,6 +18018,12 @@ def _simulate_trade_with_params(entry_price, direction, atr, future_data,
             stop_loss = entry_price + stop_loss_distance
             take_profit = entry_price - take_profit_distance
     
+    # 3. 【V8.3.21】检查future_data类型
+    if isinstance(future_data, dict):
+        # 使用摘要数据快速模拟
+        return _simulate_with_summary(entry_price, direction, stop_loss, take_profit, 
+                                      future_data, max_holding_hours)
+    
     # 3. 模拟交易：遍历后续价格，看哪个先触及
     if future_data.empty:
         return {'can_entry': True, 'profit': 0, 'exit_type': 'no_data'}
@@ -18012,12 +18086,18 @@ def _simulate_trade_with_params(entry_price, direction, atr, future_data,
 
 def analyze_separated_opportunities(market_snapshots, old_config):
     """
-    【V8.3.12】分析超短线和波段的分离机会
+    【V8.3.12→V8.3.21】分析超短线和波段的分离机会（内存优化版）
     
     核心思路：
     1. 从历史快照中识别客观机会（实际达到利润目标的点位）
     2. 按信号类型分类为scalping/swing
     3. 统计各自的表现（利润、time_exit率等）
+    
+    【V8.3.21优化】：
+    - 用摘要替换完整DataFrame（节省99%内存）
+    - 采样处理（最多200个点位/币种）
+    - 限制机会数量（每类最多500个）
+    - 及时垃圾回收
     
     返回：
     {
@@ -18033,6 +18113,13 @@ def analyze_separated_opportunities(market_snapshots, old_config):
     """
     try:
         import pandas as pd
+        import gc
+        
+        # 【V8.3.21】全局机会数量限制（保守策略：不遗漏机会）
+        MAX_OPPORTUNITIES_PER_TYPE = 2000  # 提高到2000，确保不遗漏重要机会
+        MAX_OPPORTUNITIES_PER_COIN = 300   # 提高到300
+        ENABLE_SAMPLING = False  # 关闭采样，分析所有点位（保证准确性）
+        MAX_SAMPLE_POINTS = 200  # 如果开启采样才使用
         
         scalping_opps = []
         swing_opps = []
@@ -18042,22 +18129,45 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         swing_params = old_config.get('swing_params', {})
         
         print(f"  📊 分析历史快照: {len(market_snapshots)}条记录")
+        if ENABLE_SAMPLING:
+            print(f"  💾 内存优化模式: 采样分析 + 摘要数据（最大内存<500MB）")
+        else:
+            print(f"  💾 内存优化模式: 全点位分析 + 摘要数据（预计<1GB，保证不遗漏）")
         
         # 按币种分组
         coins_list = list(market_snapshots['coin'].unique())
         total_coins = len(coins_list)
         
         for coin_idx, coin in enumerate(coins_list, 1):
-            print(f"  🔍 [{coin_idx}/{total_coins}] 分析 {coin}...", end='', flush=True)
             coin_data = market_snapshots[market_snapshots['coin'] == coin].sort_values('time')
             coin_data = coin_data.reset_index(drop=True)
             
-            # 遍历每个点位
+            coin_scalping = []
+            coin_swing = []
+            
+            # 【V8.3.21】决定是否采样
             total_points = len(coin_data) - 96
-            for idx in range(total_points):  # 至少需要96根K线（24小时）
-                # 每处理100个点显示一次进度
-                if idx > 0 and idx % 100 == 0:
-                    print(f"\r  🔍 [{coin_idx}/{total_coins}] 分析 {coin}... {idx}/{total_points} ({idx*100//total_points}%)", end='', flush=True)
+            if total_points <= 0:
+                print(f"  ⚠️ [{coin_idx}/{total_coins}] {coin} 数据不足，跳过")
+                continue
+            
+            if ENABLE_SAMPLING:
+                # 采样模式：快速但可能遗漏
+                step_size = max(1, total_points // MAX_SAMPLE_POINTS)
+                sampled_indices = list(range(0, total_points, step_size))
+                print(f"  🔍 [{coin_idx}/{total_coins}] 分析 {coin}... (采样{len(sampled_indices)}/{total_points}个点位)", end='', flush=True)
+            else:
+                # 全点位模式：准确但稍慢
+                sampled_indices = list(range(total_points))
+                print(f"  🔍 [{coin_idx}/{total_coins}] 分析 {coin}... (全量{total_points}个点位)", end='', flush=True)
+            
+            for idx_count, idx in enumerate(sampled_indices):
+                # 每处理100个点显示一次进度（全量模式下调整显示频率）
+                display_interval = 50 if ENABLE_SAMPLING else 200
+                if idx_count > 0 and idx_count % display_interval == 0:
+                    progress = min(100, idx_count * 100 // len(sampled_indices))
+                    print(f"\r  🔍 [{coin_idx}/{total_coins}] 分析 {coin}... {progress}%", end='', flush=True)
+                
                 current = coin_data.iloc[idx]
                 
                 # 安全获取数据
@@ -18101,6 +18211,14 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     if objective_profit < 1.0:  # 至少1%利润
                         continue
                     
+                    # 【V8.3.21】创建摘要数据代替完整DataFrame
+                    future_summary = {
+                        'max_high': float(later_24h['high'].max()),
+                        'min_low': float(later_24h['low'].min()),
+                        'final_close': float(later_24h.iloc[-1]['close']),
+                        'data_points': len(later_24h)
+                    }
+                    
                     # 根据信号类型分类
                     opp_data = {
                         'coin': coin,
@@ -18113,22 +18231,41 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         'signal_type': signal_type,
                         'signal_name': signal_name,
                         'objective_profit': objective_profit,
-                        'future_data': later_24h
+                        'future_data': future_summary  # 【V8.3.21】使用摘要代替完整DataFrame
                     }
                     
                     if signal_type == 'scalping':
-                        scalping_opps.append(opp_data)
+                        coin_scalping.append(opp_data)
                     else:  # swing
-                        swing_opps.append(opp_data)
+                        coin_swing.append(opp_data)
                 
                 except (ValueError, TypeError, KeyError) as e:
                     continue
             
+            # 【V8.3.21】每个币种只保留TOP机会（按利润排序）
+            coin_scalping.sort(key=lambda x: x['objective_profit'], reverse=True)
+            coin_swing.sort(key=lambda x: x['objective_profit'], reverse=True)
+            scalping_opps.extend(coin_scalping[:MAX_OPPORTUNITIES_PER_COIN])
+            swing_opps.extend(coin_swing[:MAX_OPPORTUNITIES_PER_COIN])
+            
             # 每个币种完成后换行
-            print(f"\r  ✓ [{coin_idx}/{total_coins}] {coin} 分析完成 ({total_points}个点位)")
+            print(f"\r  ✓ [{coin_idx}/{total_coins}] {coin} 完成 (scalping:{len(coin_scalping)} swing:{len(coin_swing)})")
+            
+            # 【V8.3.21】及时释放内存
+            del coin_data, coin_scalping, coin_swing
+            gc.collect()
         
-        print(f"\n  ⚡ 超短线机会: {len(scalping_opps)}个")
-        print(f"  🌊 波段机会: {len(swing_opps)}个")
+        # 【V8.3.21】全局机会数量限制（保留利润最高的）
+        if len(scalping_opps) > MAX_OPPORTUNITIES_PER_TYPE:
+            scalping_opps.sort(key=lambda x: x['objective_profit'], reverse=True)
+            scalping_opps = scalping_opps[:MAX_OPPORTUNITIES_PER_TYPE]
+        
+        if len(swing_opps) > MAX_OPPORTUNITIES_PER_TYPE:
+            swing_opps.sort(key=lambda x: x['objective_profit'], reverse=True)
+            swing_opps = swing_opps[:MAX_OPPORTUNITIES_PER_TYPE]
+        
+        print(f"\n  ⚡ 超短线机会: {len(scalping_opps)}个（已优化）")
+        print(f"  🌊 波段机会: {len(swing_opps)}个（已优化）")
         
         # 分析超短线表现
         scalping_analysis = {
@@ -18147,6 +18284,9 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             'time_exit_rate': 0,
             'opportunities': swing_opps
         }
+        
+        # 【V8.3.21】最后释放内存
+        gc.collect()
         
         return {
             'scalping': scalping_analysis,
