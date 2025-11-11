@@ -19018,7 +19018,7 @@ Respond in JSON format ONLY:
             "https://api.deepseek.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {deepseek_api_key}"},
             json={
-                "model": "deepseek-chat",
+                "model": "deepseek-reasoner",
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.3,
                 "max_tokens": 2000
