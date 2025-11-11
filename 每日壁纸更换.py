@@ -2250,6 +2250,23 @@ def get_model_summary(model, range_type='all', start_date='', end_date=''):
                 'pause_reason': ''
             }
         
+        # 🆕 【V8.3.21修复】读取AI决策历史（用于综合页面显示）
+        try:
+            decisions_file = os.path.join(data_dir, 'ai_decisions.json')
+            if os.path.exists(decisions_file):
+                with open(decisions_file, 'r', encoding='utf-8') as f:
+                    decisions = json.load(f)
+                    # 只返回最后10条决策，减少数据传输量
+                    if isinstance(decisions, list):
+                        summary['ai_decisions'] = decisions[-10:]
+                    else:
+                        summary['ai_decisions'] = []
+            else:
+                summary['ai_decisions'] = []
+        except Exception as e:
+            logging.error(f"读取{model}AI决策历史失败: {e}")
+            summary['ai_decisions'] = []
+        
         return summary
     except Exception as e:
         logging.error(f"获取{model}摘要失败: {e}")
