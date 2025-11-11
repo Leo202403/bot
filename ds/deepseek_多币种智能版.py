@@ -7773,21 +7773,35 @@ def analyze_and_adjust_params():
                 adjustments.get("per_symbol", {})
             )
 
-            # 发送Bark通知（简要版）
+            # 🆕 V8.3.21.3: 发送Bark通知（优先显示V8.3.21真实数据）
             iter_desc = f"多轮迭代{iterative_result['total_rounds']}轮" if iterative_result else "参数已优化"
             
-            # 获取回测盈利信息和捕捉率（如果有）
+            # 🔄 V8.3.21.3: 优先读取V8.3.21洞察（真实数据）
             backtest_info = f"\n调整{adjusted_count}个参数"
-            if config.get('_iterative_history'):
+            v8321_insights = config.get('compressed_insights', {}).get('v8321_insights', {})
+            
+            if v8321_insights and ('scalping' in v8321_insights or 'swing' in v8321_insights):
+                # 使用V8.3.21的真实优化数据
+                scalp_perf = v8321_insights.get('scalping', {}).get('performance', {})
+                swing_perf = v8321_insights.get('swing', {}).get('performance', {})
+                
+                if scalp_perf or swing_perf:
+                    backtest_info = "\n📊V8.3.21优化:"
+                    parts = []
+                    if scalp_perf:
+                        parts.append(f"⚡{scalp_perf.get('score', 0):.2f}分 {scalp_perf.get('capture_rate', 0)*100:.0f}%捕获")
+                    if swing_perf:
+                        parts.append(f"🌊{swing_perf.get('score', 0):.2f}分 {swing_perf.get('capture_rate', 0)*100:.0f}%捕获")
+                    backtest_info += " ".join(parts)
+            elif config.get('_iterative_history'):
+                # 降级到旧版数据（如果V8.3.21未运行）
                 iter_res = config['_iterative_history']
-                # 从phase2获取最优配置的回测盈利
                 if 'phase2' in iter_res and 'best_result' in iter_res['phase2']:
                     best_result = iter_res['phase2']['best_result']
                     profit_pct = best_result.get('total_profit', 0)
                     capture_rate = best_result.get('capture_rate', 0)
                     total_trades = best_result.get('total_trades', 0)
                     
-                    # 构建详细的回测信息
                     if profit_pct != 0 or total_trades > 0:
                         backtest_info = f"\n📊回测(3天{total_trades}笔):"
                         if profit_pct > 0:
@@ -7799,7 +7813,7 @@ def analyze_and_adjust_params():
                         backtest_info += f" 捕获率{capture_rate*100:.0f}%"
             
             send_bark_notification(
-                "[DeepSeek]🤖AI参数优化V7.7.0",
+                "[DeepSeek]🤖AI参数优化V8.3.21",
                 f"胜率{win_rate*100:.0f}% 盈亏比{win_loss_ratio:.1f}\n{iter_desc}{backtest_info}",
             )
             
@@ -8648,7 +8662,7 @@ def analyze_and_adjust_params():
     <p><strong>生成时间：</strong>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
 """
                 
-                # 🆕 V7.7.0.19: 构建学习经验模块
+                # 🆕 V8.3.21.3: 构建学习经验模块（优先展示V8.3.21真实数据）
                 learning_insights_html = ""
                 # 🔧 V7.7.0.19 Fix: 重新读取最新的 learning_config 确保获取到 compressed_insights
                 current_config = load_learning_config()
@@ -8657,8 +8671,75 @@ def analyze_and_adjust_params():
                 if current_config and 'compressed_insights' in current_config:
                     insights = current_config['compressed_insights']
                     print(f"[邮件调试] insights 内容: {insights}")
-                    if insights.get('lessons') or insights.get('focus'):
+                    
+                    # 🆕 V8.3.21.3: 优先展示V8.3.21优化结果（真实数据）
+                    v8321_insights = insights.get('v8321_insights', {})
+                    if v8321_insights and ('scalping' in v8321_insights or 'swing' in v8321_insights):
                         learning_insights_html = """
+    <div class="summary-box" style="background: #e8f5e9; border: 2px solid #4caf50;">
+        <h2>🎯 V8.3.21 回测优化结果（实际运行参数）</h2>
+        <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+            ✅ 以下数据来自V8.3.21增强优化器的真实回测结果，已应用于实时交易决策
+        </p>
+"""
+                        
+                        # 超短线数据
+                        if 'scalping' in v8321_insights:
+                            scalp = v8321_insights['scalping']
+                            scalp_perf = scalp.get('performance', {})
+                            scalp_contexts = scalp.get('best_contexts', [])
+                            
+                            learning_insights_html += """
+        <h3>⚡ 超短线策略</h3>
+        <div style="background: #fff; padding: 15px; border-radius: 5px; margin: 10px 0;">
+"""
+                            if scalp_perf:
+                                learning_insights_html += f"""
+            <p><strong>优化得分:</strong> <span style="color: #4caf50; font-size: 1.2em;">{scalp_perf.get('score', 0):.3f}</span></p>
+            <p><strong>捕获率:</strong> {scalp_perf.get('capture_rate', 0)*100:.0f}% | <strong>平均利润:</strong> {scalp_perf.get('avg_profit', 0):.1f}%</p>
+"""
+                            if scalp_contexts:
+                                learning_insights_html += """
+            <p><strong>🔑 最优市场上下文（Top 2）:</strong></p>
+            <ul style="list-style-type: disc; padding-left: 20px; font-size: 0.9em;">
+"""
+                                for ctx in scalp_contexts[:2]:
+                                    learning_insights_html += f"                <li>{ctx}</li>\n"
+                                learning_insights_html += "            </ul>\n"
+                            
+                            learning_insights_html += "        </div>\n"
+                        
+                        # 波段数据
+                        if 'swing' in v8321_insights:
+                            swing = v8321_insights['swing']
+                            swing_perf = swing.get('performance', {})
+                            swing_contexts = swing.get('best_contexts', [])
+                            
+                            learning_insights_html += """
+        <h3>🌊 波段策略</h3>
+        <div style="background: #fff; padding: 15px; border-radius: 5px; margin: 10px 0;">
+"""
+                            if swing_perf:
+                                learning_insights_html += f"""
+            <p><strong>优化得分:</strong> <span style="color: #2196f3; font-size: 1.2em;">{swing_perf.get('score', 0):.3f}</span></p>
+            <p><strong>捕获率:</strong> {swing_perf.get('capture_rate', 0)*100:.0f}% | <strong>平均利润:</strong> {swing_perf.get('avg_profit', 0):.1f}%</p>
+"""
+                            if swing_contexts:
+                                learning_insights_html += """
+            <p><strong>🔑 最优市场上下文（Top 2）:</strong></p>
+            <ul style="list-style-type: disc; padding-left: 20px; font-size: 0.9em;">
+"""
+                                for ctx in swing_contexts[:2]:
+                                    learning_insights_html += f"                <li>{ctx}</li>\n"
+                                learning_insights_html += "            </ul>\n"
+                            
+                            learning_insights_html += "        </div>\n"
+                        
+                        learning_insights_html += "    </div>\n"
+                    
+                    # 显示传统学习经验（作为补充）
+                    if insights.get('lessons') or insights.get('focus'):
+                        learning_insights_html += """
     <div class="summary-box" style="background: #e3f2fd;">
         <h2>📚 AI Learning Insights</h2>
 """
