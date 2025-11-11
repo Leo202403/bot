@@ -1341,12 +1341,12 @@ def clear_symbol_orders(symbol, verbose=True):
             print(f"  ⚠️ 处理条件单异常: {str(e)[:50]}")
     
     # 汇总结果
-        if verbose and (success_count > 0 or fail_count > 0):
-            print(f"  清理完成: 成功{success_count}个, 失败{fail_count}个")
+    if verbose and (success_count > 0 or fail_count > 0):
+        print(f"  清理完成: 成功{success_count}个, 失败{fail_count}个")
     elif verbose and success_count == 0 and fail_count == 0:
         print(f"  无需要清理的订单")
         
-        return success_count, fail_count
+    return success_count, fail_count
         
 
 def set_tpsl_orders_via_papi(symbol: str, side: str, amount: float, stop_loss: float = None, take_profit: float = None, verbose: bool = True):
