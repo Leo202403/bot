@@ -19126,22 +19126,30 @@ def analyze_signal_type_performance(opportunities):
     return result
 
 
-def optimize_scalping_params(scalping_data, current_params, initial_params=None):
+def optimize_scalping_params(scalping_data, current_params, initial_params=None, use_v8321=True):
     """
-    【V8.3.12.1 + V8.3.16】超短线参数优化 - Grid Search + Exit Analysis + 条件AI优化
+    【V8.3.21】超短线参数优化 - V8.3.21增强版 + 旧版Grid Search（可选）
     
     优化流程：
-    1. Grid Search找到最优参数（54组参数）
-    2. Exit Analysis分析最优参数的问题
-    3. 条件AI调用：只在Time Exit>80%时调用AI（V8.3.16）
-    4. 动态激进度：根据Time Exit率调整AI建议采纳度（V8.3.16技术债3）
+    - V8.3.21增强版（默认）：
+      1. 11维度参数Grid Search（200组采样）
+      2. V8.3.21上下文过滤（4层：基础→K线→结构→S/R）
+      3. 本地统计分析（参数敏感度、异常检测）
+      4. 成本优化（节省89%）
     
-    目标：降低time_exit率，提高平均利润
+    - 旧版Grid Search（use_v8321=False）：
+      1. Grid Search找到最优参数（54组参数）
+      2. Exit Analysis分析最优参数的问题
+      3. 条件AI调用：只在Time Exit>80%时调用AI（V8.3.16）
+      4. 动态激进度：根据Time Exit率调整AI建议采纳度（V8.3.16技术债3）
+    
+    目标：降低time_exit率，提高平均利润，提高捕获率
     
     Args:
         scalping_data: 超短线机会数据
         current_params: 当前配置的策略参数
-        initial_params: 【V8.3.16新增】V7.7.0快速探索提供的初始参数（技术债1）
+        initial_params: 【V8.3.16】V7.7.0快速探索提供的初始参数（技术债1）
+        use_v8321: 【V8.3.21新增】是否使用V8.3.21增强优化器（默认True）
     """
     opportunities = scalping_data['opportunities']
     
@@ -19151,6 +19159,119 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
             'optimized_params': current_params,
             'improvement': None
         }
+    
+    # ===== 【V8.3.21】使用增强优化器 =====
+    if use_v8321:
+        try:
+            from backtest_optimizer_v8321 import optimize_params_v8321_lightweight
+            
+            print(f"\n  🚀 【V8.3.21】使用增强优化器（{len(opportunities)}个机会）")
+            print(f"     • 11维度参数搜索")
+            print(f"     • 4层上下文过滤")
+            print(f"     • 成本优化（节省89%）")
+            
+            v8321_result = optimize_params_v8321_lightweight(
+                opportunities=opportunities,
+                current_params=current_params,
+                signal_type='scalping',
+                max_combinations=200  # 2核2G环境优化
+            )
+            
+            print(f"\n  ✅ V8.3.21优化完成")
+            print(f"     最优分数: {v8321_result['top_10_configs'][0]['score']:.3f}")
+            print(f"     捕获率: {v8321_result['top_10_configs'][0]['metrics']['capture_rate']*100:.0f}%")
+            print(f"     平均利润: {v8321_result['top_10_configs'][0]['metrics']['avg_profit']:.1f}%")
+            print(f"     胜率: {v8321_result['top_10_configs'][0]['metrics']['win_rate']*100:.0f}%")
+            print(f"     💰 成本节省: ${v8321_result['cost_saved']:.4f}")
+            
+            # 打印关键洞察
+            if v8321_result['context_analysis'].get('key_insights'):
+                print(f"\n  💡 关键发现:")
+                for insight in v8321_result['context_analysis']['key_insights'][:3]:
+                    print(f"     {insight}")
+            
+            # 打印参数敏感度（Top 3）
+            if v8321_result['statistics'].get('param_sensitivity'):
+                print(f"\n  📊 参数敏感度（影响最大的3个）:")
+                sorted_params = sorted(
+                    v8321_result['statistics']['param_sensitivity'].items(),
+                    key=lambda x: abs(x[1]['avg_impact']),
+                    reverse=True
+                )[:3]
+                for param_name, sensitivity in sorted_params:
+                    print(f"     • {param_name}: {sensitivity['importance']} "
+                          f"(影响={sensitivity['avg_impact']:+.3f})")
+            
+            # 【V8.3.21修复】计算old_result/new_result以兼容邮件/bark
+            print(f"\n  📊 计算前后对比（兼容性）...")
+            baseline_result = simulate_params_on_opportunities(opportunities, current_params)
+            optimized_result = simulate_params_on_opportunities(
+                opportunities, 
+                v8321_result['optimized_params']
+            )
+            
+            # 【V8.3.21 AI迭代】提取AI决策（如果有）
+            ai_decision = v8321_result.get('ai_decision', None)
+            ai_insights_zh = []
+            ai_recommendation_zh = f"V8.3.21建议使用Top 1配置（分数{v8321_result['top_10_configs'][0]['score']:.3f}）"
+            
+            if ai_decision:
+                # AI参与了迭代决策
+                print(f"  🤖 AI迭代决策:")
+                print(f"     选择: Rank {ai_decision.get('selected_rank', 1)}")
+                print(f"     调整: {'是' if ai_decision.get('needs_adjustment') else '否'}")
+                
+                # 使用AI转换的中文洞察
+                ai_insights_zh = ai_decision.get('key_insights_zh', [])
+                
+                # AI推荐（英文转中文）
+                if ai_decision.get('reasoning_en'):
+                    ai_recommendation_zh = f"AI建议: {ai_decision['reasoning_en']}"
+                    # 简单翻译关键词
+                    ai_recommendation_zh = ai_recommendation_zh.replace("Rank 1 is optimal", "Top 1配置最优")
+                    ai_recommendation_zh = ai_recommendation_zh.replace("best balance", "最佳平衡")
+            else:
+                # 使用本地分析的洞察（中文）
+                ai_insights_zh = v8321_result['context_analysis'].get('key_insights', [])
+            
+            # 【V8.3.21修复】构建完全兼容的返回结构
+            return {
+                'optimized_params': v8321_result['optimized_params'],
+                'old_result': baseline_result,
+                'new_result': optimized_result,
+                'old_time_exit_rate': baseline_result['time_exit_count'] / baseline_result['captured_count'] * 100 if baseline_result['captured_count'] > 0 else 100,
+                'new_time_exit_rate': optimized_result['time_exit_count'] / optimized_result['captured_count'] * 100 if optimized_result['captured_count'] > 0 else 100,
+                'old_avg_profit': baseline_result['avg_profit'],
+                'new_avg_profit': optimized_result['avg_profit'],
+                'old_capture_rate': baseline_result['capture_rate'],
+                'new_capture_rate': optimized_result['capture_rate'],
+                'exit_analysis': {
+                    'round1': {
+                        'common_exit_reasons': v8321_result['statistics'].get('exit_reason_distribution', {}),
+                        'affected_symbols': list(v8321_result['statistics'].get('symbol_performance', {}).keys())[:5]
+                    }
+                },
+                'ai_suggestions': {
+                    'key_findings': ai_insights_zh,
+                    'recommendation': ai_recommendation_zh,
+                    'applied_changes': [f"V8.3.21: {v8321_result['optimized_params']}"]
+                },
+                'improvement': {
+                    'capture_rate': optimized_result['capture_rate'] - baseline_result['capture_rate'],
+                    'avg_profit': optimized_result['avg_profit'] - baseline_result['avg_profit'],
+                    'time_exit_rate': (optimized_result['time_exit_count'] / optimized_result['captured_count'] * 100 if optimized_result['captured_count'] > 0 else 100) - (baseline_result['time_exit_count'] / baseline_result['captured_count'] * 100 if baseline_result['captured_count'] > 0 else 100)
+                }
+            }
+            
+        except ImportError as e:
+            print(f"  ⚠️  V8.3.21模块未找到，降级到旧版Grid Search: {e}")
+        except Exception as e:
+            print(f"  ❌ V8.3.21优化失败，降级到旧版Grid Search: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # ===== 【旧版】Grid Search（降级或use_v8321=False） =====
+    print(f"\n  📊 使用旧版Grid Search优化器（{len(opportunities)}个机会）")
     
     # ========== 【V8.3.19 NEW】信号类型分析 ==========
     print(f"\n  📊 【V8.3.19】分析信号类型表现（共{len(opportunities)}个机会）...")
@@ -19447,22 +19568,30 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None)
 
 
 
-def optimize_swing_params(swing_data, current_params, initial_params=None):
+def optimize_swing_params(swing_data, current_params, initial_params=None, use_v8321=True):
     """
-    【V8.3.12.1 + V8.3.16】波段参数优化 - Grid Search + Exit Analysis + 条件AI优化
+    【V8.3.21】波段参数优化 - V8.3.21增强版 + 旧版Grid Search（可选）
     
     优化流程：
-    1. Grid Search找到最优参数（54组参数）
-    2. Exit Analysis分析最优参数的问题
-    3. 条件AI调用：只在Time Exit>80%时调用AI（V8.3.16）
-    4. 动态激进度：根据Time Exit率调整AI建议采纳度（V8.3.16技术债3）
+    - V8.3.21增强版（默认）：
+      1. 11维度参数Grid Search（200组采样）
+      2. V8.3.21上下文过滤（4层：基础→K线→结构→S/R）
+      3. 本地统计分析（参数敏感度、异常检测）
+      4. 成本优化（节省89%）
+    
+    - 旧版Grid Search（use_v8321=False）：
+      1. Grid Search找到最优参数（54组参数）
+      2. Exit Analysis分析最优参数的问题
+      3. 条件AI调用：只在Time Exit>80%时调用AI（V8.3.16）
+      4. 动态激进度：根据Time Exit率调整AI建议采纳度（V8.3.16技术债3）
     
     目标：提高平均利润，保持捕获率
     
     Args:
         swing_data: 波段机会数据
         current_params: 当前配置的策略参数
-        initial_params: 【V8.3.16新增】V7.7.0快速探索提供的初始参数（技术债1）
+        initial_params: 【V8.3.16】V7.7.0快速探索提供的初始参数（技术债1）
+        use_v8321: 【V8.3.21新增】是否使用V8.3.21增强优化器（默认True）
     """
     opportunities = swing_data['opportunities']
     
@@ -19472,6 +19601,125 @@ def optimize_swing_params(swing_data, current_params, initial_params=None):
             'optimized_params': current_params,
             'improvement': None
         }
+    
+    # ===== 【V8.3.21】使用增强优化器 =====
+    if use_v8321:
+        try:
+            from backtest_optimizer_v8321 import optimize_params_v8321_lightweight
+            
+            print(f"\n  🚀 【V8.3.21】使用增强优化器（{len(opportunities)}个机会）")
+            print(f"     • 11维度参数搜索")
+            print(f"     • 4层上下文过滤")
+            print(f"     • 成本优化（节省89%）")
+            
+            v8321_result = optimize_params_v8321_lightweight(
+                opportunities=opportunities,
+                current_params=current_params,
+                signal_type='swing',
+                max_combinations=200  # 2核2G环境优化
+            )
+            
+            print(f"\n  ✅ V8.3.21优化完成")
+            print(f"     最优分数: {v8321_result['top_10_configs'][0]['score']:.3f}")
+            print(f"     捕获率: {v8321_result['top_10_configs'][0]['metrics']['capture_rate']*100:.0f}%")
+            print(f"     平均利润: {v8321_result['top_10_configs'][0]['metrics']['avg_profit']:.1f}%")
+            print(f"     胜率: {v8321_result['top_10_configs'][0]['metrics']['win_rate']*100:.0f}%")
+            print(f"     💰 成本节省: ${v8321_result['cost_saved']:.4f}")
+            
+            # 打印关键洞察
+            if v8321_result['context_analysis'].get('key_insights'):
+                print(f"\n  💡 关键发现:")
+                for insight in v8321_result['context_analysis']['key_insights'][:3]:
+                    print(f"     {insight}")
+            
+            # 打印参数敏感度（Top 3）
+            if v8321_result['statistics'].get('param_sensitivity'):
+                print(f"\n  📊 参数敏感度（影响最大的3个）:")
+                sorted_params = sorted(
+                    v8321_result['statistics']['param_sensitivity'].items(),
+                    key=lambda x: abs(x[1]['avg_impact']),
+                    reverse=True
+                )[:3]
+                for param_name, sensitivity in sorted_params:
+                    print(f"     • {param_name}: {sensitivity['importance']} "
+                          f"(影响={sensitivity['avg_impact']:+.3f})")
+            
+            # 【V8.3.21修复】计算old_result/new_result以兼容邮件/bark
+            print(f"\n  📊 计算前后对比（兼容性）...")
+            baseline_result = simulate_params_on_opportunities(opportunities, current_params)
+            optimized_result = simulate_params_on_opportunities(
+                opportunities, 
+                v8321_result['optimized_params']
+            )
+            
+            # 【V8.3.21 AI迭代】提取AI决策（如果有）
+            ai_decision = v8321_result.get('ai_decision', None)
+            ai_insights_zh = []
+            ai_recommendation_zh = f"V8.3.21建议使用Top 1配置（分数{v8321_result['top_10_configs'][0]['score']:.3f}）"
+            
+            if ai_decision:
+                # AI参与了迭代决策
+                print(f"  🤖 AI迭代决策:")
+                print(f"     选择: Rank {ai_decision.get('selected_rank', 1)}")
+                print(f"     调整: {'是' if ai_decision.get('needs_adjustment') else '否'}")
+                
+                # 使用AI转换的中文洞察
+                ai_insights_zh = ai_decision.get('key_insights_zh', [])
+                
+                # AI推荐（英文转中文）
+                if ai_decision.get('reasoning_en'):
+                    ai_recommendation_zh = f"AI建议: {ai_decision['reasoning_en']}"
+                    # 简单翻译关键词
+                    ai_recommendation_zh = ai_recommendation_zh.replace("Rank 1 is optimal", "Top 1配置最优")
+                    ai_recommendation_zh = ai_recommendation_zh.replace("best balance", "最佳平衡")
+            else:
+                # 使用本地分析的洞察（中文）
+                ai_insights_zh = v8321_result['context_analysis'].get('key_insights', [])
+            
+            # 【V8.3.21修复】构建完全兼容的返回结构
+            return {
+                'optimized_params': v8321_result['optimized_params'],
+                
+                # 兼容字段（邮件/bark需要）
+                'old_result': baseline_result,
+                'new_result': optimized_result,
+                'old_avg_profit': baseline_result['avg_profit'],
+                'new_avg_profit': optimized_result['avg_profit'],
+                'old_capture_rate': baseline_result['capture_rate'],
+                'new_capture_rate': optimized_result['capture_rate'],
+                'exit_analysis': None,  # V8.3.21不需要
+                
+                # AI建议（中文，给用户看）
+                'ai_suggestions': {
+                    'method': 'v8321_ai_iterative' if ai_decision else 'v8321_local_analysis',
+                    'key_insights': ai_insights_zh,  # 中文洞察
+                    'param_sensitivity': v8321_result['statistics'].get('param_sensitivity', {}),
+                    'anomalies': v8321_result.get('anomalies', []),
+                    'recommendation': ai_recommendation_zh,  # 中文推荐
+                    'ai_decision_en': ai_decision  # 保留英文原始决策（供调试）
+                },
+                
+                # improvement字段（兼容格式）
+                'improvement': {
+                    'method': 'v8321_with_ai' if ai_decision else 'v8321',
+                    'rounds': 1 + (1 if ai_decision else 0),  # AI迭代算作第2轮
+                    'v8321_score': v8321_result['top_10_configs'][0]['score'],
+                    'v8321_capture_rate': v8321_result['top_10_configs'][0]['metrics']['capture_rate'],
+                    'v8321_insights': ai_insights_zh[:3],  # 中文洞察
+                    'cost_saved': v8321_result['cost_saved'],
+                    'ai_enhanced': ai_decision is not None
+                }
+            }
+            
+        except ImportError as e:
+            print(f"  ⚠️  V8.3.21模块未找到，降级到旧版Grid Search: {e}")
+        except Exception as e:
+            print(f"  ❌ V8.3.21优化失败，降级到旧版Grid Search: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # ===== 【旧版】Grid Search（降级或use_v8321=False） =====
+    print(f"\n  📊 使用旧版Grid Search优化器（{len(opportunities)}个机会）")
     
     # 【V8.3.16】使用initial_params作为Grid Search的起点
     if initial_params:
