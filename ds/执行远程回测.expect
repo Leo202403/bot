@@ -1,0 +1,42 @@
+#!/usr/bin/expect -f
+# 执行远程回测
+
+set timeout 900
+set password "j1lUcf9TbdCzZkPL"
+
+spawn ssh -o StrictHostKeyChecking=no root@43.100.52.142
+
+expect {
+    "*password:" {
+        send "$password\r"
+        expect "*#"
+    }
+    "*#" {}
+    timeout {
+        puts "连接超时"
+        exit 1
+    }
+}
+
+# 拉取最新脚本
+send "cd /root/10-23-bot && git pull origin main\r"
+expect "*#"
+
+# 执行回测脚本
+send "cd ds && bash 执行回测.sh\r"
+
+# 等待回测完成（最多15分钟）
+expect {
+    "回测完成" {
+        puts "\n✅ 回测已完成"
+    }
+    timeout {
+        puts "\n⚠️ 回测可能还在进行或超时"
+    }
+}
+
+# 保持连接
+expect "*#"
+send "exit\r"
+expect eof
+
