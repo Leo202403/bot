@@ -1347,7 +1347,7 @@ def clear_symbol_orders(symbol, verbose=True):
         print(f"  无需要清理的订单")
     
     return success_count, fail_count
-        
+
 
 def set_tpsl_orders_via_papi(symbol: str, side: str, amount: float, stop_loss: float = None, take_profit: float = None, verbose: bool = True):
     """
