@@ -436,6 +436,20 @@ def simulate_params_with_v8321_filter(opportunities: List[Dict], params: Dict) -
     }
 
 
+def get_profit_pct(opp: Dict) -> float:
+    """
+    【V8.3.21.1辅助】获取利润百分比（兼容不同字段名）
+    
+    优先级：actual_profit_pct > objective_profit > 0
+    """
+    if 'actual_profit_pct' in opp:
+        return opp['actual_profit_pct']
+    elif 'objective_profit' in opp:
+        return opp['objective_profit']
+    else:
+        return 0.0
+
+
 def passes_basic_filter(opp: Dict, params: Dict) -> bool:
     """基础参数过滤"""
     return (
@@ -608,7 +622,7 @@ def analyze_kline_context_impact(captured: List[Dict]) -> Dict:
     result = {}
     for range_name, group in groups.items():
         if len(group) > 0:
-            profits = [o['actual_profit_pct'] for o in group]
+            profits = [get_profit_pct(o) for o in group]  # 【V8.3.21.1修复】使用辅助函数
             result[range_name] = {
                 'count': len(group),
                 'avg_profit': round(np.mean(profits), 1),
@@ -637,7 +651,7 @@ def analyze_market_structure_impact(captured: List[Dict]) -> Dict:
     result = {}
     for swing_type, group in groups.items():
         if len(group) > 0:
-            profits = [o['actual_profit_pct'] for o in group]
+            profits = [get_profit_pct(o) for o in group]  # 【V8.3.21.1修复】使用辅助函数
             result[swing_type] = {
                 'count': len(group),
                 'avg_profit': round(np.mean(profits), 1)
@@ -674,7 +688,7 @@ def analyze_sr_history_impact(captured: List[Dict]) -> Dict:
     result = {}
     for range_name, group in groups.items():
         if len(group) > 0:
-            profits = [o['actual_profit_pct'] for o in group]
+            profits = [get_profit_pct(o) for o in group]  # 【V8.3.21.1修复】使用辅助函数
             result[range_name] = {
                 'count': len(group),
                 'avg_profit': round(np.mean(profits), 1)
