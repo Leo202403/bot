@@ -419,15 +419,27 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
         }
     """
     try:
-        # 🔧 V8.3.25.3: 自动检测API密钥（支持Qwen和DeepSeek）
-        api_key = os.getenv('DEEPSEEK_API_KEY') or os.getenv('QWEN_API_KEY')
-        if not api_key:
+        # 🔧 V8.3.25.4: 自动检测API密钥和base_url（支持Qwen和DeepSeek）
+        deepseek_key = os.getenv('DEEPSEEK_API_KEY')
+        qwen_key = os.getenv('QWEN_API_KEY')
+        
+        if deepseek_key:
+            api_key = deepseek_key.strip()
+            base_url = "https://api.deepseek.com"
+            model_type = "DeepSeek"
+        elif qwen_key:
+            api_key = qwen_key.strip()
+            base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            model_type = "Qwen"
+        else:
             raise ValueError("未找到API密钥：请设置 DEEPSEEK_API_KEY 或 QWEN_API_KEY 环境变量")
+        
+        print(f"[AI Entry Analysis] 使用{model_type} API进行深度分析...")
         
         # 初始化OpenAI客户端
         client = OpenAI(
             api_key=api_key,
-            base_url="https://api.deepseek.com"
+            base_url=base_url
         )
         
         # 压缩数据（避免超长prompt）
@@ -787,15 +799,27 @@ def generate_ai_exit_insights(exit_analysis, entry_analysis=None, market_context
     Returns: 同generate_ai_entry_insights格式
     """
     try:
-        # 🔧 V8.3.25.3: 自动检测API密钥（支持Qwen和DeepSeek）
-        api_key = os.getenv('DEEPSEEK_API_KEY') or os.getenv('QWEN_API_KEY')
-        if not api_key:
+        # 🔧 V8.3.25.4: 自动检测API密钥和base_url（支持Qwen和DeepSeek）
+        deepseek_key = os.getenv('DEEPSEEK_API_KEY')
+        qwen_key = os.getenv('QWEN_API_KEY')
+        
+        if deepseek_key:
+            api_key = deepseek_key.strip()
+            base_url = "https://api.deepseek.com"
+            model_type = "DeepSeek"
+        elif qwen_key:
+            api_key = qwen_key.strip()
+            base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            model_type = "Qwen"
+        else:
             raise ValueError("未找到API密钥：请设置 DEEPSEEK_API_KEY 或 QWEN_API_KEY 环境变量")
+        
+        print(f"[AI Exit Analysis] 使用{model_type} API进行深度分析...")
         
         # 初始化OpenAI客户端
         client = OpenAI(
             api_key=api_key,
-            base_url="https://api.deepseek.com"
+            base_url=base_url
         )
         
         # 压缩数据
