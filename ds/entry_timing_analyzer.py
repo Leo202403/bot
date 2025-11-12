@@ -532,8 +532,27 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
         ai_reasoning_samples = []
         matched_count = 0
         
-        if ai_decisions and len(ai_decisions) > 0:
-            # 遍历开仓交易，匹配AI决策
+        # 🔧 V8.3.25.8: 兼容V2分析模块（没有entry_details，只有entry_table_data）
+        if 'entry_details' not in entry_analysis:
+            print(f"  ℹ️  Entry analysis from V2 module (no entry_details), using simplified AI reflection")
+            # V2模块返回的数据结构不同，我们跳过详细的trade匹配，只使用最近的AI决策
+            if ai_decisions and len(ai_decisions) > 0:
+                for decision in ai_decisions[-10:]:  # 使用最近10条决策
+                    ai_reasoning_samples.append({
+                        'timestamp': decision.get('timestamp', ''),
+                        'thinking': decision.get('思考过程', '')[:150],
+                        'actions': [
+                            {
+                                'coin': a.get('symbol', '').split('/')[0] if '/' in a.get('symbol', '') else a.get('symbol', ''),
+                                'action': a.get('action', ''),
+                                'reason': a.get('reason', '')[:100]
+                            }
+                            for a in decision.get('actions', [])[:2]
+                        ]
+                    })
+                print(f"  ✓ 使用了{len(ai_reasoning_samples)}条最近AI决策用于自我反思")
+        elif ai_decisions and len(ai_decisions) > 0:
+            # 旧的逻辑：遍历开仓交易，匹配AI决策
             for _, trade in entry_analysis['entry_details'].iterrows():
                 coin = trade.get('coin', '')
                 open_time = trade.get('开仓时间', '')
