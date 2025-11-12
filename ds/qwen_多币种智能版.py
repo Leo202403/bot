@@ -9011,7 +9011,7 @@ def analyze_and_adjust_params():
                 
                 # 发送邮件
                 send_email_notification(
-                    subject="AI参数优化 + 调用优化报告",
+                    subject=f"[{model_name}] AI参数优化 + 调用优化报告",
                     body_html=email_html,
                     model_name=model_name
                 )

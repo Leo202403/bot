@@ -865,7 +865,7 @@ def send_email_notification(subject, body_html, model_name="DeepSeek"):
         
         # 创建邮件
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = f"[{model_name}] {subject}"
+        msg['Subject'] = subject
         msg['From'] = email_config['from_address']
         msg['To'] = email_config['to_address']
         msg['Date'] = datetime.now().strftime('%a, %d %b %Y %H:%M:%S +0800')
