@@ -865,7 +865,9 @@ def send_email_notification(subject, body_html, model_name="Qwen"):
         
         # 创建邮件
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = f"[{model_name}] {subject}"
+        # 根据model_name添加前缀（映射：deepseek->DeepSeek, qwen->Qwen）
+        display_name = "DeepSeek" if "deepseek" in model_name.lower() else "Qwen" if "qwen" in model_name.lower() else model_name
+        msg['Subject'] = f"[{display_name}] {subject}"
         msg['From'] = email_config['from_address']
         msg['To'] = email_config['to_address']
         msg['Date'] = datetime.now().strftime('%a, %d %b %Y %H:%M:%S +0800')
