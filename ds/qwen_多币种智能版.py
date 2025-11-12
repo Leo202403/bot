@@ -7835,13 +7835,13 @@ def analyze_and_adjust_params():
                     if scalp_perf:
                         cap_rate = scalp_perf.get('capture_rate', 0)
                         avg_profit = scalp_perf.get('avg_profit', 0)
-                        bark_content_lines.append(f"⚡超短线: 捕获{cap_rate*100:.0f}% 平均+{avg_profit:.1f}%")
+                        bark_content_lines.append(f"⚡超短线: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
                     
                     # 波段数据
                     if swing_perf:
                         cap_rate = swing_perf.get('capture_rate', 0)
                         avg_profit = swing_perf.get('avg_profit', 0)
-                        bark_content_lines.append(f"🌊波段: 捕获{cap_rate*100:.0f}% 平均+{avg_profit:.1f}%")
+                        bark_content_lines.append(f"🌊波段: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
                 else:
                     # V8.3.21数据存在但为空，使用历史数据
                     bark_content_lines.append(f"胜率{win_rate*100:.0f}% 盈亏比{win_loss_ratio:.1f}")
