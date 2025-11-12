@@ -1,0 +1,40 @@
+#!/usr/bin/expect -f
+
+set timeout 60
+
+# 通过代理连接SSH
+spawn ssh -o ProxyCommand="nc -X 5 -x 127.0.0.1:7890 %h %p" -o StrictHostKeyChecking=no root@43.100.52.142
+
+# 等待密码提示
+expect {
+    "password:" {
+        send "j1lUcf9TbdCzZkPL\r"
+    }
+    timeout {
+        puts "连接超时"
+        exit 1
+    }
+}
+
+# 等待登录成功
+expect {
+    "#" {
+        # 执行部署命令
+        send "cd /root/10-23-bot\r"
+        expect "#"
+        send "git reset --hard\r"
+        expect "#"
+        send "git pull\r"
+        expect "#"
+        send "bash ~/快速重启_修复版.sh all\r"
+        expect "#"
+        send "exit\r"
+    }
+    timeout {
+        puts "命令执行超时"
+        exit 1
+    }
+}
+
+expect eof
+

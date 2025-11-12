@@ -7815,9 +7815,43 @@ def analyze_and_adjust_params():
                             backtest_info += f"持平"
                         backtest_info += f" 捕获率{capture_rate*100:.0f}%"
             
+            # 🔄 V8.3.21.8: 构建Bark通知内容（优先显示优化后预期收益）
+            bark_content_lines = []
+            
+            if v8321_insights and ('scalping' in v8321_insights or 'swing' in v8321_insights):
+                # 使用V8.3.21的优化后预期数据
+                scalp_perf = v8321_insights.get('scalping', {}).get('performance', {})
+                swing_perf = v8321_insights.get('swing', {}).get('performance', {})
+                
+                if scalp_perf or swing_perf:
+                    # 标题行
+                    bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
+                    bark_content_lines.append("")
+                    bark_content_lines.append("📊 优化后预期收益:")
+                    
+                    # 超短线数据
+                    if scalp_perf:
+                        cap_rate = scalp_perf.get('capture_rate', 0)
+                        avg_profit = scalp_perf.get('avg_profit', 0)
+                        bark_content_lines.append(f"⚡超短线: 捕获{cap_rate*100:.0f}% 平均+{avg_profit:.1f}%")
+                    
+                    # 波段数据
+                    if swing_perf:
+                        cap_rate = swing_perf.get('capture_rate', 0)
+                        avg_profit = swing_perf.get('avg_profit', 0)
+                        bark_content_lines.append(f"🌊波段: 捕获{cap_rate*100:.0f}% 平均+{avg_profit:.1f}%")
+                else:
+                    # V8.3.21数据存在但为空，使用历史数据
+                    bark_content_lines.append(f"胜率{win_rate*100:.0f}% 盈亏比{win_loss_ratio:.1f}")
+                    bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
+            else:
+                # 没有V8.3.21数据，使用历史统计数据
+                bark_content_lines.append(f"胜率{win_rate*100:.0f}% 盈亏比{win_loss_ratio:.1f}")
+                bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
+            
             send_bark_notification(
                 "[DeepSeek]🤖AI参数优化V8.3.21",
-                f"胜率{win_rate*100:.0f}% 盈亏比{win_loss_ratio:.1f}\n{iter_desc}{backtest_info}",
+                "\n".join(bark_content_lines),
             )
             
             # 🆕 发送邮件通知（详细版）
