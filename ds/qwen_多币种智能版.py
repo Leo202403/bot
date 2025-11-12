@@ -23,8 +23,13 @@ from urllib.parse import urlencode
 
 # 🆕 V8.3.22: 导入开仓时机分析模块
 # 🆕 V8.3.23: AI自主学习版
+# 🔧 V8.3.25.8: 使用新的V2分析模块（完整的市场机会对比分析）
+from entry_exit_timing_analyzer_v2 import (
+    analyze_entry_timing_v2,
+    analyze_exit_timing_v2
+)
+# 保留AI深度分析功能
 from entry_timing_analyzer import (
-    analyze_entry_timing, 
     generate_ai_entry_insights, 
     generate_ai_exit_insights
 )
@@ -7415,83 +7420,39 @@ def analyze_and_adjust_params():
                 print(f"⚠️ 错过机会分析失败: {e}")
 
         # 🆕 V7.7.0.15: 平仓时机分析
+        # 🔧 V8.3.25.8: 使用新的V2分析（完整的市场对比）
         print("\n【平仓时机分析】")
         exit_analysis = None
-        if not yesterday_closed_trades.empty and kline_snapshots is not None:
+        if not yesterday_closed_trades.empty:
             try:
-                exit_analysis = analyze_exit_timing(yesterday_closed_trades, kline_snapshots)
-                stats = exit_analysis['exit_stats']
-                
-                print(f"✓ 分析{stats['total_exits']}笔平仓交易")
-                print(f"  • 止盈平仓: {stats['tp_exits']}笔 | 止损平仓: {stats['sl_exits']}笔 | 手动平仓: {stats['manual_exits']}笔")
-                print(f"  • 过早平仓: {stats['premature_exits']}笔 (平均错过{stats['avg_missed_profit_pct']:.1f}%利润)")
-                print(f"  • 平仓合理: {stats['optimal_exits']}笔")
-                
-                if exit_analysis['suboptimal_exits']:
-                    print(f"\n  📌 过早平仓案例（TOP3）:")
-                    for exit_trade in exit_analysis['suboptimal_exits'][:3]:
-                        print(f"     {exit_trade['coin']} {exit_trade['side']}单: 错过{exit_trade['missed_profit_pct']:.1f}%利润 | {exit_trade['exit_type']}: {exit_trade['exit_reason'][:30]}")
+                exit_analysis = analyze_exit_timing_v2(yesterday_closed_trades, kline_snapshots)
+                # V2返回的数据结构保持兼容，可以直接使用
             except Exception as e:
                 print(f"⚠️ 平仓时机分析失败: {e}")
                 import traceback
                 traceback.print_exc()
                 exit_analysis = None
         else:
-            if yesterday_closed_trades.empty:
-                print(f"⚠️ 昨日无平仓交易，跳过平仓时机分析")
-            else:
-                print(f"⚠️ 缺少K线快照数据，跳过平仓时机分析")
+            print(f"⚠️ 昨日无平仓交易，跳过平仓时机分析")
 
         # 🆕 V8.3.22: 开仓时机分析
+        # 🔧 V8.3.25.8: 使用新的V2分析（对比市场机会vs AI决策）
         print("\n【开仓时机分析】")
         entry_analysis = None
-        if not yesterday_opened_trades.empty and kline_snapshots is not None:
-            try:
-                entry_analysis = analyze_entry_timing(
-                    yesterday_opened_trades, 
-                    kline_snapshots, 
-                    missed_opportunities if 'missed_opportunities' in locals() else []
-                )
-                stats = entry_analysis['entry_stats']
-                
-                print(f"✓ 分析{stats['total_entries']}笔开仓交易")
-                print(f"  • 虚假信号开仓: {stats['false_entries']}笔 ({stats['false_entries']/stats['total_entries']*100:.0f}%)")
-                print(f"  • 延迟开仓: {stats['delayed_entries']}笔 ({stats['delayed_entries']/stats['total_entries']*100:.0f}%)")
-                print(f"  • 过早开仓: {stats['premature_entries']}笔 ({stats['premature_entries']/stats['total_entries']*100:.0f}%)")
-                print(f"  • 最优开仓: {stats['optimal_entries']}笔 ({stats['optimal_entries']/stats['total_entries']*100:.0f}%)")
-                
-                # 打印关键案例
-                if entry_analysis['false_entries']:
-                    print(f"\n  📌 虚假信号案例（TOP3）:")
-                    for entry in entry_analysis['false_entries'][:3]:
-                        print(f"     {entry['coin']} {entry['side']}单: {entry['issue']} | {entry['lesson'][:40]}")
-                
-                if entry_analysis['delayed_entries']:
-                    print(f"\n  📌 延迟开仓案例（TOP3）:")
-                    for entry in entry_analysis['delayed_entries'][:3]:
-                        print(f"     {entry['coin']} {entry['side']}单: {entry['issue']}")
-                
-                if entry_analysis['premature_entries']:
-                    print(f"\n  📌 过早开仓案例（TOP3）:")
-                    for entry in entry_analysis['premature_entries'][:3]:
-                        print(f"     {entry['coin']} {entry['side']}单: {entry['issue']}")
-                
-                # 打印改进建议
-                if entry_analysis['entry_lessons']:
-                    print(f"\n  💡 开仓改进建议:")
-                    for lesson in entry_analysis['entry_lessons']:
-                        print(f"     • {lesson}")
-                
-            except Exception as e:
-                print(f"⚠️ 开仓时机分析失败: {e}")
-                import traceback
-                traceback.print_exc()
-                entry_analysis = None
-        else:
-            if yesterday_opened_trades.empty:
-                print(f"⚠️ 昨日无开仓交易，跳过开仓时机分析")
-            else:
-                print(f"⚠️ 缺少K线快照数据，跳过开仓时机分析")
+        try:
+            # V2需要：昨日开仓交易、市场快照、AI决策记录、昨日日期
+            entry_analysis = analyze_entry_timing_v2(
+                yesterday_opened_trades, 
+                kline_snapshots,
+                [],  # ai_decisions_list暂时传空，后续补充
+                yesterday_date_formatted
+            )
+            # V2会自动打印统计信息和改进建议
+        except Exception as e:
+            print(f"⚠️ 开仓时机分析失败: {e}")
+            import traceback
+            traceback.print_exc()
+            entry_analysis = None
 
         # 🆕 V8.3.23: AI深度分析（开仓 + 平仓）
         # 🆕 V8.3.24: 每天都运行（确保持续学习）
