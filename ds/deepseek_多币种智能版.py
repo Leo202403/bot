@@ -7868,7 +7868,8 @@ def analyze_and_adjust_params():
             
             # 🆕 发送邮件通知（详细版）
             try:
-                model_name = os.getenv("MODEL_NAME", "DeepSeek")
+                # 强制使用DeepSeek（避免环境变量污染）
+                model_name = "DeepSeek"
                 
                 # 构建参数调整详情（HTML格式）- 只显示有变化的参数
                 param_changes_html = ""
@@ -9083,7 +9084,8 @@ def analyze_and_adjust_params():
                 
                 # 发送邮件（复用之前构建的邮件HTML）
                 try:
-                    model_name = os.getenv("MODEL_NAME", "DeepSeek")
+                    # 强制使用DeepSeek（避免环境变量污染）
+                    model_name = "DeepSeek"
                     # 构建简化的邮件（无参数变化）
                     # 由于没有参数变化，我们需要重新构建部分HTML
                     # 这里直接复用前面已经构建好的HTML变量（如果存在的话）
