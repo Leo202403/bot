@@ -7370,10 +7370,10 @@ def analyze_and_adjust_params():
         # 🆕 V3.0: 交易深度分析
         print("\n【交易表现深度分析】")
         # 🔧 V7.7.0.15 Fix: 区分昨天开仓和昨天平仓的交易
-        yesterday_opened_trades = df[df["开仓时间"].str.contains(yesterday, na=False)]  # 昨天开仓（用于机会捕获分析）
+        # 🔧 V8.3.25.2: 修复开仓时间日期匹配 - 统一格式转换
+        yesterday_date_formatted = f"{yesterday[:4]}-{yesterday[4:6]}-{yesterday[6:]}"  # 20251111 -> 2025-11-11
         
-        # 🔧 V7.7.0.15 Hotfix: 修复平仓时间日期匹配 - 将YYYYMMDD格式转为YYYY-MM-DD以匹配datetime字符串
-        yesterday_date_formatted = f"{yesterday[:4]}-{yesterday[4:6]}-{yesterday[6:]}"  # 20251102 -> 2025-11-02
+        yesterday_opened_trades = df[df["开仓时间"].str.contains(yesterday_date_formatted, na=False)]  # 昨天开仓（用于机会捕获分析）
         yesterday_closed_trades = df[df["平仓时间"].notna() & df["平仓时间"].str.contains(yesterday_date_formatted, na=False)]  # 昨天平仓（用于平仓时机分析）
         
         if kline_snapshots is not None and len(yesterday_opened_trades) > 0:
