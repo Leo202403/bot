@@ -7769,6 +7769,8 @@ def analyze_and_adjust_params():
         should_send_notification = config_changed or is_manual_backtest
         
         if config_changed:
+            # 🔧 V8.3.21.14: 先重新加载配置以合并optimize函数保存的v8321_insights
+            config = load_learning_config()
             save_learning_config(config)
             
             # 🔧 V8.3.21.5: 重新加载配置以获取optimize函数保存的V8.3.21洞察
