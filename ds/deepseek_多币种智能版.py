@@ -8991,6 +8991,99 @@ def analyze_and_adjust_params():
                             learning_insights_html += "        </p>\n"
                         
                         learning_insights_html += "    </div>\n"
+                    
+                    # 🆕 V8.3.25.5: 添加AI深度分析（开仓+平仓质量）
+                    ai_entry = insights.get('ai_entry_analysis', {})
+                    ai_exit = insights.get('ai_exit_analysis', {})
+                    
+                    if ai_entry or ai_exit:
+                        learning_insights_html += """
+    <div class="summary-box" style="background: #fff3e0; border: 2px solid #ff9800;">
+        <h2>🧠 AI深度学习分析（AI Self-Reflection）</h2>
+        <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+            💡 AI分析自己的决策逻辑，识别错误模式并提出改进建议（已保存供实时AI参考）
+        </p>
+"""
+                        
+                        # 开仓质量分析
+                        if ai_entry and ai_entry.get('learning_insights'):
+                            learning_insights_html += """
+        <h3>🚪 开仓质量分析</h3>
+        <div style="background: #fff; padding: 15px; border-radius: 5px; margin: 10px 0;">
+"""
+                            diagnosis = ai_entry.get('diagnosis', '')
+                            if diagnosis:
+                                learning_insights_html += f"""
+            <p><strong>📋 诊断：</strong>{diagnosis}</p>
+"""
+                            
+                            # 学习洞察
+                            learning_insights_html += """
+            <p><strong>💡 关键洞察（Key Learnings）：</strong></p>
+            <ul style="list-style-type: disc; padding-left: 20px; font-size: 0.9em;">
+"""
+                            for insight in ai_entry['learning_insights'][:5]:
+                                learning_insights_html += f"                <li>{insight}</li>\n"
+                            learning_insights_html += "            </ul>\n"
+                            
+                            # 高优先级建议
+                            if ai_entry.get('key_recommendations'):
+                                high_priority = [r for r in ai_entry['key_recommendations'] if r.get('priority') == 'High']
+                                if high_priority:
+                                    learning_insights_html += """
+            <p><strong>🎯 高优先级改进（High Priority Actions）：</strong></p>
+            <ul style="list-style-type: disc; padding-left: 20px; font-size: 0.9em;">
+"""
+                                    for rec in high_priority:
+                                        learning_insights_html += f"""                <li><strong>{rec.get('action', '')}</strong>: {rec.get('threshold', '')}</li>\n"""
+                                    learning_insights_html += "            </ul>\n"
+                            
+                            gen_time = ai_entry.get('generated_at', 'N/A')
+                            learning_insights_html += f"""
+            <p style="color: #999; font-size: 0.85em; margin-top: 10px;">生成时间: {gen_time}</p>
+        </div>
+"""
+                        
+                        # 平仓质量分析
+                        if ai_exit and ai_exit.get('learning_insights'):
+                            learning_insights_html += """
+        <h3>🔄 平仓质量分析</h3>
+        <div style="background: #fff; padding: 15px; border-radius: 5px; margin: 10px 0;">
+"""
+                            diagnosis = ai_exit.get('diagnosis', '')
+                            if diagnosis:
+                                learning_insights_html += f"""
+            <p><strong>📋 诊断：</strong>{diagnosis}</p>
+"""
+                            
+                            # 学习洞察
+                            learning_insights_html += """
+            <p><strong>💡 关键洞察（Key Learnings）：</strong></p>
+            <ul style="list-style-type: disc; padding-left: 20px; font-size: 0.9em;">
+"""
+                            for insight in ai_exit['learning_insights'][:5]:
+                                learning_insights_html += f"                <li>{insight}</li>\n"
+                            learning_insights_html += "            </ul>\n"
+                            
+                            # 高优先级建议
+                            if ai_exit.get('key_recommendations'):
+                                high_priority = [r for r in ai_exit['key_recommendations'] if r.get('priority') == 'High']
+                                if high_priority:
+                                    learning_insights_html += """
+            <p><strong>🎯 高优先级改进（High Priority Actions）：</strong></p>
+            <ul style="list-style-type: disc; padding-left: 20px; font-size: 0.9em;">
+"""
+                                    for rec in high_priority:
+                                        learning_insights_html += f"""                <li><strong>{rec.get('action', '')}</strong>: {rec.get('threshold', '')}</li>\n"""
+                                    learning_insights_html += "            </ul>\n"
+                            
+                            gen_time = ai_exit.get('generated_at', 'N/A')
+                            learning_insights_html += f"""
+            <p style="color: #999; font-size: 0.85em; margin-top: 10px;">生成时间: {gen_time}</p>
+        </div>
+"""
+                        
+                        learning_insights_html += "    </div>\n"
                 
                 # 【V7.9新增】生成交易员执行摘要（分Scalping/Swing）
                 trader_summary_html = ""
