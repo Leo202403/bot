@@ -7509,13 +7509,26 @@ def analyze_and_adjust_params():
         if should_run_ai:
             try:
                 # 🆕 V8.3.24: 加载AI历史决策（用于自我反思）
+                # 🔧 V8.3.25: 只读取目标日期的决策（控制数据量）
                 ai_decisions = []
                 try:
                     ai_decisions_file = Path("trading_data") / os.getenv("MODEL_NAME", "qwen") / "ai_decisions.json"
                     if ai_decisions_file.exists():
                         with open(ai_decisions_file, "r", encoding="utf-8") as f:
-                            ai_decisions = json.load(f)
-                        print(f"  ✓ 加载了{len(ai_decisions)}条AI历史决策用于自我反思")
+                            all_decisions = json.load(f)
+                        
+                        # 筛选目标日期的决策（前一天）
+                        from datetime import datetime, timedelta
+                        target_date = yesterday.strftime('%Y-%m-%d')  # yesterday已在代码中定义
+                        
+                        ai_decisions = [
+                            d for d in all_decisions
+                            if d.get('timestamp', '').startswith(target_date)
+                        ]
+                        
+                        print(f"  ✓ 加载了{len(ai_decisions)}条AI决策（{target_date}）用于自我反思")
+                        if len(ai_decisions) == 0:
+                            print(f"  ⚠️ {target_date}无AI决策记录，跳过自我反思")
                 except Exception as e:
                     print(f"  ⚠️ 加载AI决策失败: {e}")
                 
@@ -21272,6 +21285,71 @@ def clear_position_context(coin):
         print(f"⚠️ 清理决策上下文失败: {e}")
 
 
+def merge_historical_insights(config):
+    """
+    🆕 V8.3.25: 智能合并历史经验，防止prompt过长
+    
+    策略：
+    1. 如果ai_entry_analysis和ai_exit_analysis超过7天，合并为精简版
+    2. 保留最近3天的完整洞察
+    3. 将7天前的洞察合并为"历史模式总结"
+    """
+    from datetime import datetime, timedelta
+    
+    insights = config.get('compressed_insights', {})
+    if not insights:
+        return config
+    
+    # 检查是否需要合并
+    ai_entry = insights.get('ai_entry_analysis', {})
+    ai_exit = insights.get('ai_exit_analysis', {})
+    
+    # 解析生成时间
+    try:
+        if ai_entry.get('generated_at'):
+            entry_date = datetime.strptime(ai_entry['generated_at'], '%Y-%m-%d %H:%M:%S')
+            days_old = (datetime.now() - entry_date).days
+            
+            # 如果超过7天，压缩为精简版
+            if days_old > 7:
+                # 提取最关键的3条洞察
+                key_insights = ai_entry.get('learning_insights', [])[:3]
+                key_recs = ai_entry.get('key_recommendations', [])[:2]
+                
+                # 创建精简版
+                insights['ai_entry_analysis'] = {
+                    'diagnosis': f"[Merged {days_old}-day insights]",
+                    'learning_insights': key_insights,
+                    'key_recommendations': key_recs,
+                    'generated_at': ai_entry['generated_at'],
+                    'merged': True
+                }
+                print(f"  🗜️  Entry insights compressed ({days_old} days old)")
+        
+        if ai_exit.get('generated_at'):
+            exit_date = datetime.strptime(ai_exit['generated_at'], '%Y-%m-%d %H:%M:%S')
+            days_old = (datetime.now() - exit_date).days
+            
+            if days_old > 7:
+                key_insights = ai_exit.get('learning_insights', [])[:3]
+                key_recs = ai_exit.get('key_recommendations', [])[:2]
+                
+                insights['ai_exit_analysis'] = {
+                    'diagnosis': f"[Merged {days_old}-day insights]",
+                    'learning_insights': key_insights,
+                    'key_recommendations': key_recs,
+                    'generated_at': ai_exit['generated_at'],
+                    'merged': True
+                }
+                print(f"  🗜️  Exit insights compressed ({days_old} days old)")
+        
+        config['compressed_insights'] = insights
+    except Exception as e:
+        print(f"  ⚠️ 合并历史洞察失败: {e}")
+    
+    return config
+
+
 def build_decision_context(current_positions=None):
     """
     Build concise decision context for AI (<150 tokens)
@@ -21289,6 +21367,10 @@ def build_decision_context(current_positions=None):
     # 🔧 V7.7.0.19: 从 learning_config.json 读取 compressed_insights
     try:
         learning_config = load_learning_config()
+        
+        # 🆕 V8.3.25: 智能合并过期经验（防止prompt过长）
+        learning_config = merge_historical_insights(learning_config)
+        
         insights = learning_config.get('compressed_insights', {})
         
         if insights and insights.get('lessons'):

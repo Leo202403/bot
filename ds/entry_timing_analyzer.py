@@ -468,26 +468,139 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
             }
         
         # 🆕 V8.3.24: 提取AI决策理由（用于自我反思）
+        # 🔧 V8.3.25: 增强 - 为每笔交易匹配对应的AI决策（时间窗口±5分钟）
+        from datetime import datetime, timedelta
+        
+        def find_ai_decision_for_trade(trade_time_str, coin, ai_decisions):
+            """为交易匹配AI决策（容错跳过）"""
+            if not trade_time_str or not ai_decisions:
+                return None
+            
+            try:
+                # 解析交易时间
+                trade_time = datetime.strptime(trade_time_str, '%Y-%m-%d %H:%M:%S')
+                
+                # 在±5分钟窗口内查找
+                for decision in ai_decisions:
+                    decision_time_str = decision.get('timestamp', '')
+                    if not decision_time_str:
+                        continue
+                    
+                    try:
+                        decision_time = datetime.strptime(decision_time_str, '%Y-%m-%d %H:%M:%S')
+                        time_diff = abs((trade_time - decision_time).total_seconds())
+                        
+                        # 时间窗口：5分钟 = 300秒
+                        if time_diff <= 300:
+                            # 检查是否包含该币种的开仓action
+                            for action in decision.get('actions', []):
+                                if coin in action.get('symbol', '') and 'OPEN' in action.get('action', ''):
+                                    return {
+                                        'timestamp': decision_time_str,
+                                        'thinking': decision.get('思考过程', '')[:150],
+                                        'action_reason': action.get('reason', '')[:100],
+                                        'time_diff_seconds': int(time_diff)
+                                    }
+                    except:
+                        continue
+            except:
+                pass
+            
+            return None
+        
+        # 为每笔交易匹配AI决策
         ai_reasoning_samples = []
+        matched_count = 0
+        
         if ai_decisions and len(ai_decisions) > 0:
-            # 获取最近10条决策
-            recent_decisions = ai_decisions[-10:] if len(ai_decisions) > 10 else ai_decisions
-            for decision in recent_decisions:
-                # 提取关键信息
-                reasoning = {
-                    'timestamp': decision.get('timestamp', ''),
-                    'thinking_process': decision.get('思考过程', '')[:200],  # 限制长度
-                    'analysis': decision.get('analysis', '')[:200],
-                    'actions': [
-                        {
-                            'coin': action.get('symbol', '').split('/')[0],
-                            'action_type': action.get('action', ''),
-                            'reason': action.get('reason', '')[:100]
-                        }
-                        for action in decision.get('actions', [])[:3]  # 只取前3个action
-                    ]
-                }
-                ai_reasoning_samples.append(reasoning)
+            # 遍历开仓交易，匹配AI决策
+            for _, trade in entry_analysis['entry_details'].iterrows():
+                coin = trade.get('coin', '')
+                open_time = trade.get('开仓时间', '')
+                
+                ai_decision = find_ai_decision_for_trade(open_time, coin, ai_decisions)
+                if ai_decision:
+                    ai_reasoning_samples.append({
+                        'coin': coin,
+                        'trade_time': open_time,
+                        **ai_decision
+                    })
+                    matched_count += 1
+            
+            # 如果匹配数少于5条，补充其他决策（保证有足够的上下文）
+            if len(ai_reasoning_samples) < 5 and len(ai_decisions) > 0:
+                for decision in ai_decisions[-5:]:
+                    if len(ai_reasoning_samples) >= 5:
+                        break
+                    
+                    # 避免重复
+                    if decision.get('timestamp') not in [r['timestamp'] for r in ai_reasoning_samples]:
+                        ai_reasoning_samples.append({
+                            'timestamp': decision.get('timestamp', ''),
+                            'thinking': decision.get('思考过程', '')[:150],
+                            'actions': [
+                                {
+                                    'coin': a.get('symbol', '').split('/')[0],
+                                    'action': a.get('action', ''),
+                                    'reason': a.get('reason', '')[:100]
+                                }
+                                for a in decision.get('actions', [])[:2]
+                            ]
+                        })
+            
+            print(f"  ✓ 匹配了{matched_count}笔交易的AI决策（±5分钟窗口）")
+        
+        # 🆕 V8.3.25: 为错过的机会也匹配AI决策（分析"为什么没开仓"）
+        missed_with_ai_decisions = []
+        if ai_decisions and 'missed_opportunities' in locals():
+            for opp in missed_opportunities[:10]:  # 只分析TOP10错过的机会
+                opp_time = opp.get('time', '')
+                opp_coin = opp.get('coin', '')
+                
+                if not opp_time or not opp_coin:
+                    continue
+                
+                # 在±5分钟窗口内查找AI决策
+                try:
+                    opp_dt = datetime.strptime(opp_time, '%Y-%m-%d %H:%M:%S')
+                    
+                    for decision in ai_decisions:
+                        decision_time_str = decision.get('timestamp', '')
+                        if not decision_time_str:
+                            continue
+                        
+                        try:
+                            decision_dt = datetime.strptime(decision_time_str, '%Y-%m-%d %H:%M:%S')
+                            time_diff = abs((opp_dt - decision_dt).total_seconds())
+                            
+                            # 时间窗口：5分钟
+                            if time_diff <= 300:
+                                # 检查AI是否考虑过这个币种
+                                ai_mentioned_coin = False
+                                for action in decision.get('actions', []):
+                                    if opp_coin in action.get('symbol', ''):
+                                        ai_mentioned_coin = True
+                                        break
+                                
+                                # 如果AI没提这个币，说明可能被过滤了
+                                missed_with_ai_decisions.append({
+                                    'coin': opp_coin,
+                                    'missed_time': opp_time,
+                                    'missed_reason': opp.get('reason', 'unknown'),
+                                    'profit_potential': opp.get('profit', 0),
+                                    'ai_decision_time': decision_time_str,
+                                    'ai_considered': ai_mentioned_coin,
+                                    'ai_thinking': decision.get('思考过程', '')[:100],
+                                    'time_diff_seconds': int(time_diff)
+                                })
+                                break
+                        except:
+                            continue
+                except:
+                    continue
+            
+            if missed_with_ai_decisions:
+                print(f"  ✓ 匹配了{len(missed_with_ai_decisions)}个错过机会的AI决策")
         
         # 构建数据包
         analysis_data = {
@@ -503,7 +616,8 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
             'premature_entries': premature_entries_summary,
             'exit_quality': exit_stats_summary,
             'market_context': market_context or {},
-            'ai_reasoning_samples': ai_reasoning_samples  # 🆕 AI决策理由
+            'ai_reasoning_samples': ai_reasoning_samples,  # 🆕 AI决策理由
+            'missed_with_ai': missed_with_ai_decisions  # 🆕 V8.3.25: 错过机会的AI决策
         }
         
         # 构建AI prompt（纯英文 + 自我反思）
@@ -523,6 +637,25 @@ The AI system has been making decisions with the following reasoning patterns:
 - What market conditions were misinterpreted?
 
 Provide specific critique of the AI's decision-making process."""
+        
+        # 🆕 V8.3.25: 添加错过机会的AI反思
+        missed_ai_note = ""
+        if missed_with_ai_decisions:
+            missed_ai_note = f"""
+
+# 🔍 Missed Opportunities with AI Decision Context
+Analysis of why the AI didn't enter these profitable opportunities:
+```json
+{json.dumps(missed_with_ai_decisions[:5], indent=2)}
+```
+
+**CRITICAL**: For each missed opportunity:
+- Did the AI consider this coin at that time? (ai_considered field)
+- If yes, why did it decide NOT to open? Was the logic correct or overly conservative?
+- If no, why was this coin filtered out? Was it a systematic blind spot?
+- Given the profit_potential (actual profit if entered), was the decision justified?
+
+Provide specific insights on whether the AI's filtering logic needs adjustment."""
 
         prompt = f"""You are an expert quantitative trading analyst performing AI self-reflection analysis. 
 
@@ -531,6 +664,7 @@ Provide specific critique of the AI's decision-making process."""
 {json.dumps(analysis_data, indent=2)}
 ```
 {ai_reasoning_note}
+{missed_ai_note}
 
 # Your Task
 Perform deep self-critical analysis:
