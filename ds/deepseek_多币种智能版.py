@@ -7186,6 +7186,9 @@ def analyze_and_adjust_params():
     # 🆕 V3.0: 深度复盘系统
     print("\n【🔬 深度复盘分析】")
     
+    # 🔧 V8.3.25: 导入必要的库
+    from datetime import datetime, timedelta
+    
     # 🔧 V7.9.1: 定义yesterday变量（后续代码需要使用）
     yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
     
@@ -7518,8 +7521,9 @@ def analyze_and_adjust_params():
                             all_decisions = json.load(f)
                         
                         # 筛选目标日期的决策（前一天）
-                        from datetime import datetime, timedelta
-                        target_date = yesterday.strftime('%Y-%m-%d')  # yesterday已在代码中定义
+                        # datetime已在函数开头导入
+                        yesterday_dt = datetime.strptime(yesterday, '%Y%m%d')
+                        target_date = yesterday_dt.strftime('%Y-%m-%d')
                         
                         ai_decisions = [
                             d for d in all_decisions
