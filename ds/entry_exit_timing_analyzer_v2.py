@@ -166,21 +166,25 @@ def analyze_entry_timing_v2(
             
             if matching_trades.empty:
                 # 情况1: AI没开仓（错过机会 or 正确过滤）
-                # 需要检查实际走势：如果后续有利润，说明错过了；如果止损，说明正确过滤
-                potential_profit = snapshot.get('potential_profit_pct', 0)
+                # 🔧 V8.3.25.8: 简化逻辑 - 高信号分视为错过机会，低信号分视为正确过滤
+                # 注：完整评估需要后续K线数据，暂时用信号质量近似判断
                 
-                if potential_profit > 2:  # 实际有>2%的利润
+                # 使用信号质量作为判断标准
+                is_high_quality = (signal_score >= 75 and consensus >= 3) or signal_score >= 85
+                
+                if is_high_quality:
+                    # 高质量信号但未开仓 → 可能是错过的机会
                     missed_opportunities.append({
                         'coin': coin,
                         'time': str(snapshot_time),
                         'signal_score': signal_score,
                         'consensus': consensus,
-                        'potential_profit': potential_profit,
-                        'reason': f'参数过滤（信号{signal_score}/共振{consensus}）'
+                        'potential_profit': 0,  # 需要后续K线数据才能计算，暂时0
+                        'reason': f'高质量信号（{signal_score}分/{consensus}共振）但参数过滤'
                     })
                     entry_stats['missed_profitable'] += 1
                 else:
-                    # 正确过滤了虚假信号
+                    # 低质量信号未开仓 → 正确过滤
                     entry_stats['correctly_filtered'] += 1
             else:
                 # 情况2: AI开仓了
