@@ -9267,88 +9267,161 @@ def analyze_and_adjust_params():
     <pre>{data_summary}</pre>
 """
                 
-                # 🆕 V8.3.22: 构建开仓时机分析HTML块
-                entry_timing_html = ""
-                if entry_analysis:
-                    false_entries = entry_analysis['entry_stats']['false_entries']
-                    delayed_entries = entry_analysis['entry_stats']['delayed_entries']
-                    premature_entries = entry_analysis['entry_stats']['premature_entries']
-                    optimal_entries = entry_analysis['entry_stats']['optimal_entries']
-                    total_entries = max(entry_analysis['entry_stats']['total_entries'], 1)
+                # 🆕 V8.3.25.8: 构建统一的开平仓时机分析表格
+                entry_exit_timing_html = ""
+                
+                # 准备统计数据
+                has_entry = entry_analysis is not None
+                has_exit = exit_analysis is not None
+                
+                if has_entry or has_exit:
+                    # 构建统计摘要
+                    stats_html = '<div class="summary-box" style="background: #e3f2fd;">\n'
+                    stats_html += '    <h2>📊 开平仓时机完整分析（昨日）</h2>\n'
                     
-                    false_pct = (false_entries / total_entries * 100)
-                    delayed_pct = (delayed_entries / total_entries * 100)
-                    premature_pct = (premature_entries / total_entries * 100)
-                    optimal_pct = (optimal_entries / total_entries * 100)
+                    # 开仓统计
+                    if has_entry:
+                        entry_stats = entry_analysis['entry_stats']
+                        stats_html += f'''
+    <div style="background: #fff; padding: 10px; border-radius: 5px; margin: 10px 0;">
+        <h3 style="color: #1976d2;">🚪 开仓质量统计</h3>
+        <p><strong>总机会数：</strong>{entry_stats.get('total_opportunities', 0)} | <strong>AI开仓：</strong>{entry_stats.get('ai_opened', 0)} ({entry_stats.get('ai_opened', 0)/max(entry_stats.get('total_opportunities', 1), 1)*100:.0f}%)</p>
+        <p>
+            ├─ ✅ 正确开仓: {entry_stats.get('correct_entries', 0)}笔 | 
+            ❌ 虚假信号: {entry_stats.get('false_entries', 0)}笔 | 
+            ⚠️ 时机问题: {entry_stats.get('timing_issues', 0)}笔<br/>
+            └─ 错过机会: {entry_stats.get('missed_profitable', 0)}笔 | 
+            正确过滤: {entry_stats.get('correctly_filtered', 0)}笔
+        </p>
+    </div>
+'''
                     
-                    # 定义颜色
-                    false_class = 'danger' if false_pct > 30 else 'warning' if false_pct > 15 else 'success'
-                    delayed_class = 'danger' if delayed_pct > 30 else 'warning' if delayed_pct > 15 else 'success'
-                    premature_class = 'danger' if premature_pct > 30 else 'warning' if premature_pct > 15 else 'success'
+                    # 平仓统计
+                    if has_exit:
+                        exit_stats = exit_analysis['exit_stats']
+                        stats_html += f'''
+    <div style="background: #fff; padding: 10px; border-radius: 5px; margin: 10px 0;">
+        <h3 style="color: #f57c00;">🚪 平仓质量统计</h3>
+        <p><strong>总平仓：</strong>{exit_stats['total_exits']}笔 | 止盈: {exit_stats['tp_exits']}笔 | 止损: {exit_stats['sl_exits']}笔 | 手动: {exit_stats['manual_exits']}笔</p>
+        <p>
+            ├─ ✅ 最优: {exit_stats['optimal_exits']}笔 | 
+            ⚠️ 过早: {exit_stats['premature_exits']}笔 (平均错过{exit_stats['avg_missed_profit_pct']:.1f}%利润) | 
+            ⚠️ 延迟: {exit_stats['delayed_exits']}笔
+        </p>
+    </div>
+'''
                     
-                    entry_timing_html = """
-    <div class="summary-box" style="background: #e3f2fd;">
-    <h2>🚪 开仓时机分析（昨日）</h2>
-        <table style="width:100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9em;">
-            <tr style="background: #bbdefb;">
-                <th style="padding: 8px; text-align: center; border: 1px solid #64b5f6;">开仓类型</th>
-                <th style="padding: 8px; text-align: center; border: 1px solid #64b5f6;">数量</th>
-                <th style="padding: 8px; text-align: center; border: 1px solid #64b5f6;">占比</th>
-            </tr>
-            <tr>
-                <td style="padding: 8px; border: 1px solid #e0e0e0;">虚假信号开仓</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;">{false_entries}笔</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;"><span class="{false_class}">{false_pct:.0f}%</span></td>
-            </tr>
-            <tr style="background: #f5f5f5;">
-                <td style="padding: 8px; border: 1px solid #e0e0e0;">延迟开仓</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;">{delayed_entries}笔</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;"><span class="{delayed_class}">{delayed_pct:.0f}%</span></td>
-            </tr>
-            <tr>
-                <td style="padding: 8px; border: 1px solid #e0e0e0;">过早开仓</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;">{premature_entries}笔</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;"><span class="{premature_class}">{premature_pct:.0f}%</span></td>
-            </tr>
-            <tr style="background: #e8f5e9;">
-                <td style="padding: 8px; border: 1px solid #e0e0e0;"><strong>最优开仓</strong></td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;"><strong>{optimal_entries}笔</strong></td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;"><strong><span class="success">{optimal_pct:.0f}%</span></strong></td>
-            </tr>
-        </table>
-        
-        <div style="margin-top: 15px;">
-            <p><strong>💡 开仓改进建议：</strong></p>
-            <ul>
-""".format(
-                        false_entries=false_entries, delayed_entries=delayed_entries,
-                        premature_entries=premature_entries, optimal_entries=optimal_entries,
-                        false_pct=false_pct, delayed_pct=delayed_pct, premature_pct=premature_pct, optimal_pct=optimal_pct,
-                        false_class=false_class, delayed_class=delayed_class, premature_class=premature_class
-                    )
+                    # 构建统一表格
+                    stats_html += '''
+    <h3 style="margin-top: 20px;">📋 详细交易分析（合并视图）</h3>
+    <table style="width:100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85em;">
+        <tr style="background: #bbdefb;">
+            <th style="padding: 6px; text-align: center; border: 1px solid #64b5f6; min-width: 50px;">币种</th>
+            <th style="padding: 6px; text-align: center; border: 1px solid #64b5f6; min-width: 80px;">时间</th>
+            <th style="padding: 6px; text-align: center; border: 1px solid #64b5f6; min-width: 60px;">信号/共振</th>
+            <th style="padding: 6px; text-align: center; border: 1px solid #64b5f6; min-width: 70px;">AI决策</th>
+            <th style="padding: 6px; text-align: center; border: 1px solid #64b5f6; min-width: 70px;">开仓结果</th>
+            <th style="padding: 6px; text-align: center; border: 1px solid #64b5f6; min-width: 60px;">平仓类型</th>
+            <th style="padding: 6px; text-align: center; border: 1px solid #64b5f6; min-width: 70px;">平仓结果</th>
+            <th style="padding: 6px; text-align: center; border: 1px solid #64b5f6; min-width: 80px;">综合评价</th>
+            <th style="padding: 6px; text-align: left; border: 1px solid #64b5f6; min-width: 100px;">改进建议</th>
+        </tr>
+'''
+                    
+                    # 合并数据：从exit_table_data和entry_table_data构建统一视图
+                    combined_rows = []
+                    
+                    # 先添加所有平仓交易（这些是完整的交易）
+                    if has_exit and exit_analysis.get('exit_table_data'):
+                        for exit_trade in exit_analysis['exit_table_data']:
+                            combined_rows.append({
+                                'coin': exit_trade['coin'],
+                                'time': exit_trade.get('entry_time', 'N/A'),  # 如果有开仓时间更好
+                                'signal_info': 'N/A',  # 从exit数据无法获取
+                                'ai_action': '✅ 已开仓',
+                                'entry_result': f"{exit_trade['pnl']:+.2f}U",
+                                'exit_type': exit_trade['exit_type'],
+                                'exit_result': f"{exit_trade['pnl']:+.2f}U<br/>潜在{exit_trade['max_potential_profit_pct']:+.1f}%",
+                                'evaluation': exit_trade['evaluation'],
+                                'recommendation': exit_trade['recommendation']
+                            })
+                    
+                    # 再添加错过的机会（来自entry_table_data中AI未开仓的）
+                    if has_entry and entry_analysis.get('entry_table_data'):
+                        for entry_opp in entry_analysis['entry_table_data']:
+                            if entry_opp['ai_action'] == '❌ 未开':
+                                combined_rows.append({
+                                    'coin': entry_opp['coin'],
+                                    'time': entry_opp['time'],
+                                    'signal_info': f"{entry_opp['signal_score']}/{entry_opp['consensus']}",
+                                    'ai_action': entry_opp['ai_action'],
+                                    'entry_result': '-',
+                                    'exit_type': '-',
+                                    'exit_result': entry_opp['result'],
+                                    'evaluation': entry_opp['evaluation'],
+                                    'recommendation': '参数过滤'
+                                })
+                    
+                    # 生成表格行（限制TOP20）
+                    for i, row in enumerate(combined_rows[:20]):
+                        row_bg = 'background: #ffebee;' if '❌' in row['evaluation'] else \
+                                 'background: #fff3e0;' if '⚠️' in row['evaluation'] else \
+                                 'background: #f5f5f5;'
+                        
+                        stats_html += f'''
+        <tr style="{row_bg}">
+            <td style="padding: 6px; text-align: center; border: 1px solid #e0e0e0;"><strong>{row['coin']}</strong></td>
+            <td style="padding: 6px; text-align: center; border: 1px solid #e0e0e0; font-size: 0.8em;">{row['time'][-8:-3] if len(row['time']) > 8 else row['time']}</td>
+            <td style="padding: 6px; text-align: center; border: 1px solid #e0e0e0;">{row['signal_info']}</td>
+            <td style="padding: 6px; text-align: center; border: 1px solid #e0e0e0;">{row['ai_action']}</td>
+            <td style="padding: 6px; text-align: center; border: 1px solid #e0e0e0;">{row['entry_result']}</td>
+            <td style="padding: 6px; text-align: center; border: 1px solid #e0e0e0;">{row['exit_type']}</td>
+            <td style="padding: 6px; text-align: center; border: 1px solid #e0e0e0;">{row['exit_result']}</td>
+            <td style="padding: 6px; text-align: center; border: 1px solid #e0e0e0;">{row['evaluation']}</td>
+            <td style="padding: 6px; text-align: left; border: 1px solid #e0e0e0; font-size: 0.85em;">{row['recommendation']}</td>
+        </tr>
+'''
+                    
+                    stats_html += '''
+    </table>
+    <p style="margin-top: 10px; font-size: 0.85em; color: #666;">
+        💡 <strong>说明：</strong>表格合并显示开仓和平仓分析，限制显示TOP20条记录。"AI决策"显示是否开仓，"综合评价"综合考虑开仓质量和平仓时机。
+    </p>
+'''
                     
                     # 添加改进建议
-                    if entry_analysis.get('entry_lessons'):
-                        for lesson in entry_analysis['entry_lessons']:
-                            entry_timing_html += f'                <li>{lesson}</li>\n'
-                    else:
-                        entry_timing_html += '                <li>当前开仓质量良好，无需调整</li>\n'
+                    stats_html += '    <div style="margin-top: 15px;">\n'
+                    stats_html += '        <p><strong>💡 改进建议：</strong></p>\n'
+                    stats_html += '        <ul>\n'
                     
-                    entry_timing_html += """
-            </ul>
-        </div>
-    </div>
-"""
+                    # 合并开仓和平仓的改进建议
+                    all_lessons = []
+                    if has_entry and entry_analysis.get('entry_lessons'):
+                        all_lessons.extend([f'[开仓] {l}' for l in entry_analysis['entry_lessons']])
+                    if has_exit and exit_analysis.get('exit_lessons'):
+                        all_lessons.extend([f'[平仓] {l}' for l in exit_analysis['exit_lessons']])
+                    
+                    if all_lessons:
+                        for lesson in all_lessons:
+                            stats_html += f'            <li>{lesson}</li>\n'
+                    else:
+                        stats_html += '            <li>当前交易质量良好，继续保持</li>\n'
+                    
+                    stats_html += '        </ul>\n'
+                    stats_html += '    </div>\n'
+                    stats_html += '</div>\n'
+                    
+                    entry_exit_timing_html = stats_html
                 else:
-                    entry_timing_html = """
+                    entry_exit_timing_html = '''
     <div class="summary-box" style="background: #f5f5f5;">
-        <h2>🚪 开仓时机分析（昨日）</h2>
-        <p style="color: #999;">⚠️ 昨日无开仓交易，跳过开仓时机分析</p>
+        <h2>📊 开平仓时机分析（昨日）</h2>
+        <p style="color: #999;">⚠️ 昨日无交易数据</p>
     </div>
-    """
+'''
                 
-                # 将开仓分析添加到邮件body
-                email_body_parts.insert(5, entry_timing_html)  # 在learning_insights之后插入
+                # 将统一的开平仓分析添加到邮件body
+                email_body_parts.insert(5, entry_exit_timing_html)  # 在learning_insights之后插入
                 
                 # 拼接footer前的AI优化统计
                 optimizer_report_html = ai_optimizer.get_daily_report_html()
