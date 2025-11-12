@@ -7491,18 +7491,20 @@ def analyze_and_adjust_params():
                 print(f"⚠️ 缺少K线快照数据，跳过开仓时机分析")
 
         # 🆕 V8.3.23: AI深度分析（开仓 + 平仓）
+        # 🆕 V8.3.24: 每天都运行（确保持续学习）
         print("\n【AI深度学习分析】")
         ai_entry_insights = None
         ai_exit_insights = None
         
-        # 条件触发：有数据 + (手动回测 OR 质量问题严重)
+        # 🔧 V8.3.24修改：每天都运行AI分析（不再设置门槛）
+        # 原因：持续学习比节省成本更重要，每天$0.004可接受
         should_run_ai = (
             entry_analysis is not None or exit_analysis is not None
-        ) and (
-            os.getenv('MANUAL_BACKTEST') == 'true' or  # 手动回测总是运行
-            (entry_analysis and entry_analysis['entry_stats']['false_entries'] / max(entry_analysis['entry_stats']['total_entries'], 1) > 0.15) or  # 虚假信号率>15%
-            (exit_analysis and exit_analysis['exit_stats']['premature_exits'] >= 3)  # 过早平仓>=3笔
         )
+        
+        # 如果没有数据，跳过
+        if not should_run_ai:
+            print(f"  ℹ️  跳过AI分析（无开仓或平仓数据）")
         
         if should_run_ai:
             try:
@@ -7588,8 +7590,6 @@ def analyze_and_adjust_params():
                 print(f"  ⚠️ AI深度分析失败: {e}")
                 import traceback
                 traceback.print_exc()
-        else:
-            print(f"  ℹ️  跳过AI分析（质量良好或非手动回测）")
 
         # ========== 第2步：多轮迭代参数优化 (V7.6.3.3) ==========
         print("\n【第2步：多轮迭代参数优化】")
