@@ -1099,7 +1099,7 @@ def upload_images():
 # AI交易系统监控端点
 # ========================================
 
-TRADING_DATA_BASE = '/home/admin/10-23-bot/ds/trading_data'
+TRADING_DATA_BASE = '/root/10-23-bot/ds/trading_data'
 
 def get_trading_data_dir(model='deepseek'):
     """根据模型名称获取数据目录"""
