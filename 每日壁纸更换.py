@@ -2411,7 +2411,7 @@ def trading_ai_status():
         # 4. 检查运行模式
         test_mode = None
         try:
-            env_file = '/home/admin/10-23-bot/ds/.env' if model == 'deepseek' else '/home/admin/10-23-bot/ds/.env.qwen'
+            env_file = '/root/10-23-bot/ds/.env' if model == 'deepseek' else '/root/10-23-bot/ds/.env.qwen'
             if os.path.exists(env_file):
                 with open(env_file, 'r', encoding='utf-8') as f:
                     content = f.read()
