@@ -1669,7 +1669,7 @@ def trading_summary():
         # 读取当前运行模式（从环境变量文件）
         try:
             # 根据model参数选择对应的环境变量文件
-            env_file = '/home/admin/10-23-bot/ds/.env' if model == 'deepseek' else '/home/admin/10-23-bot/ds/.env.qwen'
+            env_file = '/root/10-23-bot/ds/.env' if model == 'deepseek' else '/root/10-23-bot/ds/.env.qwen'
             if os.path.exists(env_file):
                 with open(env_file, 'r', encoding='utf-8') as f:
                     content = f.read()
@@ -2202,7 +2202,7 @@ def get_model_summary(model, range_type='all', start_date='', end_date=''):
         # 读取当前运行模式（从环境变量文件）
         try:
             # 根据model参数选择对应的环境变量文件
-            env_file = '/home/admin/10-23-bot/ds/.env' if model == 'deepseek' else '/home/admin/10-23-bot/ds/.env.qwen'
+            env_file = '/root/10-23-bot/ds/.env' if model == 'deepseek' else '/root/10-23-bot/ds/.env.qwen'
             if os.path.exists(env_file):
                 with open(env_file, 'r', encoding='utf-8') as f:
                     content = f.read()
