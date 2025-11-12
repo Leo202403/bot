@@ -642,13 +642,20 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
                 print(f"  ✓ 匹配了{len(missed_with_ai_decisions)}个错过机会的AI决策")
         
         # 构建数据包
+        # 🔧 V8.3.25.8: 兼容V2模块（使用total_opportunities而不是total_entries）
+        total_count = entry_stats.get('total_entries', entry_stats.get('total_opportunities', entry_stats.get('ai_opened', 1)))
+        false_entries = entry_stats.get('false_entries', 0)
+        delayed_entries = entry_stats.get('delayed_entries', entry_stats.get('timing_issues', 0))  # V2用timing_issues
+        premature_entries = entry_stats.get('premature_entries', 0)
+        optimal_entries = entry_stats.get('optimal_entries', entry_stats.get('correct_entries', 0))  # V2用correct_entries
+        
         analysis_data = {
             'entry_quality': {
-                'total_entries': entry_stats['total_entries'],
-                'false_signal_rate': entry_stats['false_entries'] / max(entry_stats['total_entries'], 1) * 100,
-                'delayed_rate': entry_stats['delayed_entries'] / max(entry_stats['total_entries'], 1) * 100,
-                'premature_rate': entry_stats['premature_entries'] / max(entry_stats['total_entries'], 1) * 100,
-                'optimal_rate': entry_stats['optimal_entries'] / max(entry_stats['total_entries'], 1) * 100
+                'total_entries': total_count,
+                'false_signal_rate': false_entries / max(total_count, 1) * 100,
+                'delayed_rate': delayed_entries / max(total_count, 1) * 100,
+                'premature_rate': premature_entries / max(total_count, 1) * 100,
+                'optimal_rate': optimal_entries / max(total_count, 1) * 100
             },
             'false_signals': false_signals_summary,
             'delayed_entries': delayed_entries_summary,
