@@ -862,12 +862,15 @@ def send_email_notification(subject, body_html, model_name="Qwen"):
         }
         
         print(f"[邮件通知] 准备发送邮件: {subject}")
+        print(f"[邮件通知] model_name输入值: {model_name}")
         
         # 创建邮件
         msg = MIMEMultipart('alternative')
         # 根据model_name添加前缀（映射：deepseek->DeepSeek, qwen->Qwen）
         display_name = "DeepSeek" if "deepseek" in model_name.lower() else "Qwen" if "qwen" in model_name.lower() else model_name
+        print(f"[邮件通知] 映射后display_name: {display_name}")
         msg['Subject'] = f"[{display_name}] {subject}"
+        print(f"[邮件通知] 最终邮件主题: {msg['Subject']}")
         msg['From'] = email_config['from_address']
         msg['To'] = email_config['to_address']
         msg['Date'] = datetime.now().strftime('%a, %d %b %Y %H:%M:%S +0800')
@@ -9053,6 +9056,7 @@ def analyze_and_adjust_params():
                 email_html = ''.join(email_body_parts)
                 
                 # 发送邮件
+                print(f"[邮件调试] 准备发送邮件，model_name={model_name}")
                 send_email_notification(
                     subject="AI参数优化 + 调用优化报告",
                     body_html=email_html,
