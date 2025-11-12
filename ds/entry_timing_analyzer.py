@@ -281,6 +281,7 @@ def analyze_entry_timing(yesterday_trades, kline_snapshots, missed_opportunities
     
     return {
         'entry_stats': entry_stats,
+        'entry_details': yesterday_trades,  # 🔧 V8.3.25.3: 添加entry_details字段供AI分析使用
         'false_entries': false_entries[:5],  # TOP5
         'delayed_entries': delayed_entries[:5],  # TOP5
         'premature_entries': premature_entries[:5],  # TOP5
@@ -418,9 +419,14 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
         }
     """
     try:
+        # 🔧 V8.3.25.3: 自动检测API密钥（支持Qwen和DeepSeek）
+        api_key = os.getenv('DEEPSEEK_API_KEY') or os.getenv('QWEN_API_KEY')
+        if not api_key:
+            raise ValueError("未找到API密钥：请设置 DEEPSEEK_API_KEY 或 QWEN_API_KEY 环境变量")
+        
         # 初始化OpenAI客户端
         client = OpenAI(
-            api_key=os.getenv('DEEPSEEK_API_KEY'),
+            api_key=api_key,
             base_url="https://api.deepseek.com"
         )
         
@@ -781,9 +787,14 @@ def generate_ai_exit_insights(exit_analysis, entry_analysis=None, market_context
     Returns: 同generate_ai_entry_insights格式
     """
     try:
+        # 🔧 V8.3.25.3: 自动检测API密钥（支持Qwen和DeepSeek）
+        api_key = os.getenv('DEEPSEEK_API_KEY') or os.getenv('QWEN_API_KEY')
+        if not api_key:
+            raise ValueError("未找到API密钥：请设置 DEEPSEEK_API_KEY 或 QWEN_API_KEY 环境变量")
+        
         # 初始化OpenAI客户端
         client = OpenAI(
-            api_key=os.getenv('DEEPSEEK_API_KEY'),
+            api_key=api_key,
             base_url="https://api.deepseek.com"
         )
         

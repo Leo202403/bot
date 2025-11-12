@@ -20847,10 +20847,11 @@ def analyze_missed_opportunities(trends, actual_trades, config):
     for trend in trends:
         coin = trend['coin']
         
+        # 🔧 V8.3.25.3: 修复类型错误 - 确保时间统一格式
         # 检查是否在这个趋势中开仓了
         opened = any(
             t.get('币种') == coin and 
-            trend['start_time'] <= pd.to_datetime(t.get('开仓时间', '')).strftime('%H%M') <= trend['end_time']
+            int(trend['start_time']) <= int(pd.to_datetime(t.get('开仓时间', ''), errors='coerce').strftime('%H%M') if t.get('开仓时间') else '0000') <= int(trend['end_time'])
             for t in actual_trades
                 )
         
