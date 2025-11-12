@@ -2381,6 +2381,7 @@ def trading_ai_status():
         status_file = os.path.join(data_dir, 'system_status.json')
         is_active = False
         last_update = None
+        logging.info(f"[AI Status] Checking status_file: {status_file}, exists: {os.path.exists(status_file)}")
         if os.path.exists(status_file):
             try:
                 file_mtime = os.path.getmtime(status_file)
@@ -2388,7 +2389,9 @@ def trading_ai_status():
                 time_diff = time.time() - file_mtime
                 # 如果文件在30分钟内更新过，认为是活跃的
                 is_active = time_diff < 1800
-            except:
+                logging.info(f"[AI Status] {model}: time_diff={time_diff:.0f}s, is_active={is_active}")
+            except Exception as e:
+                logging.error(f"[AI Status] Error reading status file: {e}")
                 pass
         
         # 3. 检查冷却期状态
