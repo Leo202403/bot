@@ -2389,6 +2389,7 @@ def debug_status_check():
 @app.route('/trading-ai-status', methods=['GET'])
 def trading_ai_status():
     """获取AI进程的真实运行状态"""
+    import time  # ← 添加time导入！
     try:
         model = request.args.get('model', 'deepseek')
         data_dir = get_trading_data_dir(model)
