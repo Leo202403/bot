@@ -390,14 +390,16 @@ def get_suggested_threshold(reason_type, count, total):
         return "需人工review"
 
 
-def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=None):
+def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=None, ai_decisions=None):
     """
     【V8.3.23】使用AI深度分析开仓质量并生成英文洞察
+    【V8.3.24】增强：包含AI原始决策理由的自我反思
     
     Args:
         entry_analysis: dict, 开仓分析结果（来自analyze_entry_timing）
         exit_analysis: dict, 平仓分析结果（来自analyze_exit_timing）
         market_context: dict, 市场环境数据（可选）
+        ai_decisions: list, AI历史决策记录（包含思考过程）
     
     Returns:
         {
@@ -465,6 +467,28 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
                 'avg_missed_profit': exit_stats.get('avg_missed_profit_pct', 0)
             }
         
+        # 🆕 V8.3.24: 提取AI决策理由（用于自我反思）
+        ai_reasoning_samples = []
+        if ai_decisions and len(ai_decisions) > 0:
+            # 获取最近10条决策
+            recent_decisions = ai_decisions[-10:] if len(ai_decisions) > 10 else ai_decisions
+            for decision in recent_decisions:
+                # 提取关键信息
+                reasoning = {
+                    'timestamp': decision.get('timestamp', ''),
+                    'thinking_process': decision.get('思考过程', '')[:200],  # 限制长度
+                    'analysis': decision.get('analysis', '')[:200],
+                    'actions': [
+                        {
+                            'coin': action.get('symbol', '').split('/')[0],
+                            'action_type': action.get('action', ''),
+                            'reason': action.get('reason', '')[:100]
+                        }
+                        for action in decision.get('actions', [])[:3]  # 只取前3个action
+                    ]
+                }
+                ai_reasoning_samples.append(reasoning)
+        
         # 构建数据包
         analysis_data = {
             'entry_quality': {
@@ -478,28 +502,52 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
             'delayed_entries': delayed_entries_summary,
             'premature_entries': premature_entries_summary,
             'exit_quality': exit_stats_summary,
-            'market_context': market_context or {}
+            'market_context': market_context or {},
+            'ai_reasoning_samples': ai_reasoning_samples  # 🆕 AI决策理由
         }
         
-        # 构建AI prompt（纯英文）
-        prompt = f"""You are an expert quantitative trading analyst. Analyze the entry timing quality data and provide deep insights for AI self-learning.
+        # 构建AI prompt（纯英文 + 自我反思）
+        ai_reasoning_note = ""
+        if ai_reasoning_samples:
+            ai_reasoning_note = f"""
+
+# 🧠 AI Self-Reflection Context
+The AI system has been making decisions with the following reasoning patterns:
+```json
+{json.dumps(ai_reasoning_samples[-3:], indent=2)}
+```
+
+**CRITICAL**: Analyze these reasoning patterns against the actual results. 
+- What logical flaws led to false signals?
+- What assumptions were wrong?
+- What market conditions were misinterpreted?
+
+Provide specific critique of the AI's decision-making process."""
+
+        prompt = f"""You are an expert quantitative trading analyst performing AI self-reflection analysis. 
 
 # Entry Quality Data
 ```json
 {json.dumps(analysis_data, indent=2)}
 ```
+{ai_reasoning_note}
 
 # Your Task
-Perform deep analysis and generate insights that can be used by the AI trading system to improve future entry decisions.
+Perform deep self-critical analysis:
+1. **Review AI's past reasoning** (if provided above) and identify logical errors
+2. **Analyze entry quality results** to find patterns of failure
+3. **Connect the dots**: How did flawed reasoning lead to poor results?
+4. **Generate corrective insights** that address root causes in decision logic
 
 # Requirements
-1. **Diagnosis**: Identify the core issue (1-2 sentences)
-2. **Root Causes**: List 2-3 fundamental reasons (not just symptoms)
-3. **Recommendations**: Provide 3-5 actionable recommendations with:
+1. **Diagnosis**: Identify the core issue in AI's decision-making process (1-2 sentences)
+2. **Root Causes**: List 2-3 fundamental logical flaws (with specific examples from reasoning if available)
+3. **Recommendations**: Provide 3-5 actionable recommendations:
    - Specific threshold adjustments (with numbers)
+   - Decision logic corrections (e.g., "Don't trust MACD golden cross when RSI>70")
    - Expected impact (quantified if possible)
    - Implementation priority (High/Medium/Low)
-4. **Learning Insights**: Generate 3-5 key learnings in concise format that can be stored in knowledge base and referenced by real-time AI
+4. **Learning Insights**: Generate 3-5 key learnings that critique and correct AI's reasoning patterns
 
 # Output Format (JSON)
 {{
@@ -585,14 +633,16 @@ Perform deep analysis and generate insights that can be used by the AI trading s
         }
 
 
-def generate_ai_exit_insights(exit_analysis, entry_analysis=None, market_context=None):
+def generate_ai_exit_insights(exit_analysis, entry_analysis=None, market_context=None, ai_decisions=None):
     """
     【V8.3.23】使用AI深度分析平仓质量并生成英文洞察
+    【V8.3.24】增强：包含AI原始决策理由的自我反思
     
     Args:
         exit_analysis: dict, 平仓分析结果（来自analyze_exit_timing）
         entry_analysis: dict, 开仓分析结果（可选，用于关联分析）
         market_context: dict, 市场环境数据（可选）
+        ai_decisions: list, AI历史决策记录（包含思考过程）
     
     Returns: 同generate_ai_entry_insights格式
     """
@@ -624,6 +674,30 @@ def generate_ai_exit_insights(exit_analysis, entry_analysis=None, market_context
                 'evaluation': trade.get('evaluation', 'N/A')
             })
         
+        # 🆕 V8.3.24: 提取AI决策理由（平仓相关）
+        ai_exit_reasoning = []
+        if ai_decisions and len(ai_decisions) > 0:
+            recent_decisions = ai_decisions[-10:] if len(ai_decisions) > 10 else ai_decisions
+            for decision in recent_decisions:
+                # 只提取CLOSE_LONG/CLOSE_SHORT相关的决策
+                exit_actions = [
+                    action for action in decision.get('actions', [])
+                    if 'CLOSE' in action.get('action', '')
+                ]
+                if exit_actions:
+                    ai_exit_reasoning.append({
+                        'timestamp': decision.get('timestamp', ''),
+                        'thinking': decision.get('思考过程', '')[:150],
+                        'exit_actions': [
+                            {
+                                'coin': a.get('symbol', '').split('/')[0],
+                                'action': a.get('action', ''),
+                                'reason': a.get('reason', '')[:100]
+                            }
+                            for a in exit_actions[:2]
+                        ]
+                    })
+        
         # 构建数据包
         analysis_data = {
             'exit_quality': {
@@ -636,11 +710,28 @@ def generate_ai_exit_insights(exit_analysis, entry_analysis=None, market_context
             },
             'premature_cases': premature_exits_summary,
             'good_cases': good_exits_summary,
-            'exit_lessons': exit_analysis.get('exit_lessons', [])
+            'exit_lessons': exit_analysis.get('exit_lessons', []),
+            'ai_exit_reasoning': ai_exit_reasoning  # 🆕 AI平仓决策理由
         }
         
-        # 构建AI prompt
-        prompt = f"""You are an expert quantitative trading analyst. Analyze the exit timing quality data and provide deep insights for AI self-learning.
+        # 构建AI prompt（包含自我反思）
+        ai_reasoning_note = ""
+        if ai_exit_reasoning:
+            ai_reasoning_note = f"""
+
+# 🧠 AI Self-Reflection: Exit Decision Reasoning
+The AI's past exit decisions and reasoning:
+```json
+{json.dumps(ai_exit_reasoning[-3:], indent=2)}
+```
+
+**CRITICAL**: Analyze if the AI's exit reasoning was sound:
+- Did it exit too early based on fear rather than data?
+- Did it ignore bullish continuation signals?
+- Were take-profit targets too conservative?
+"""
+
+        prompt = f"""You are an expert quantitative trading analyst performing AI self-reflection on exit timing.
 
 # Exit Quality Data
 ```json

@@ -7506,12 +7506,24 @@ def analyze_and_adjust_params():
         
         if should_run_ai:
             try:
-                # AI分析开仓质量
+                # 🆕 V8.3.24: 加载AI历史决策（用于自我反思）
+                ai_decisions = []
+                try:
+                    ai_decisions_file = Path("trading_data") / os.getenv("MODEL_NAME", "deepseek") / "ai_decisions.json"
+                    if ai_decisions_file.exists():
+                        with open(ai_decisions_file, "r", encoding="utf-8") as f:
+                            ai_decisions = json.load(f)
+                        print(f"  ✓ 加载了{len(ai_decisions)}条AI历史决策用于自我反思")
+                except Exception as e:
+                    print(f"  ⚠️ 加载AI决策失败: {e}")
+                
+                # AI分析开仓质量（包含自我反思）
                 if entry_analysis:
-                    print("  🤖 AI analyzing entry quality...")
+                    print("  🤖 AI analyzing entry quality with self-reflection...")
                     ai_entry_insights = generate_ai_entry_insights(
                         entry_analysis, 
-                        exit_analysis
+                        exit_analysis,
+                        ai_decisions=ai_decisions  # 传入历史决策
                     )
                     
                     if ai_entry_insights and 'error' not in ai_entry_insights:
@@ -7519,12 +7531,13 @@ def analyze_and_adjust_params():
                         print(f"  ✓ Learning Insights: {len(ai_entry_insights.get('learning_insights', []))} generated")
                         print(f"  ✓ Cost: ${ai_entry_insights.get('cost_usd', 0):.6f}")
                 
-                # AI分析平仓质量
+                # AI分析平仓质量（包含自我反思）
                 if exit_analysis:
-                    print("  🤖 AI analyzing exit quality...")
+                    print("  🤖 AI analyzing exit quality with self-reflection...")
                     ai_exit_insights = generate_ai_exit_insights(
                         exit_analysis,
-                        entry_analysis
+                        entry_analysis,
+                        ai_decisions=ai_decisions  # 传入历史决策
                     )
                     
                     if ai_exit_insights and 'error' not in ai_exit_insights:
