@@ -56,33 +56,32 @@ restart_frontend() {
     pkill -f "python.*my_project" || echo "  ℹ️  没有运行中的前端进程"
     sleep 2
     
-    # 启动前端
-    echo -e "${YELLOW}  → 启动前端服务...${NC}"
-    cd "$FRONTEND_DIR"
-    nohup python3 app.py > frontend.log 2>&1 &
+    # 前端通过supervisor管理，直接重启
+    echo -e "${YELLOW}  → 重启前端服务（supervisor: web）...${NC}"
+    supervisorctl restart web
     sleep 3
     
     # 检查启动状态
-    if pgrep -f "python.*my_project.*app.py" > /dev/null; then
+    if supervisorctl status web | grep -q "RUNNING"; then
         echo -e "${GREEN}  ✅ 前端服务启动成功${NC}"
         echo -e "${GREEN}  📊 前端访问地址: http://43.100.52.142:5000${NC}"
         return 0
     else
         echo -e "${RED}  ❌ 前端服务启动失败，请检查日志：${NC}"
-        echo -e "${RED}     tail -f $FRONTEND_DIR/frontend.log${NC}"
+        echo -e "${RED}     tail -f /var/log/gunicorn/error.log${NC}"
         return 1
     fi
 }
 
-# 重启Web面板
+# 重启Web面板（等同于前端）
 restart_web() {
     echo -e "\n${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${YELLOW}🌐 重启Web面板${NC}"
+    echo -e "${YELLOW}🌐 重启Web面板（前端）${NC}"
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     
-    supervisorctl restart ai-bot:web
+    supervisorctl restart web
     sleep 2
-    supervisorctl status ai-bot:web
+    supervisorctl status web
 }
 
 # 重启所有AI机器人
@@ -91,9 +90,9 @@ restart_bots() {
     echo -e "${YELLOW}🤖 重启所有AI机器人${NC}"
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     
-    supervisorctl restart ai-bot:deepseek ai-bot:qwen
+    supervisorctl restart deepseek qwen
     sleep 2
-    supervisorctl status ai-bot:deepseek ai-bot:qwen
+    supervisorctl status deepseek qwen
 }
 
 # 重启DeepSeek
@@ -102,9 +101,9 @@ restart_deepseek() {
     echo -e "${YELLOW}🧠 重启DeepSeek${NC}"
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     
-    supervisorctl restart ai-bot:deepseek
+    supervisorctl restart deepseek
     sleep 2
-    supervisorctl status ai-bot:deepseek
+    supervisorctl status deepseek
 }
 
 # 重启Qwen
@@ -113,9 +112,9 @@ restart_qwen() {
     echo -e "${YELLOW}🧠 重启Qwen${NC}"
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     
-    supervisorctl restart ai-bot:qwen
+    supervisorctl restart qwen
     sleep 2
-    supervisorctl status ai-bot:qwen
+    supervisorctl status qwen
 }
 
 # 手动回测
