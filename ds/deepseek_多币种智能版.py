@@ -7768,6 +7768,9 @@ def analyze_and_adjust_params():
         
         if config_changed:
             save_learning_config(config)
+            
+            # 🔧 V8.3.21.5: 重新加载配置以获取optimize函数保存的V8.3.21洞察
+            config = load_learning_config()
 
             adjusted_count = len(adjustments.get("global", {})) + len(
                 adjustments.get("per_symbol", {})
@@ -9008,7 +9011,7 @@ def analyze_and_adjust_params():
                 
                 # 发送邮件
                 send_email_notification(
-                    subject="AI参数优化 + 调用优化报告",
+                    subject=f"[{model_name}] AI参数优化 + 调用优化报告",
                     body_html=email_html,
                     model_name=model_name
                 )
