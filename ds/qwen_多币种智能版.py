@@ -1601,7 +1601,7 @@ def sync_csv_with_exchange_positions(current_positions):
                     # 中文化类型名称
                     type_name_cn = "超短线" if signal_type == 'scalping' else "波段" if signal_type == 'swing' else "未知"
                     send_bark_notification(
-                        f"[DS]{coin}自动平仓{pnl_emoji}",
+                        f"[通义千问]{coin}自动平仓{pnl_emoji}",
                         f"{side}仓 {触发类型}触发 {pnl:+.2f}U\n{type_emoji}{type_name_cn} {actual_holding_minutes:.0f}分 {达标状态}\n开${entry_price:.0f}→平${close_price:.0f}"
                             )
                 except Exception as e:
@@ -15478,7 +15478,7 @@ def _execute_single_close_action(action, current_positions):
         partial_mark = f"[分批{close_pct:.0f}%]" if close_pct < 100 else ""
         
         send_bark_notification(
-            f"[DS]{coin_name}平仓{pnl_emoji}{partial_mark}",
+            f"[通义千问]{coin_name}平仓{pnl_emoji}{partial_mark}",
             f"{position_type}仓 {pnl:+.2f}U {holding_info}\n开${real_pos.get('entry_price', 0):.0f}→平${real_pos.get('mark_price', 0):.0f}\n{close_reason}",
                 )
 
