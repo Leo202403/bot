@@ -64,7 +64,7 @@ restart_frontend() {
     # 检查启动状态
     if supervisorctl status web | grep -q "RUNNING"; then
         echo -e "${GREEN}  ✅ 前端服务启动成功${NC}"
-        echo -e "${GREEN}  📊 前端访问地址: http://43.100.52.142:5000${NC}"
+        echo -e "${GREEN}  📊 前端访问地址: http://43.100.52.142 (端口80)${NC}"
         return 0
     else
         echo -e "${RED}  ❌ 前端服务启动失败，请检查日志：${NC}"
