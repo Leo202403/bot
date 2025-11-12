@@ -2353,6 +2353,39 @@ def trading_chat():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/debug-status-check', methods=['GET'])
+def debug_status_check():
+    """调试AI状态检测"""
+    import time
+    model = request.args.get('model', 'deepseek')
+    data_dir = get_trading_data_dir(model)
+    status_file = os.path.join(data_dir, 'system_status.json')
+    
+    result = {
+        'TRADING_DATA_BASE': TRADING_DATA_BASE,
+        'model': model,
+        'data_dir': data_dir,
+        'status_file': status_file,
+        'file_exists': os.path.exists(status_file),
+    }
+    
+    if os.path.exists(status_file):
+        try:
+            file_mtime = os.path.getmtime(status_file)
+            last_update = datetime.fromtimestamp(file_mtime).strftime('%Y-%m-%d %H:%M:%S')
+            time_diff = time.time() - file_mtime
+            is_active = time_diff < 1800
+            result.update({
+                'last_update': last_update,
+                'time_diff_seconds': time_diff,
+                'is_active': is_active,
+                'threshold': 1800
+            })
+        except Exception as e:
+            result['error'] = str(e)
+    
+    return jsonify(result), 200
+
 @app.route('/trading-ai-status', methods=['GET'])
 def trading_ai_status():
     """获取AI进程的真实运行状态"""
