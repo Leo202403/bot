@@ -7215,6 +7215,11 @@ def analyze_and_adjust_params():
         if snapshot_file.exists():
             try:
                 df = pd.read_csv(snapshot_file, on_bad_lines='skip', quoting=1, encoding='utf-8-sig')
+                # 🔧 V8.3.25.8: 添加日期列（从文件名提取），便于后续筛选昨日数据
+                df['snapshot_date'] = date_str  # 格式：YYYYMMDD
+                # 🔧 V8.3.25.8: 构建完整时间戳（结合文件名日期和time列）
+                if 'time' in df.columns:
+                    df['full_datetime'] = pd.to_datetime(date_str + ' ' + df['time'].astype(str), format='%Y%m%d %H:%M', errors='coerce')
                 dataframes_to_merge.append(df)
                 days_loaded += 1
                 print(f"✓ 读取{date_str}市场快照: {len(df)}条 (第{days_loaded}天)")
@@ -7222,6 +7227,10 @@ def analyze_and_adjust_params():
                 print(f"⚠️ 读取{date_str}快照失败: {e}")
                 try:
                     df = pd.read_csv(snapshot_file, on_bad_lines='skip', encoding='utf-8-sig')
+                    # 🔧 V8.3.25.8: 备用方式也添加日期列
+                    df['snapshot_date'] = date_str
+                    if 'time' in df.columns:
+                        df['full_datetime'] = pd.to_datetime(date_str + ' ' + df['time'].astype(str), format='%Y%m%d %H:%M', errors='coerce')
                     dataframes_to_merge.append(df)
                     days_loaded += 1
                     print(f"✓ 使用备用方式读取{date_str}: {len(df)}条 (第{days_loaded}天)")

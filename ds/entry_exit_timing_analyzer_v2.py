@@ -88,14 +88,27 @@ def analyze_entry_timing_v2(
         }
     
     # 筛选昨日的市场快照
-    market_snapshots_df['date'] = pd.to_datetime(market_snapshots_df['time']).dt.date
-    yesterday_date_obj = datetime.strptime(yesterday_date_str, '%Y-%m-%d').date()
+    # 🔧 V8.3.25.8: 使用snapshot_date列（YYYYMMDD格式）而不是解析time列
+    yesterday_date_yyyymmdd = yesterday_date_str.replace('-', '')  # "2025-11-11" -> "20251111"
+    
+    if 'snapshot_date' not in market_snapshots_df.columns:
+        print(f"⚠️ 市场快照数据缺少snapshot_date列（旧格式），无法筛选昨日数据")
+        return {
+            'entry_stats': entry_stats,
+            'correct_entries': [],
+            'false_entries': [],
+            'missed_opportunities': [],
+            'timing_issues': [],
+            'entry_table_data': [],
+            'entry_lessons': ['市场快照数据格式不兼容（缺少snapshot_date列）']
+        }
+    
     yesterday_snapshots = market_snapshots_df[
-        market_snapshots_df['date'] == yesterday_date_obj
+        market_snapshots_df['snapshot_date'] == yesterday_date_yyyymmdd
     ].copy()
     
     if yesterday_snapshots.empty:
-        print(f"⚠️ 昨日无市场快照数据")
+        print(f"⚠️ 昨日({yesterday_date_yyyymmdd})无市场快照数据")
         return {
             'entry_stats': entry_stats,
             'correct_entries': [],
@@ -130,12 +143,21 @@ def analyze_entry_timing_v2(
         # ===== Step 3: 对比分析每个机会点 =====
         for idx, snapshot in yesterday_snapshots.iterrows():
             coin = snapshot.get('coin', '')
-            snapshot_time = snapshot.get('time')
+            snapshot_time = snapshot.get('time')  # HH:MM格式
             signal_score = snapshot.get('signal_score', 0)
             consensus = snapshot.get('consensus', 0)
             
             # 查找是否有对应的开仓记录（±5分钟窗口）
-            snapshot_time_dt = pd.to_datetime(snapshot_time)
+            # 🔧 V8.3.25.8: 使用full_datetime列（包含日期和时间）
+            if 'full_datetime' in snapshot and pd.notna(snapshot['full_datetime']):
+                snapshot_time_dt = snapshot['full_datetime']
+            else:
+                # Fallback：尝试从snapshot_date和time构建时间戳
+                try:
+                    snapshot_time_dt = pd.to_datetime(f"{snapshot['snapshot_date']} {snapshot_time}", format='%Y%m%d %H:%M')
+                except:
+                    continue  # 无法解析时间，跳过此快照
+            
             matching_trades = yesterday_trades_df[
                 (yesterday_trades_df['币种'] == coin) &
                 (pd.to_datetime(yesterday_trades_df['开仓时间']) >= snapshot_time_dt - timedelta(minutes=5)) &
