@@ -1,11 +1,15 @@
 """
 【V8.3.22】开仓时机分析模块
+【V8.3.23】AI自主学习版：使用AI深度分析并生成英文洞察
 独立文件便于维护和测试
 """
 
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+import json
+import os
+from openai import OpenAI
 
 
 def analyze_entry_timing(yesterday_trades, kline_snapshots, missed_opportunities):
@@ -384,4 +388,354 @@ def get_suggested_threshold(reason_type, count, total):
         return "2/3趋势一致即可"
     else:
         return "需人工review"
+
+
+def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=None):
+    """
+    【V8.3.23】使用AI深度分析开仓质量并生成英文洞察
+    
+    Args:
+        entry_analysis: dict, 开仓分析结果（来自analyze_entry_timing）
+        exit_analysis: dict, 平仓分析结果（来自analyze_exit_timing）
+        market_context: dict, 市场环境数据（可选）
+    
+    Returns:
+        {
+            'diagnosis': str,  # 问题诊断（英文）
+            'root_causes': [str],  # 根本原因列表
+            'recommendations': [  # 具体建议
+                {
+                    'issue': str,  # 问题
+                    'action': str,  # 行动
+                    'threshold': str,  # 具体阈值
+                    'expected_impact': str  # 预期效果
+                }
+            ],
+            'learning_insights': [str],  # 可传递给实时AI的关键洞察
+            'generated_at': str
+        }
+    """
+    try:
+        # 初始化OpenAI客户端
+        client = OpenAI(
+            api_key=os.getenv('DEEPSEEK_API_KEY'),
+            base_url="https://api.deepseek.com"
+        )
+        
+        # 压缩数据（避免超长prompt）
+        entry_stats = entry_analysis['entry_stats']
+        
+        # 构建精简的案例摘要
+        false_signals_summary = []
+        for entry in entry_analysis.get('false_entries', [])[:3]:
+            false_signals_summary.append({
+                'coin': entry['coin'],
+                'side': entry['side'],
+                'signal_score': entry.get('signal_score', 0),
+                'consensus': entry.get('consensus', 0),
+                'issue': entry['issue']
+            })
+        
+        delayed_entries_summary = []
+        for entry in entry_analysis.get('delayed_entries', [])[:3]:
+            delayed_entries_summary.append({
+                'coin': entry['coin'],
+                'missed_improvement_pct': entry['missed_improvement']
+            })
+        
+        premature_entries_summary = []
+        for entry in entry_analysis.get('premature_entries', [])[:3]:
+            premature_entries_summary.append({
+                'coin': entry['coin'],
+                'later_move_pct': entry['later_move']
+            })
+        
+        # 构建exit stats摘要
+        exit_stats_summary = {
+            'sl_rate': 0,
+            'premature_exits': 0,
+            'avg_missed_profit': 0
+        }
+        if exit_analysis:
+            exit_stats = exit_analysis.get('exit_stats', {})
+            total_exits = max(exit_stats.get('total_exits', 1), 1)
+            exit_stats_summary = {
+                'sl_rate': exit_stats.get('sl_exits', 0) / total_exits * 100,
+                'premature_exits': exit_stats.get('premature_exits', 0),
+                'avg_missed_profit': exit_stats.get('avg_missed_profit_pct', 0)
+            }
+        
+        # 构建数据包
+        analysis_data = {
+            'entry_quality': {
+                'total_entries': entry_stats['total_entries'],
+                'false_signal_rate': entry_stats['false_entries'] / max(entry_stats['total_entries'], 1) * 100,
+                'delayed_rate': entry_stats['delayed_entries'] / max(entry_stats['total_entries'], 1) * 100,
+                'premature_rate': entry_stats['premature_entries'] / max(entry_stats['total_entries'], 1) * 100,
+                'optimal_rate': entry_stats['optimal_entries'] / max(entry_stats['total_entries'], 1) * 100
+            },
+            'false_signals': false_signals_summary,
+            'delayed_entries': delayed_entries_summary,
+            'premature_entries': premature_entries_summary,
+            'exit_quality': exit_stats_summary,
+            'market_context': market_context or {}
+        }
+        
+        # 构建AI prompt（纯英文）
+        prompt = f"""You are an expert quantitative trading analyst. Analyze the entry timing quality data and provide deep insights for AI self-learning.
+
+# Entry Quality Data
+```json
+{json.dumps(analysis_data, indent=2)}
+```
+
+# Your Task
+Perform deep analysis and generate insights that can be used by the AI trading system to improve future entry decisions.
+
+# Requirements
+1. **Diagnosis**: Identify the core issue (1-2 sentences)
+2. **Root Causes**: List 2-3 fundamental reasons (not just symptoms)
+3. **Recommendations**: Provide 3-5 actionable recommendations with:
+   - Specific threshold adjustments (with numbers)
+   - Expected impact (quantified if possible)
+   - Implementation priority (High/Medium/Low)
+4. **Learning Insights**: Generate 3-5 key learnings in concise format that can be stored in knowledge base and referenced by real-time AI
+
+# Output Format (JSON)
+{{
+  "diagnosis": "Brief summary of the main issue",
+  "root_causes": [
+    "Cause 1: ...",
+    "Cause 2: ..."
+  ],
+  "recommendations": [
+    {{
+      "issue": "What problem this addresses",
+      "action": "Specific action to take",
+      "threshold": "e.g., signal_score >= 70 (from 65)",
+      "expected_impact": "e.g., Reduce false signal rate by 10-15%",
+      "priority": "High/Medium/Low"
+    }}
+  ],
+  "learning_insights": [
+    "Insight 1: Pattern observed...",
+    "Insight 2: Condition discovered..."
+  ]
+}}
+
+# Important
+- Focus on patterns, not individual cases
+- Provide specific numbers for thresholds
+- Ensure insights are actionable for AI
+- Output must be valid JSON
+"""
+        
+        # 调用AI分析
+        print(f"[AI Entry Analysis] Calling DeepSeek AI for deep insights...")
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a professional quant trading analyst specialized in entry timing optimization. Always output valid JSON."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.3,  # 低温度保证稳定性
+            max_tokens=2000
+        )
+        
+        # 解析AI响应
+        ai_content = response.choices[0].message.content.strip()
+        
+        # 提取JSON（可能被markdown包裹）
+        if '```json' in ai_content:
+            ai_content = ai_content.split('```json')[1].split('```')[0].strip()
+        elif '```' in ai_content:
+            ai_content = ai_content.split('```')[1].split('```')[0].strip()
+        
+        ai_insights = json.loads(ai_content)
+        
+        # 添加时间戳
+        ai_insights['generated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        ai_insights['tokens_used'] = response.usage.total_tokens
+        ai_insights['cost_usd'] = response.usage.total_tokens * 0.0000014  # DeepSeek pricing
+        
+        print(f"[AI Entry Analysis] ✓ Generated {len(ai_insights.get('recommendations', []))} recommendations")
+        print(f"[AI Entry Analysis] ✓ Tokens: {ai_insights['tokens_used']}, Cost: ${ai_insights['cost_usd']:.6f}")
+        
+        return ai_insights
+        
+    except Exception as e:
+        print(f"[AI Entry Analysis] ⚠️ Failed: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # 降级返回空结构
+        return {
+            'diagnosis': f"AI analysis failed: {str(e)}",
+            'root_causes': [],
+            'recommendations': [],
+            'learning_insights': [],
+            'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'error': str(e)
+        }
+
+
+def generate_ai_exit_insights(exit_analysis, entry_analysis=None, market_context=None):
+    """
+    【V8.3.23】使用AI深度分析平仓质量并生成英文洞察
+    
+    Args:
+        exit_analysis: dict, 平仓分析结果（来自analyze_exit_timing）
+        entry_analysis: dict, 开仓分析结果（可选，用于关联分析）
+        market_context: dict, 市场环境数据（可选）
+    
+    Returns: 同generate_ai_entry_insights格式
+    """
+    try:
+        # 初始化OpenAI客户端
+        client = OpenAI(
+            api_key=os.getenv('DEEPSEEK_API_KEY'),
+            base_url="https://api.deepseek.com"
+        )
+        
+        # 压缩数据
+        exit_stats = exit_analysis['exit_stats']
+        
+        # 构建案例摘要
+        premature_exits_summary = []
+        for trade in exit_analysis.get('suboptimal_exits', [])[:5]:
+            premature_exits_summary.append({
+                'coin': trade.get('coin', 'N/A'),
+                'side': trade.get('side', 'N/A'),
+                'missed_profit_pct': trade.get('missed_profit_pct', 0),
+                'exit_type': trade.get('exit_type', 'N/A'),
+                'evaluation': trade.get('evaluation', 'N/A')
+            })
+        
+        good_exits_summary = []
+        for trade in exit_analysis.get('good_exits', [])[:3]:
+            good_exits_summary.append({
+                'coin': trade.get('coin', 'N/A'),
+                'evaluation': trade.get('evaluation', 'N/A')
+            })
+        
+        # 构建数据包
+        analysis_data = {
+            'exit_quality': {
+                'total_exits': exit_stats['total_exits'],
+                'tp_rate': exit_stats['tp_exits'] / max(exit_stats['total_exits'], 1) * 100,
+                'sl_rate': exit_stats['sl_exits'] / max(exit_stats['total_exits'], 1) * 100,
+                'premature_exits': exit_stats['premature_exits'],
+                'optimal_exits': exit_stats['optimal_exits'],
+                'avg_missed_profit_pct': exit_stats.get('avg_missed_profit_pct', 0)
+            },
+            'premature_cases': premature_exits_summary,
+            'good_cases': good_exits_summary,
+            'exit_lessons': exit_analysis.get('exit_lessons', [])
+        }
+        
+        # 构建AI prompt
+        prompt = f"""You are an expert quantitative trading analyst. Analyze the exit timing quality data and provide deep insights for AI self-learning.
+
+# Exit Quality Data
+```json
+{json.dumps(analysis_data, indent=2)}
+```
+
+# Your Task
+Perform deep analysis and generate insights that can be used by the AI trading system to improve future exit decisions.
+
+# Requirements
+1. **Diagnosis**: Identify the core issue with exit timing
+2. **Root Causes**: List 2-3 fundamental reasons for suboptimal exits
+3. **Recommendations**: Provide 3-5 actionable recommendations for:
+   - Take-profit strategy optimization
+   - Stop-loss adjustment
+   - Trailing stop implementation
+   - Risk-reward ratio refinement
+4. **Learning Insights**: Generate 3-5 key learnings for real-time AI reference
+
+# Output Format (JSON)
+{{
+  "diagnosis": "Brief summary of exit timing issues",
+  "root_causes": ["Cause 1", "Cause 2"],
+  "recommendations": [
+    {{
+      "issue": "Problem",
+      "action": "Solution",
+      "threshold": "Specific parameter adjustment",
+      "expected_impact": "Quantified improvement",
+      "priority": "High/Medium/Low"
+    }}
+  ],
+  "learning_insights": [
+    "Insight 1: Exit pattern observed...",
+    "Insight 2: Condition for optimal exit..."
+  ]
+}}
+
+# Important
+- Focus on systematic patterns
+- Provide specific threshold adjustments
+- Ensure insights are immediately actionable
+- Output valid JSON only
+"""
+        
+        # 调用AI分析
+        print(f"[AI Exit Analysis] Calling DeepSeek AI for deep insights...")
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a professional quant trading analyst specialized in exit timing optimization. Always output valid JSON."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.3,
+            max_tokens=2000
+        )
+        
+        # 解析AI响应
+        ai_content = response.choices[0].message.content.strip()
+        
+        # 提取JSON
+        if '```json' in ai_content:
+            ai_content = ai_content.split('```json')[1].split('```')[0].strip()
+        elif '```' in ai_content:
+            ai_content = ai_content.split('```')[1].split('```')[0].strip()
+        
+        ai_insights = json.loads(ai_content)
+        
+        # 添加元数据
+        ai_insights['generated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        ai_insights['tokens_used'] = response.usage.total_tokens
+        ai_insights['cost_usd'] = response.usage.total_tokens * 0.0000014
+        
+        print(f"[AI Exit Analysis] ✓ Generated {len(ai_insights.get('recommendations', []))} recommendations")
+        print(f"[AI Exit Analysis] ✓ Tokens: {ai_insights['tokens_used']}, Cost: ${ai_insights['cost_usd']:.6f}")
+        
+        return ai_insights
+        
+    except Exception as e:
+        print(f"[AI Exit Analysis] ⚠️ Failed: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        return {
+            'diagnosis': f"AI analysis failed: {str(e)}",
+            'root_causes': [],
+            'recommendations': [],
+            'learning_insights': [],
+            'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'error': str(e)
+        }
 

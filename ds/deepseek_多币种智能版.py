@@ -22,7 +22,12 @@ import re  # 🔧 V7.6.7: 用于AI响应解析
 from urllib.parse import urlencode
 
 # 🆕 V8.3.22: 导入开仓时机分析模块
-from entry_timing_analyzer import analyze_entry_timing
+# 🆕 V8.3.23: AI自主学习版
+from entry_timing_analyzer import (
+    analyze_entry_timing, 
+    generate_ai_entry_insights, 
+    generate_ai_exit_insights
+)
 
 # 🔧 明确指定 .env 文件路径
 _env_file = Path(__file__).parent / '.env'
@@ -7484,6 +7489,94 @@ def analyze_and_adjust_params():
                 print(f"⚠️ 昨日无开仓交易，跳过开仓时机分析")
             else:
                 print(f"⚠️ 缺少K线快照数据，跳过开仓时机分析")
+
+        # 🆕 V8.3.23: AI深度分析（开仓 + 平仓）
+        print("\n【AI深度学习分析】")
+        ai_entry_insights = None
+        ai_exit_insights = None
+        
+        # 条件触发：有数据 + (手动回测 OR 质量问题严重)
+        should_run_ai = (
+            entry_analysis is not None or exit_analysis is not None
+        ) and (
+            os.getenv('MANUAL_BACKTEST') == 'true' or  # 手动回测总是运行
+            (entry_analysis and entry_analysis['entry_stats']['false_entries'] / max(entry_analysis['entry_stats']['total_entries'], 1) > 0.15) or  # 虚假信号率>15%
+            (exit_analysis and exit_analysis['exit_stats']['premature_exits'] >= 3)  # 过早平仓>=3笔
+        )
+        
+        if should_run_ai:
+            try:
+                # AI分析开仓质量
+                if entry_analysis:
+                    print("  🤖 AI analyzing entry quality...")
+                    ai_entry_insights = generate_ai_entry_insights(
+                        entry_analysis, 
+                        exit_analysis
+                    )
+                    
+                    if ai_entry_insights and 'error' not in ai_entry_insights:
+                        print(f"  ✓ Entry Analysis: {ai_entry_insights['diagnosis']}")
+                        print(f"  ✓ Learning Insights: {len(ai_entry_insights.get('learning_insights', []))} generated")
+                        print(f"  ✓ Cost: ${ai_entry_insights.get('cost_usd', 0):.6f}")
+                
+                # AI分析平仓质量
+                if exit_analysis:
+                    print("  🤖 AI analyzing exit quality...")
+                    ai_exit_insights = generate_ai_exit_insights(
+                        exit_analysis,
+                        entry_analysis
+                    )
+                    
+                    if ai_exit_insights and 'error' not in ai_exit_insights:
+                        print(f"  ✓ Exit Analysis: {ai_exit_insights['diagnosis']}")
+                        print(f"  ✓ Learning Insights: {len(ai_exit_insights.get('learning_insights', []))} generated")
+                        print(f"  ✓ Cost: ${ai_exit_insights.get('cost_usd', 0):.6f}")
+                
+                # 保存AI洞察到compressed_insights（供实时AI参考）
+                if ai_entry_insights or ai_exit_insights:
+                    config = load_learning_config()
+                    if 'compressed_insights' not in config:
+                        config['compressed_insights'] = {}
+                    
+                    if ai_entry_insights and 'error' not in ai_entry_insights:
+                        config['compressed_insights']['ai_entry_analysis'] = {
+                            'diagnosis': ai_entry_insights['diagnosis'],
+                            'learning_insights': ai_entry_insights.get('learning_insights', []),
+                            'key_recommendations': [
+                                {
+                                    'action': r['action'],
+                                    'threshold': r['threshold'],
+                                    'priority': r['priority']
+                                }
+                                for r in ai_entry_insights.get('recommendations', [])[:3]  # TOP3
+                            ],
+                            'generated_at': ai_entry_insights['generated_at']
+                        }
+                    
+                    if ai_exit_insights and 'error' not in ai_exit_insights:
+                        config['compressed_insights']['ai_exit_analysis'] = {
+                            'diagnosis': ai_exit_insights['diagnosis'],
+                            'learning_insights': ai_exit_insights.get('learning_insights', []),
+                            'key_recommendations': [
+                                {
+                                    'action': r['action'],
+                                    'threshold': r['threshold'],
+                                    'priority': r['priority']
+                                }
+                                for r in ai_exit_insights.get('recommendations', [])[:3]
+                            ],
+                            'generated_at': ai_exit_insights['generated_at']
+                        }
+                    
+                    save_learning_config(config)
+                    print(f"  ✓ AI洞察已保存到learning_config.json")
+                    
+            except Exception as e:
+                print(f"  ⚠️ AI深度分析失败: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print(f"  ℹ️  跳过AI分析（质量良好或非手动回测）")
 
         # ========== 第2步：多轮迭代参数优化 (V7.6.3.3) ==========
         print("\n【第2步：多轮迭代参数优化】")
