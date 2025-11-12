@@ -21,6 +21,9 @@ from typing import Dict, List, Any, Optional
 import re  # 🔧 V7.6.7: 用于AI响应解析
 from urllib.parse import urlencode
 
+# 🆕 V8.3.22: 导入开仓时机分析模块
+from entry_timing_analyzer import analyze_entry_timing
+
 # 🔧 明确指定 .env.qwen 文件路径
 _env_file = Path(__file__).parent / '.env.qwen'
 if not _env_file.exists():
@@ -7431,6 +7434,57 @@ def analyze_and_adjust_params():
             else:
                 print(f"⚠️ 缺少K线快照数据，跳过平仓时机分析")
 
+        # 🆕 V8.3.22: 开仓时机分析
+        print("\n【开仓时机分析】")
+        entry_analysis = None
+        if not yesterday_opened_trades.empty and kline_snapshots is not None:
+            try:
+                entry_analysis = analyze_entry_timing(
+                    yesterday_opened_trades, 
+                    kline_snapshots, 
+                    missed_opportunities if 'missed_opportunities' in locals() else []
+                )
+                stats = entry_analysis['entry_stats']
+                
+                print(f"✓ 分析{stats['total_entries']}笔开仓交易")
+                print(f"  • 虚假信号开仓: {stats['false_entries']}笔 ({stats['false_entries']/stats['total_entries']*100:.0f}%)")
+                print(f"  • 延迟开仓: {stats['delayed_entries']}笔 ({stats['delayed_entries']/stats['total_entries']*100:.0f}%)")
+                print(f"  • 过早开仓: {stats['premature_entries']}笔 ({stats['premature_entries']/stats['total_entries']*100:.0f}%)")
+                print(f"  • 最优开仓: {stats['optimal_entries']}笔 ({stats['optimal_entries']/stats['total_entries']*100:.0f}%)")
+                
+                # 打印关键案例
+                if entry_analysis['false_entries']:
+                    print(f"\n  📌 虚假信号案例（TOP3）:")
+                    for entry in entry_analysis['false_entries'][:3]:
+                        print(f"     {entry['coin']} {entry['side']}单: {entry['issue']} | {entry['lesson'][:40]}")
+                
+                if entry_analysis['delayed_entries']:
+                    print(f"\n  📌 延迟开仓案例（TOP3）:")
+                    for entry in entry_analysis['delayed_entries'][:3]:
+                        print(f"     {entry['coin']} {entry['side']}单: {entry['issue']}")
+                
+                if entry_analysis['premature_entries']:
+                    print(f"\n  📌 过早开仓案例（TOP3）:")
+                    for entry in entry_analysis['premature_entries'][:3]:
+                        print(f"     {entry['coin']} {entry['side']}单: {entry['issue']}")
+                
+                # 打印改进建议
+                if entry_analysis['entry_lessons']:
+                    print(f"\n  💡 开仓改进建议:")
+                    for lesson in entry_analysis['entry_lessons']:
+                        print(f"     • {lesson}")
+                
+            except Exception as e:
+                print(f"⚠️ 开仓时机分析失败: {e}")
+                import traceback
+                traceback.print_exc()
+                entry_analysis = None
+        else:
+            if yesterday_opened_trades.empty:
+                print(f"⚠️ 昨日无开仓交易，跳过开仓时机分析")
+            else:
+                print(f"⚠️ 缺少K线快照数据，跳过开仓时机分析")
+
         # ========== 第2步：多轮迭代参数优化 (V7.6.3.3) ==========
         print("\n【第2步：多轮迭代参数优化】")
         
@@ -9035,6 +9089,89 @@ def analyze_and_adjust_params():
     <h2>📊 详细交易数据</h2>
     <pre>{data_summary}</pre>
 """
+                
+                # 🆕 V8.3.22: 构建开仓时机分析HTML块
+                entry_timing_html = ""
+                if entry_analysis:
+                    false_entries = entry_analysis['entry_stats']['false_entries']
+                    delayed_entries = entry_analysis['entry_stats']['delayed_entries']
+                    premature_entries = entry_analysis['entry_stats']['premature_entries']
+                    optimal_entries = entry_analysis['entry_stats']['optimal_entries']
+                    total_entries = max(entry_analysis['entry_stats']['total_entries'], 1)
+                    
+                    false_pct = (false_entries / total_entries * 100)
+                    delayed_pct = (delayed_entries / total_entries * 100)
+                    premature_pct = (premature_entries / total_entries * 100)
+                    optimal_pct = (optimal_entries / total_entries * 100)
+                    
+                    # 定义颜色
+                    false_class = 'danger' if false_pct > 30 else 'warning' if false_pct > 15 else 'success'
+                    delayed_class = 'danger' if delayed_pct > 30 else 'warning' if delayed_pct > 15 else 'success'
+                    premature_class = 'danger' if premature_pct > 30 else 'warning' if premature_pct > 15 else 'success'
+                    
+                    entry_timing_html = """
+    <div class="summary-box" style="background: #e3f2fd;">
+    <h2>🚪 开仓时机分析（昨日）</h2>
+        <table style="width:100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9em;">
+            <tr style="background: #bbdefb;">
+                <th style="padding: 8px; text-align: center; border: 1px solid #64b5f6;">开仓类型</th>
+                <th style="padding: 8px; text-align: center; border: 1px solid #64b5f6;">数量</th>
+                <th style="padding: 8px; text-align: center; border: 1px solid #64b5f6;">占比</th>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #e0e0e0;">虚假信号开仓</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;">{false_entries}笔</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;"><span class="{false_class}">{false_pct:.0f}%</span></td>
+            </tr>
+            <tr style="background: #f5f5f5;">
+                <td style="padding: 8px; border: 1px solid #e0e0e0;">延迟开仓</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;">{delayed_entries}笔</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;"><span class="{delayed_class}">{delayed_pct:.0f}%</span></td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #e0e0e0;">过早开仓</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;">{premature_entries}笔</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;"><span class="{premature_class}">{premature_pct:.0f}%</span></td>
+            </tr>
+            <tr style="background: #e8f5e9;">
+                <td style="padding: 8px; border: 1px solid #e0e0e0;"><strong>最优开仓</strong></td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;"><strong>{optimal_entries}笔</strong></td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;"><strong><span class="success">{optimal_pct:.0f}%</span></strong></td>
+            </tr>
+        </table>
+        
+        <div style="margin-top: 15px;">
+            <p><strong>💡 开仓改进建议：</strong></p>
+            <ul>
+""".format(
+                        false_entries=false_entries, delayed_entries=delayed_entries,
+                        premature_entries=premature_entries, optimal_entries=optimal_entries,
+                        false_pct=false_pct, delayed_pct=delayed_pct, premature_pct=premature_pct, optimal_pct=optimal_pct,
+                        false_class=false_class, delayed_class=delayed_class, premature_class=premature_class
+                    )
+                    
+                    # 添加改进建议
+                    if entry_analysis.get('entry_lessons'):
+                        for lesson in entry_analysis['entry_lessons']:
+                            entry_timing_html += f'                <li>{lesson}</li>\n'
+                    else:
+                        entry_timing_html += '                <li>当前开仓质量良好，无需调整</li>\n'
+                    
+                    entry_timing_html += """
+            </ul>
+        </div>
+    </div>
+"""
+                else:
+                    entry_timing_html = """
+    <div class="summary-box" style="background: #f5f5f5;">
+        <h2>🚪 开仓时机分析（昨日）</h2>
+        <p style="color: #999;">⚠️ 昨日无开仓交易，跳过开仓时机分析</p>
+    </div>
+    """
+                
+                # 将开仓分析添加到邮件body
+                email_body_parts.insert(5, entry_timing_html)  # 在learning_insights之后插入
                 
                 # 拼接footer前的AI优化统计
                 optimizer_report_html = ai_optimizer.get_daily_report_html()
