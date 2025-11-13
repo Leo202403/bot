@@ -163,16 +163,21 @@ def analyze_entry_timing_v2(
         entry_stats['ai_opened'] = len(yesterday_trades_df)
         print(f"  ✓ 昨日AI实际开仓 {entry_stats['ai_opened']} 笔")
         
-        # 🔧 V8.3.25.12: 添加调试信息（打印前3笔交易数据）
+        # 🔧 V8.3.25.12: 添加调试信息（打印前3笔交易数据 + AI决策理由）
         if len(yesterday_trades_df) > 0:
-            print(f"\n  🔍 调试：前3笔交易数据样本")
+            print(f"\n  🔍 调试：前3笔交易数据样本（含AI决策）")
             for idx_debug, trade_debug in yesterday_trades_df.head(3).iterrows():
                 # 🔧 V8.3.25.12: 尝试多个字段名
                 pnl_debug = trade_debug.get('盈亏(U)', trade_debug.get('盈亏', trade_debug.get('PnL', trade_debug.get('实际盈亏'))))
+                open_reason_debug = trade_debug.get('开仓理由', 'N/A')
+                close_reason_debug = trade_debug.get('平仓理由', 'N/A')
+                
                 print(f"     [{idx_debug}] 币种: {trade_debug.get('币种')}")
                 print(f"         开仓时间: {trade_debug.get('开仓时间')}")
                 print(f"         平仓时间: '{trade_debug.get('平仓时间')}' (type: {type(trade_debug.get('平仓时间')).__name__}, isna: {pd.isna(trade_debug.get('平仓时间'))})")
                 print(f"         盈亏(U): {pnl_debug} (type: {type(pnl_debug).__name__})")
+                print(f"         📝 开仓理由: {open_reason_debug[:100] if open_reason_debug != 'N/A' else 'N/A'}...")
+                print(f"         🔒 平仓理由: {close_reason_debug[:100] if close_reason_debug != 'N/A' else 'N/A'}...")
                 print()
         
         # ===== Step 3: 对比分析每个机会点 =====
