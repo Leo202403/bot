@@ -427,12 +427,12 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
             api_key = deepseek_key.strip()
             base_url = "https://api.deepseek.com"
             model_type = "DeepSeek"
-            model_name = "deepseek-chat"  # 🔧 V8.3.25.5: 使用主文件相同的模型（deepseek-reasoner太贵，chat足够）
+            model_name = "deepseek-reasoner"  # 🔧 V8.3.25.5: 使用主文件相同的模型（deepseek-reasoner太贵，chat足够）
         elif qwen_key:
             api_key = qwen_key.strip()
             base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
             model_type = "Qwen"
-            model_name = "qwen-max"  # 🔧 V8.3.25.5: 使用Qwen的最强模型
+            model_name = "qwen3-max"  # 🔧 V8.3.25.5: 使用Qwen的最强模型
         else:
             raise ValueError("未找到API密钥：请设置 DEEPSEEK_API_KEY 或 QWEN_API_KEY 环境变量")
         
@@ -838,12 +838,12 @@ def generate_ai_exit_insights(exit_analysis, entry_analysis=None, market_context
             api_key = deepseek_key.strip()
             base_url = "https://api.deepseek.com"
             model_type = "DeepSeek"
-            model_name = "deepseek-chat"  # 🔧 V8.3.25.5: 使用deepseek-chat（成本更低，效果足够）
+            model_name = "deepseek-reasoner"  # 🔧 V8.3.25.5: 使用deepseek-reasoner（成本更低，效果足够）
         elif qwen_key:
             api_key = qwen_key.strip()
             base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
             model_type = "Qwen"
-            model_name = "qwen-max"  # 🔧 V8.3.25.5: 使用Qwen的最强模型
+            model_name = "qwen3-max"  # 🔧 V8.3.25.5: 使用Qwen的最强模型
         else:
             raise ValueError("未找到API密钥：请设置 DEEPSEEK_API_KEY 或 QWEN_API_KEY 环境变量")
         

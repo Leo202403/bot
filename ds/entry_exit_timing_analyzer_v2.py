@@ -122,6 +122,20 @@ def analyze_entry_timing_v2(
     entry_stats['total_opportunities'] = len(yesterday_snapshots)
     print(f"  ✓ 昨日识别到 {entry_stats['total_opportunities']} 个机会点")
     
+    # 🔧 V8.3.25.12: 打印AI决策数据摘要
+    if ai_decisions_list:
+        print(f"  🤖 【AI决策数据】加载了 {len(ai_decisions_list)} 条决策记录")
+        if len(ai_decisions_list) > 0:
+            first_decision = ai_decisions_list[0]
+            print(f"      第一条决策时间: {first_decision.get('timestamp', 'N/A')}")
+            print(f"      包含操作数: {len(first_decision.get('actions', []))}")
+            if first_decision.get('actions'):
+                first_action = first_decision['actions'][0]
+                print(f"      样例: {first_action.get('coin', 'N/A')} - {first_action.get('operation', 'N/A')}")
+                print(f"            理由: {first_action.get('reason', 'N/A')[:80]}...")
+    else:
+        print(f"  ⚠️  【AI决策数据】未传入ai_decisions_list，错过机会的AI分析将不可用")
+    
     # 🔧 V8.3.25.12: 调试快照数据
     if len(yesterday_snapshots) > 0:
         first_snapshot = yesterday_snapshots.iloc[0]

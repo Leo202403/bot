@@ -7456,7 +7456,8 @@ def analyze_and_adjust_params():
                 else:
                     print("✓ 所有重要机会都已把握")
             except Exception as e:
-                print(f"⚠️ 错过机会分析失败: {e}")
+                # 🔧 V8.3.25.12: 旧的错过机会分析已弃用，跳过错误
+                print(f"ℹ️  跳过旧版错过机会分析（已由V2模块替代）")
 
         # 🆕 V7.7.0.15: 平仓时机分析
         # 🔧 V8.3.25.8: 使用新的V2分析（完整的市场对比）
@@ -19763,7 +19764,7 @@ Respond in JSON format ONLY:
             "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
             headers={"Authorization": f"Bearer {qwen_api_key}"},
             json={
-                "model": "qwen-plus",
+                "model": "qwen3-max",
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.3,
                 "max_tokens": 2000
@@ -21095,13 +21096,29 @@ def analyze_missed_opportunities(trends, actual_trades, config):
     for trend in trends:
         coin = trend['coin']
         
-        # 🔧 V8.3.25.3: 修复类型错误 - 确保时间统一格式
+        # 🔧 V8.3.25.12: 修复时间格式问题（start_time现在是"HH:MM"格式）
         # 检查是否在这个趋势中开仓了
-        opened = any(
-            t.get('币种') == coin and 
-            int(trend['start_time']) <= int(pd.to_datetime(t.get('开仓时间', ''), errors='coerce').strftime('%H%M') if t.get('开仓时间') else '0000') <= int(trend['end_time'])
-            for t in actual_trades
-                )
+        try:
+            # 尝试将start_time/end_time转换为可比较的格式
+            # 如果是"HH:MM"格式，转为HHMM整数；如果已经是整数，直接使用
+            if isinstance(trend['start_time'], str) and ':' in trend['start_time']:
+                start_time_int = int(trend['start_time'].replace(':', ''))
+            else:
+                start_time_int = int(trend['start_time'])
+            
+            if isinstance(trend['end_time'], str) and ':' in trend['end_time']:
+                end_time_int = int(trend['end_time'].replace(':', ''))
+            else:
+                end_time_int = int(trend['end_time'])
+            
+            opened = any(
+                t.get('币种') == coin and 
+                start_time_int <= int(pd.to_datetime(t.get('开仓时间', ''), errors='coerce').strftime('%H%M') if t.get('开仓时间') else '0000') <= end_time_int
+                for t in actual_trades
+            )
+        except (ValueError, TypeError):
+            # 时间格式转换失败，跳过此趋势
+            continue
         
         if not opened:
             # 错过了这个机会
