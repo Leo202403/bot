@@ -51,10 +51,10 @@ AI_AGGRESSIVENESS_DYNAMIC = True        # 动态AI激进度（根据Time Exit率
 
 def extract_json_from_ai_response(ai_content: str) -> dict:
     """
-    从AI响应中提取JSON对象（鲁棒版本，支持DeepSeek Reasoner）
+    从AI响应中提取JSON对象（鲁棒版本）
     
     尝试顺序：
-    1. 跳过DeepSeek Reasoner的推理标签 (<think>...</think>)
+    1. 清理特殊标签（兼容性处理）
     2. 提取Markdown代码块中的JSON (```json ... ```)
     3. 提取第一个完整的JSON对象（非贪婪匹配）
     4. 尝试解析整个内容为JSON
@@ -70,8 +70,8 @@ def extract_json_from_ai_response(ai_content: str) -> dict:
     """
     ai_content = ai_content.strip()
     
-    # 方法0: 移除DeepSeek Reasoner的推理标签（如果存在）
-    # DeepSeek Reasoner可能返回：<think>推理过程</think>\n{JSON}
+    # 方法0: 移除特殊标签（兼容性处理）
+    # 某些模型可能返回：<think>推理过程</think>\n{JSON}
     think_match = re.search(r'<think>.*?</think>\s*', ai_content, re.DOTALL)
     if think_match:
         ai_content = ai_content[think_match.end():].strip()
@@ -339,7 +339,7 @@ class AICallOptimizer:
         time_passed = (datetime.now() - self.last_portfolio_call_time).seconds // 60 if self.last_portfolio_call_time else 0
         
         # 记录详情 + 估算节省成本
-        cost_per_call = 0.014  # DeepSeek API平均成本（元/次，reasoner模式约0.01-0.02）
+        cost_per_call = 0.020  # Qwen API平均成本（元/次，qwen3-max约0.015-0.025）
         self.daily_details['saved_cost_estimate'] += cost_per_call
         self.daily_details['skip_reasons'].append({
             'time': datetime.now().strftime('%H:%M:%S'),
@@ -388,7 +388,7 @@ class AICallOptimizer:
             'api_calls': self.call_stats['forced'] + (self.call_stats['total'] - self.call_stats['saved'] - self.call_stats['forced']),
             'calls_saved': self.call_stats['saved'],
             'save_rate': f"{saved_rate:.1f}%",
-            'cost_reduction': f"约{saved_rate * 0.8:.0f}%",  # 考虑DeepSeek自身缓存
+            'cost_reduction': f"约{saved_rate * 0.8:.0f}%",  # 考虑Qwen自身缓存
         }
     
     def reset_stats(self):
@@ -4929,7 +4929,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
                     model="qwen3-max",
                     messages=[{"role": "user", "content": ai_prompt}],
                     temperature=0.7,
-                    max_tokens=4000  # 🔧 V7.7.0.12: 增加到4000，避免JSON被截断
+                    max_tokens=2000  # 🔧 Qwen限制：最大2000，避免超限
                 )
                 
                 ai_content = response.choices[0].message.content.strip()
@@ -5495,7 +5495,7 @@ JSON (4 test points):
             model="qwen3-max",
             messages=[{"role": "user", "content": ai_fine_tune_prompt}],
             temperature=0.3,
-            max_tokens=8000  # 🔧 V7.7.0.14: 增至8000（充分放宽，避免截断）
+            max_tokens=2000  # 🔧 Qwen限制：最大2000
         )
         
         ai_content = response.choices[0].message.content.strip()
@@ -12737,7 +12737,7 @@ Output JSON only:
         response = qwen_client.chat.completions.create(
             model="qwen3-max",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=2000,  # 增加token限制，为reasoner思考过程预留空间
+            max_tokens=2000,  # Qwen标准输出限制
             temperature=0.3
         )
         
@@ -13875,7 +13875,7 @@ Your core principles:
                 {"role": "user", "content": prompt},
             ],
             stream=False,
-            max_tokens=16000,  # 🔧 从8K提升到16K，避免JSON被截断
+            max_tokens=2000,  # 🔧 Qwen限制：最大2000
         )
         
         result = response.choices[0].message.content
