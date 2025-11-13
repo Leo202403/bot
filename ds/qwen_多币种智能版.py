@@ -6124,11 +6124,11 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     # R:R维度
                     rr_precision = precision_data['by_rr'].get(min_rr, 0)
                     if rr_precision == 0:
-                        # R:R的键可能是浮点数，需要类型转换
+                        # R:R的键也是字符串，需要转换
                         available_rrs = sorted([float(k) for k in precision_data['by_rr'].keys() if float(k) <= min_rr])
                         if available_rrs:
-                            # 使用原始类型键查找
-                            rr_precision = precision_data['by_rr'][available_rrs[-1]]
+                            # 使用字符串键查找（JSON序列化后所有键都是字符串）
+                            rr_precision = precision_data['by_rr'][str(available_rrs[-1])]
                         else:
                             rr_precision = 1.0
                     
