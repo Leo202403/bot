@@ -144,10 +144,12 @@ def analyze_entry_timing_v2(
         if len(yesterday_trades_df) > 0:
             print(f"\n  🔍 调试：前3笔交易数据样本")
             for idx_debug, trade_debug in yesterday_trades_df.head(3).iterrows():
+                # 🔧 V8.3.25.12: 尝试多个字段名
+                pnl_debug = trade_debug.get('盈亏(U)', trade_debug.get('盈亏', trade_debug.get('PnL', trade_debug.get('实际盈亏'))))
                 print(f"     [{idx_debug}] 币种: {trade_debug.get('币种')}")
                 print(f"         开仓时间: {trade_debug.get('开仓时间')}")
                 print(f"         平仓时间: '{trade_debug.get('平仓时间')}' (type: {type(trade_debug.get('平仓时间')).__name__}, isna: {pd.isna(trade_debug.get('平仓时间'))})")
-                print(f"         盈亏: {trade_debug.get('盈亏')} (type: {type(trade_debug.get('盈亏')).__name__})")
+                print(f"         盈亏(U): {pnl_debug} (type: {type(pnl_debug).__name__})")
                 print()
         
         # ===== Step 3: 对比分析每个机会点 =====
@@ -199,8 +201,8 @@ def analyze_entry_timing_v2(
             else:
                 # 情况2: AI开仓了
                 trade = matching_trades.iloc[0]
-                # 🔧 V8.3.25.12: 兼容多种字段名（盈亏/PnL/实际盈亏）+ 处理None
-                pnl_raw = trade.get('盈亏', trade.get('PnL', trade.get('实际盈亏')))
+                # 🔧 V8.3.25.12: 兼容多种字段名（盈亏(U)/盈亏/PnL/实际盈亏）+ 处理None
+                pnl_raw = trade.get('盈亏(U)', trade.get('盈亏', trade.get('PnL', trade.get('实际盈亏'))))
                 # 🔧 V8.3.25.12: 处理None/NaN/空值，默认为0
                 if pnl_raw is None or pd.isna(pnl_raw):
                     pnl = 0
