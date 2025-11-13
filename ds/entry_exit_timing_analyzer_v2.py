@@ -150,11 +150,19 @@ def analyze_entry_timing_v2(
         if len(ai_decisions_list) > 0:
             first_decision = ai_decisions_list[0]
             print(f"      第一条决策时间: {first_decision.get('timestamp', 'N/A')}")
-            print(f"      包含操作数: {len(first_decision.get('actions', []))}")
-            if first_decision.get('actions'):
-                first_action = first_decision['actions'][0]
-                print(f"      样例: {first_action.get('coin', 'N/A')} - {first_action.get('operation', 'N/A')}")
-                print(f"            理由: {first_action.get('reason', 'N/A')[:80]}...")
+            
+            # 🔧 V8.3.32: 兼容新旧字段名
+            actions = first_decision.get('actions') or first_decision.get('operations', [])
+            print(f"      包含操作数: {len(actions)}")
+            
+            if actions:
+                first_action = actions[0]
+                coin_display = first_action.get('coin', first_action.get('symbol', 'N/A'))
+                operation_display = first_action.get('operation', first_action.get('action', 'N/A'))
+                reason = first_action.get('reason', 'N/A')
+                
+                print(f"      样例: {coin_display} - {operation_display}")
+                print(f"            理由: {reason[:80]}...")
     else:
         print(f"  ⚠️  【AI决策数据】未传入ai_decisions_list，错过机会的AI分析将不可用")
     
@@ -233,22 +241,54 @@ def analyze_entry_timing_v2(
                     # AI没开仓 → 错过的机会
                     # 查找AI当时的决策理由
                     ai_reason = "未找到AI决策记录"
+                    
+                    # 🔧 V8.3.32: 添加调试输出
+                    if False:  # 设置为True时启用调试
+                        print(f"  🔍 【调试AI匹配】错过的机会")
+                        print(f"     币种: {coin}")
+                        print(f"     机会时间: {timestamp_str}")
+                        print(f"     机会时间解析: {opp_time_dt}")
+                        print(f"     AI决策数: {len(ai_decisions_list) if ai_decisions_list else 0}")
+                        if ai_decisions_list and len(ai_decisions_list) > 0:
+                            first_dec = ai_decisions_list[0]
+                            print(f"     第一条AI决策时间: {first_dec.get('timestamp', 'N/A')}")
+                            print(f"     第一条AI决策actions数: {len(first_dec.get('actions', []))}")
+                    
                     if ai_decisions_list:
                         for decision in ai_decisions_list:
                             decision_time_str = decision.get('timestamp', '')
                             if decision_time_str:
                                 try:
                                     decision_time = pd.to_datetime(decision_time_str)
-                                    if abs((decision_time - opp_time_dt).total_seconds()) < 600:  # 10分钟内
-                                        # 找到最接近的决策
-                                        operations = decision.get('operations', [])
+                                    time_diff_seconds = abs((decision_time - opp_time_dt).total_seconds())
+                                    
+                                    if time_diff_seconds < 600:  # 10分钟内
+                                        # 🔧 V8.3.32: 兼容新旧字段名
+                                        # 旧版：operations, 新版：actions
+                                        operations = decision.get('operations') or decision.get('actions', [])
+                                        
                                         if operations:
-                                            op = operations[0]
-                                            ai_reason = op.get('reason', '未记录理由')
+                                            # 查找匹配币种的决策
+                                            matched_op = None
+                                            for op in operations:
+                                                op_coin = op.get('coin', '') or op.get('symbol', '')
+                                                # 标准化币种名称（BNB, BNBUSDT, BNB/USDT:USDT都匹配）
+                                                if coin in op_coin or op_coin in coin:
+                                                    matched_op = op
+                                                    break
+                                            
+                                            if matched_op:
+                                                ai_reason = matched_op.get('reason', '未记录理由')
+                                                break
+                                            else:
+                                                # 没有匹配币种，但有决策（可能是其他币种）
+                                                ai_reason = f"未针对{coin}的决策（{time_diff_seconds/60:.1f}分钟内有其他决策）"
                                         else:
                                             ai_reason = decision.get('summary_reason', '未记录理由')
                                         break
-                                except:
+                                except Exception as e:
+                                    if False:  # 调试模式
+                                        print(f"     ⚠️ 解析AI决策时间失败: {e}")
                                     continue
                     
                     missed_opportunities.append({
