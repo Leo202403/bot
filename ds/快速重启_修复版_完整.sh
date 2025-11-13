@@ -127,6 +127,7 @@ run_backtest() {
     
     cd "$BOT_DIR"
     
+    # 🔧 V8.3.25.9: 修复回测命令 - 使用环境变量MANUAL_BACKTEST=true
     if [ -z "$model" ]; then
         # 回测所有模型
         echo -e "${BLUE}  ℹ️  🔬 手动回测所有模型...${NC}\n"
@@ -134,17 +135,19 @@ run_backtest() {
         echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo -e "${BLUE}回测模型1: Qwen${NC}"
         echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-        python3 qwen_多币种智能版.py --backtest
+        MANUAL_BACKTEST=true python3 qwen_多币种智能版.py
         
         echo -e "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo -e "${BLUE}回测模型2: DeepSeek${NC}"
         echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-        python3 deepseek_多币种智能版.py --backtest
+        MANUAL_BACKTEST=true python3 deepseek_多币种智能版.py
         
     elif [ "$model" == "deepseek" ]; then
-        python3 deepseek_多币种智能版.py --backtest
+        echo -e "${BLUE}  ℹ️  🔬 手动回测DeepSeek...${NC}\n"
+        MANUAL_BACKTEST=true python3 deepseek_多币种智能版.py
     elif [ "$model" == "qwen" ]; then
-        python3 qwen_多币种智能版.py --backtest
+        echo -e "${BLUE}  ℹ️  🔬 手动回测Qwen...${NC}\n"
+        MANUAL_BACKTEST=true python3 qwen_多币种智能版.py
     fi
     
     echo -e "\n${GREEN}✅ 回测完成${NC}"
