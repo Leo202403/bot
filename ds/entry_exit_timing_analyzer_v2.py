@@ -607,11 +607,20 @@ def analyze_entry_timing_v2(
     print(f"  🔍 【调试】共匹配到 {matched_trades_count} 笔交易与market snapshot关联")
     print(f"  🔍 【调试】昨日交易总数: {len(yesterday_trades_df)} 笔")
     
+    # 🔧 V8.3.25.20: 限制错过机会数量，只保留利润最高的TOP 30，避免AI信息过载
+    if len(missed_opportunities) > 30:
+        missed_opportunities_sorted = sorted(missed_opportunities, key=lambda x: x.get('potential_profit', 0), reverse=True)
+        missed_opportunities_top30 = missed_opportunities_sorted[:30]
+        print(f"  ℹ️  【优化】错过机会过多({len(missed_opportunities)}个)，只保留TOP 30用于AI分析")
+        missed_opportunities_for_ai = missed_opportunities_top30
+    else:
+        missed_opportunities_for_ai = missed_opportunities
+    
     return {
         'entry_stats': entry_stats,
         'correct_entries': correct_entries,
         'false_entries': false_entries,
-        'missed_opportunities': missed_opportunities,
+        'missed_opportunities': missed_opportunities_for_ai,  # 🔧 V8.3.25.20: 传递筛选后的TOP 30
         'timing_issues': timing_issues,
         'entry_table_data': entry_table_data,
         'entry_lessons': entry_lessons
