@@ -140,6 +140,16 @@ def analyze_entry_timing_v2(
         entry_stats['ai_opened'] = len(yesterday_trades_df)
         print(f"  ✓ 昨日AI实际开仓 {entry_stats['ai_opened']} 笔")
         
+        # 🔧 V8.3.25.12: 添加调试信息（打印前3笔交易数据）
+        if len(yesterday_trades_df) > 0:
+            print(f"\n  🔍 调试：前3笔交易数据样本")
+            for idx_debug, trade_debug in yesterday_trades_df.head(3).iterrows():
+                print(f"     [{idx_debug}] 币种: {trade_debug.get('币种')}")
+                print(f"         开仓时间: {trade_debug.get('开仓时间')}")
+                print(f"         平仓时间: '{trade_debug.get('平仓时间')}' (type: {type(trade_debug.get('平仓时间')).__name__}, isna: {pd.isna(trade_debug.get('平仓时间'))})")
+                print(f"         盈亏: {trade_debug.get('盈亏')} (type: {type(trade_debug.get('盈亏')).__name__})")
+                print()
+        
         # ===== Step 3: 对比分析每个机会点 =====
         for idx, snapshot in yesterday_snapshots.iterrows():
             coin = snapshot.get('coin', '')
@@ -192,7 +202,25 @@ def analyze_entry_timing_v2(
                 # 🔧 V8.3.25.11: 兼容多种字段名（盈亏/PnL/实际盈亏）
                 pnl = trade.get('盈亏', trade.get('PnL', trade.get('实际盈亏', 0)))
                 exit_reason = trade.get('平仓原因', trade.get('平仓类型', ''))
-                is_closed = not pd.isna(trade.get('平仓时间'))
+                
+                # 🔧 V8.3.25.12: 增强is_closed判断，处理空字符串和NaN
+                exit_time_value = trade.get('平仓时间')
+                exit_price_value = trade.get('平仓价格', 0)
+                is_closed = (
+                    not pd.isna(exit_time_value) and
+                    exit_time_value != '' and
+                    exit_time_value != 'N/A' and
+                    str(exit_time_value).strip() != '' and
+                    exit_price_value > 0  # 额外检查：平仓价格必须>0
+                )
+                
+                # 🔧 V8.3.25.12: 调试输出（仅前3笔）
+                if entry_stats['ai_opened'] <= 3:
+                    print(f"     🔍 [{coin}] is_closed判断:")
+                    print(f"        平仓时间: '{exit_time_value}' (isna: {pd.isna(exit_time_value)})")
+                    print(f"        平仓价格: {exit_price_value}")
+                    print(f"        盈亏: {pnl}")
+                    print(f"        结果: is_closed={is_closed}")
                 
                 # 🔧 V8.3.25.12: 如果交易还未平仓，标记为"进行中"
                 if not is_closed:
