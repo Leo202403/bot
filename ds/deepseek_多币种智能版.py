@@ -7214,23 +7214,53 @@ def analyze_and_adjust_params():
         snapshot_file = snapshot_dir / f"{date_str}.csv"
         if snapshot_file.exists():
             try:
-                df = pd.read_csv(snapshot_file, on_bad_lines='skip', quoting=1, encoding='utf-8-sig')
+                df = pd.read_csv(snapshot_file, on_bad_lines='skip', quoting=1, encoding='utf-8-sig', dtype={'time': str})
                 # 🔧 V8.3.25.8: 添加日期列（从文件名提取），便于后续筛选昨日数据
                 df['snapshot_date'] = date_str  # 格式：YYYYMMDD
-                # 🔧 V8.3.25.8: 构建完整时间戳（结合文件名日期和time列）
+                # 🔧 V8.3.25.12: 构建完整时间戳（修复time列被读为整数的问题）
                 if 'time' in df.columns:
-                    df['full_datetime'] = pd.to_datetime(date_str + ' ' + df['time'].astype(str), format='%Y%m%d %H:%M', errors='coerce')
+                    # 先将time列转为字符串，并确保HH:MM格式
+                    def format_time_str(t):
+                        if pd.isna(t):
+                            return None
+                        t_str = str(t).strip()
+                        # 如果是纯数字（如"0"），格式化为"00:00"
+                        if t_str.isdigit():
+                            hour = int(t_str) // 100
+                            minute = int(t_str) % 100
+                            return f"{hour:02d}:{minute:02d}"
+                        # 如果已经是"HH:MM"格式，直接返回
+                        elif ':' in t_str:
+                            return t_str
+                        # 如果是"HHMM"格式（无冒号），插入冒号
+                        elif len(t_str) == 4:
+                            return f"{t_str[:2]}:{t_str[2:]}"
+                        # 如果是"HMM"或"H:MM"等，补齐
+                        else:
+                            try:
+                                # 尝试解析为整数再格式化
+                                t_int = int(t_str)
+                                hour = t_int // 100
+                                minute = t_int % 100
+                                return f"{hour:02d}:{minute:02d}"
+                            except:
+                                return t_str
+                    
+                    df['time'] = df['time'].apply(format_time_str)
+                    df['full_datetime'] = pd.to_datetime(date_str + ' ' + df['time'], format='%Y%m%d %H:%M', errors='coerce')
                 dataframes_to_merge.append(df)
                 days_loaded += 1
                 print(f"✓ 读取{date_str}市场快照: {len(df)}条 (第{days_loaded}天)")
             except Exception as e:
                 print(f"⚠️ 读取{date_str}快照失败: {e}")
                 try:
-                    df = pd.read_csv(snapshot_file, on_bad_lines='skip', encoding='utf-8-sig')
+                    df = pd.read_csv(snapshot_file, on_bad_lines='skip', encoding='utf-8-sig', dtype={'time': str})
                     # 🔧 V8.3.25.8: 备用方式也添加日期列
                     df['snapshot_date'] = date_str
+                    # 🔧 V8.3.25.12: 备用方式也格式化time列
                     if 'time' in df.columns:
-                        df['full_datetime'] = pd.to_datetime(date_str + ' ' + df['time'].astype(str), format='%Y%m%d %H:%M', errors='coerce')
+                        df['time'] = df['time'].apply(format_time_str)
+                        df['full_datetime'] = pd.to_datetime(date_str + ' ' + df['time'], format='%Y%m%d %H:%M', errors='coerce')
                     dataframes_to_merge.append(df)
                     days_loaded += 1
                     print(f"✓ 使用备用方式读取{date_str}: {len(df)}条 (第{days_loaded}天)")
