@@ -6,7 +6,7 @@ from openai import OpenAI
 import ccxt
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from dotenv import load_dotenv
 import requests
