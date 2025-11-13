@@ -776,7 +776,7 @@ Perform deep self-critical analysis:
                 }
             ],
             temperature=0.3,  # 低温度保证稳定性
-            max_tokens=2000
+            max_tokens=4000  # 🔧 V8.3.25.21: DeepSeek reasoner需要更多tokens（思考过程长）
         )
         
         # 解析AI响应
@@ -1025,7 +1025,7 @@ Perform deep analysis and generate insights that can be used by the AI trading s
                 }
             ],
             temperature=0.3,
-            max_tokens=2000
+            max_tokens=4000  # 🔧 V8.3.25.21: DeepSeek reasoner需要更多tokens（思考过程长）
         )
         
         # 解析AI响应
