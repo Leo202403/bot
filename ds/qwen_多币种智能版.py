@@ -7770,6 +7770,44 @@ def analyze_and_adjust_params():
                 print(f"⚠️ 机会重评估失败: {e}")
                 opportunity_analysis = None
 
+        # ========== 【V8.3.25.10】第4.55步：提取AI洞察的参数建议 ==========
+        print("\n【第4.55步：提取AI洞察的参数建议】")
+        ai_suggested_params = None
+        try:
+            compressed_insights = config.get('compressed_insights', {})
+            ai_entry_analysis = compressed_insights.get('ai_entry_analysis', {})
+            ai_exit_analysis = compressed_insights.get('ai_exit_analysis', {})
+            
+            if ai_entry_analysis or ai_exit_analysis:
+                print("  🤖 发现AI洞察，提取参数建议...")
+                ai_suggested_params = {}
+                
+                # 解析threshold字段（如"signal_score >= 70"，"min_risk_reward >= 3.0"）
+                for analysis_name, analysis in [('entry', ai_entry_analysis), ('exit', ai_exit_analysis)]:
+                    recommendations = analysis.get('key_recommendations', [])
+                    for rec in recommendations:
+                        threshold_str = rec.get('threshold', '')
+                        if not threshold_str:
+                            continue
+                        
+                        # 解析threshold（支持多种格式）
+                        import re
+                        # 匹配 "param_name >= value" 或 "param_name: value" 等格式
+                        match = re.search(r'(min_risk_reward|min_indicator_consensus|min_signal_score|atr_stop_multiplier|atr_tp_multiplier)\s*[:>=<]+\s*([\d.]+)', threshold_str, re.IGNORECASE)
+                        if match:
+                            param_name = match.group(1).lower()
+                            param_value = float(match.group(2))
+                            ai_suggested_params[param_name] = param_value
+                            print(f"     • {analysis_name}: {param_name} = {param_value}")
+                
+                if ai_suggested_params:
+                    print(f"  ✅ 提取了{len(ai_suggested_params)}个AI建议参数")
+                else:
+                    print(f"  ℹ️  未从AI洞察中提取到可解析的参数")
+        except Exception as e:
+            print(f"  ⚠️  提取AI参数建议失败: {e}")
+            ai_suggested_params = None
+
         # ========== 【V8.3.12】第4.6步：分离策略优化 ==========
         print("\n【第4.6步：分离策略优化（V8.3.12）】")
         scalping_optimization = None
@@ -7806,10 +7844,13 @@ def analyze_and_adjust_params():
                     print(f"\n  ⚡ 优化超短线参数...")
                     if base_params:
                         print(f"     ℹ️  使用V7.7.0初始参数: R:R={base_params.get('min_risk_reward', 'N/A')}, 共识={base_params.get('min_indicator_consensus', 'N/A')}")
+                    if ai_suggested_params:
+                        print(f"     🤖 AI建议参数: {ai_suggested_params}")
                     scalping_optimization = optimize_scalping_params(
                         scalping_data=separated_analysis['scalping'],
                         current_params=scalping_current,
-                        initial_params=initial_params_for_scalping  # 【V8.3.16新增】
+                        initial_params=initial_params_for_scalping,  # 【V8.3.16新增】
+                        ai_suggested_params=ai_suggested_params  # 【V8.3.25.10新增】
                     )
                     
                     # 【V8.3.18.5】检查AI是否拒绝优化
@@ -7839,10 +7880,13 @@ def analyze_and_adjust_params():
                     print(f"\n  🌊 优化波段参数...")
                     if base_params:
                         print(f"     ℹ️  使用V7.7.0初始参数: R:R={base_params.get('min_risk_reward', 'N/A')}, 共识={base_params.get('min_indicator_consensus', 'N/A')}")
+                    if ai_suggested_params:
+                        print(f"     🤖 AI建议参数: {ai_suggested_params}")
                     swing_optimization = optimize_swing_params(
                         swing_data=separated_analysis['swing'],
                         current_params=swing_current,
-                        initial_params=initial_params_for_swing  # 【V8.3.16新增】
+                        initial_params=initial_params_for_swing,  # 【V8.3.16新增】
+                        ai_suggested_params=ai_suggested_params  # 【V8.3.25.10新增】
                     )
                     
                     if swing_optimization.get('improvement') is not None:
@@ -7919,8 +7963,7 @@ def analyze_and_adjust_params():
         should_send_notification = config_changed or is_manual_backtest
         
         if config_changed:
-            # 🔧 V8.3.21.14: 先重新加载配置以合并optimize函数保存的v8321_insights
-            config = load_learning_config()
+            # 🔧 V8.3.25.10: 保存参数修改（包含scalping_params和swing_params）
             save_learning_config(config)
             
             # 🔧 V8.3.21.5: 重新加载配置以获取optimize函数保存的V8.3.21洞察
@@ -19830,7 +19873,7 @@ def analyze_signal_type_performance(opportunities):
     return result
 
 
-def optimize_scalping_params(scalping_data, current_params, initial_params=None, use_v8321=True):
+def optimize_scalping_params(scalping_data, current_params, initial_params=None, ai_suggested_params=None, use_v8321=True):
     """
     【V8.3.21】超短线参数优化 - V8.3.21增强版 + 旧版Grid Search（可选）
     
@@ -19853,6 +19896,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
         scalping_data: 超短线机会数据
         current_params: 当前配置的策略参数
         initial_params: 【V8.3.16】V7.7.0快速探索提供的初始参数（技术债1）
+        ai_suggested_params: 【V8.3.25.10新增】AI洞察建议的参数（将加入测试候选集）
         use_v8321: 【V8.3.21新增】是否使用V8.3.21增强优化器（默认True）
     """
     opportunities = scalping_data['opportunities']
@@ -19878,7 +19922,8 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
                 opportunities=opportunities,
                 current_params=current_params,
                 signal_type='scalping',
-                max_combinations=200  # 2核2G环境优化
+                max_combinations=200,  # 2核2G环境优化
+                ai_suggested_params=ai_suggested_params  # 【V8.3.25.10新增】
             )
             
             print(f"\n  ✅ V8.3.21优化完成")
@@ -20308,7 +20353,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
 
 
 
-def optimize_swing_params(swing_data, current_params, initial_params=None, use_v8321=True):
+def optimize_swing_params(swing_data, current_params, initial_params=None, ai_suggested_params=None, use_v8321=True):
     """
     【V8.3.21】波段参数优化 - V8.3.21增强版 + 旧版Grid Search（可选）
     
@@ -20331,6 +20376,7 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, use_v
         swing_data: 波段机会数据
         current_params: 当前配置的策略参数
         initial_params: 【V8.3.16】V7.7.0快速探索提供的初始参数（技术债1）
+        ai_suggested_params: 【V8.3.25.10新增】AI洞察建议的参数（将加入测试候选集）
         use_v8321: 【V8.3.21新增】是否使用V8.3.21增强优化器（默认True）
     """
     opportunities = swing_data['opportunities']
@@ -20356,7 +20402,8 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, use_v
                 opportunities=opportunities,
                 current_params=current_params,
                 signal_type='swing',
-                max_combinations=200  # 2核2G环境优化
+                max_combinations=200,  # 2核2G环境优化
+                ai_suggested_params=ai_suggested_params  # 【V8.3.25.10新增】
             )
             
             print(f"\n  ✅ V8.3.21优化完成")

@@ -35,7 +35,8 @@ except ImportError:
 def optimize_params_v8321_lightweight(opportunities: List[Dict], 
                                       current_params: Dict, 
                                       signal_type: str = 'scalping',
-                                      max_combinations: int = 200) -> Dict:
+                                      max_combinations: int = 200,
+                                      ai_suggested_params: Dict = None) -> Dict:
     """
     【V8.3.21】轻量级参数优化
     
@@ -49,6 +50,7 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
         current_params: 当前参数
         signal_type: 'scalping' or 'swing'
         max_combinations: 最大测试组数（默认200）
+        ai_suggested_params: 【V8.3.25.10新增】AI洞察建议的参数（将加入测试候选集）
     
     Returns:
         {
@@ -89,6 +91,17 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
     print(f"\n🔍 阶段2: 随机采样Grid Search...")
     
     sampled_params = random_sample_param_grid(param_grid, max_combinations)
+    
+    # 【V8.3.25.10】将AI建议的参数加入测试候选集
+    if ai_suggested_params:
+        print(f"   🤖 发现AI建议参数，加入测试候选集...")
+        ai_config = {}
+        for key, value in ai_suggested_params.items():
+            ai_config[key] = value
+        # 确保AI建议的参数在候选集的前列（优先测试）
+        sampled_params.insert(0, ai_config)
+        print(f"      ✅ AI建议参数已加入（优先测试）: {ai_config}")
+    
     all_results = []
     
     for i, params in enumerate(sampled_params):
