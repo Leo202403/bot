@@ -272,38 +272,43 @@ def analyze_entry_timing_v2(
                                     time_diff_seconds = abs((decision_time - opp_time_dt).total_seconds())
                                     
                                     if time_diff_seconds < 600:  # 10分钟内
-                                        # 🔧 V8.3.32: 显示AI的整体决策思路（不只是单币种）
-                                        # 用户指出：错过的机会当然没有专门记录，应该看AI当时的综合分析
+                                        # 🔧 V8.3.32.3: 显示AI的整体决策思路（优先"思考过程"）
+                                        # 用户指出：错过的机会没有专门记录，应该看AI当时的综合分析
                                         
-                                        # 获取AI的综合分析
-                                        analysis_summary = decision.get('analysis', '') or decision.get('思考过程', '')
+                                        # 获取AI的综合分析（优先思考过程，因为它更详细）
+                                        thinking_process = decision.get('思考过程', '')
+                                        analysis_summary = decision.get('analysis', '')
                                         risk_assessment = decision.get('risk_assessment', '')
                                         
                                         # 获取操作记录
                                         operations = decision.get('operations') or decision.get('actions', [])
                                         
-                                        # 构建综合决策理由
-                                        if analysis_summary:
-                                            # 截取前200字的分析摘要
-                                            ai_reason = f"AI当时决策（{time_diff_seconds/60:.1f}分钟内）：{analysis_summary[:200]}"
-                                            
-                                            # 如果有风险评估，追加
-                                            if risk_assessment:
-                                                ai_reason += f" | 风险评估：{risk_assessment[:100]}"
-                                            
-                                            # 列出实际操作的币种
-                                            if operations:
-                                                operated_coins = [op.get('coin', op.get('symbol', '')) for op in operations]
-                                                operated_coins = [c for c in operated_coins if c]  # 过滤空值
-                                                if operated_coins:
-                                                    ai_reason += f" | 实际操作：{', '.join(operated_coins[:3])}"
+                                        # 构建综合决策理由（优先顺序：思考过程 > analysis）
+                                        if thinking_process:
+                                            # 显示思考过程的前150字
+                                            ai_reason = f"【AI思考】{thinking_process[:150]}..."
+                                        elif analysis_summary:
+                                            # 显示分析摘要的前150字
+                                            ai_reason = f"【AI分析】{analysis_summary[:150]}..."
+                                        elif risk_assessment:
+                                            # 只有风险评估
+                                            ai_reason = f"【风险评估】{risk_assessment[:150]}..."
                                         elif operations:
-                                            # 没有综合分析，只有操作记录
+                                            # 没有文字分析，只有操作记录
                                             operated_coins = [op.get('coin', op.get('symbol', '')) for op in operations]
                                             ai_reason = f"AI当时操作了：{', '.join(operated_coins[:5])}"
                                         else:
                                             # 决策记录不完整
-                                            ai_reason = decision.get('summary_reason', f"AI有决策记录但内容不完整（{time_diff_seconds/60:.1f}分钟内）")
+                                            ai_reason = f"AI有决策记录但核心字段缺失（时间差{time_diff_seconds/60:.1f}分钟）"
+                                        
+                                        # 补充：显示实际操作的币种（过滤掉HOLD）
+                                        if operations:
+                                            real_ops = [op for op in operations if op.get('action', op.get('operation', '')) not in ['HOLD', 'hold', 'Hold']]
+                                            if real_ops:
+                                                operated_coins = [f"{op.get('coin', op.get('symbol', ''))}:{op.get('action', op.get('operation', ''))}" for op in real_ops[:3]]
+                                                ai_reason += f" | 操作：{', '.join(operated_coins)}"
+                                            else:
+                                                ai_reason += " | 操作：全部HOLD"
                                         
                                         break
                                 except Exception as e:
