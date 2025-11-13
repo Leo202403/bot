@@ -276,8 +276,9 @@ def analyze_entry_timing_v2(
                                     decision_time = pd.to_datetime(decision_time_str)
                                     time_diff_seconds = abs((decision_time - opp_time_dt).total_seconds())
                                     
-                                    # 找到时间差最小的决策（限制在同一天内，即<24小时）
-                                    if time_diff_seconds < 86400 and time_diff_seconds < min_time_diff:
+                                    # 🔧 V8.3.32.7: 只匹配2小时内的决策（避免跨时段误匹配）
+                                    # 用户指出：一天96条记录足够，如果超过2小时说明机器人未运行
+                                    if time_diff_seconds < 7200 and time_diff_seconds < min_time_diff:  # 2小时 = 7200秒
                                         min_time_diff = time_diff_seconds
                                         closest_decision = decision
                                 except Exception as e:
