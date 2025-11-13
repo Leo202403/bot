@@ -7479,6 +7479,25 @@ def analyze_and_adjust_params():
         # 🔧 V8.3.25.8: 使用新的V2分析（对比市场机会vs AI决策）
         # 🔧 V8.3.25.12: 使用yesterday_closed_trades而不是yesterday_opened_trades
         #                因为只有平仓后才有盈亏数据，才能评估开仓质量
+        
+        # 🔧 V8.3.25.12: 提前加载AI决策（用于开仓分析）
+        ai_decisions_for_entry = []
+        try:
+            ai_decisions_file = Path("trading_data") / os.getenv("MODEL_NAME", "qwen") / "ai_decisions.json"
+            if ai_decisions_file.exists():
+                with open(ai_decisions_file, "r", encoding="utf-8") as f:
+                    all_decisions = json.load(f)
+                
+                # 筛选目标日期的决策（前一天）
+                yesterday_dt = datetime.strptime(yesterday, '%Y%m%d')
+                ai_decisions_for_entry = [
+                    d for d in all_decisions
+                    if d.get('timestamp', '').startswith(yesterday_dt.strftime('%Y-%m-%d'))
+                ]
+                print(f"  ✓ 加载了{len(ai_decisions_for_entry)}条AI决策（{yesterday}）用于开仓分析")
+        except Exception as e:
+            print(f"  ⚠️ 加载AI决策失败: {e}")
+        
         print("\n【开仓时机分析】")
         entry_analysis = None
         try:
@@ -7487,7 +7506,7 @@ def analyze_and_adjust_params():
             entry_analysis = analyze_entry_timing_v2(
                 yesterday_closed_trades,  # 🔧 V8.3.25.12: 改用yesterday_closed_trades
                 kline_snapshots,
-                [],  # ai_decisions_list暂时传空，后续补充
+                ai_decisions_for_entry,  # 🔧 V8.3.25.12: 传入加载的AI决策
                 yesterday_date_formatted
             )
             # V2会自动打印统计信息和改进建议
