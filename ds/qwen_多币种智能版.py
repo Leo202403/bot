@@ -879,8 +879,8 @@ def send_email_notification(subject, body_html, model_name="Qwen"):
         
         # 创建邮件
         msg = MIMEMultipart('alternative')
-        # 根据model_name添加前缀（映射：deepseek->DeepSeek, qwen->Qwen）
-        display_name = "DeepSeek" if "deepseek" in model_name.lower() else "Qwen" if "qwen" in model_name.lower() else model_name
+        # 根据model_name添加前缀（映射：qwen->qwen, qwen->Qwen）
+        display_name = "qwen" if "qwen" in model_name.lower() else "Qwen" if "qwen" in model_name.lower() else model_name
         print(f"[邮件通知] 映射后display_name: {display_name}")
         msg['Subject'] = f"[{display_name}] {subject}"
         print(f"[邮件通知] 最终邮件主题: {msg['Subject']}")
@@ -4791,7 +4791,7 @@ This metric balances three dimensions:
 
 # 注意：由于 V7.7.0 代码量较大（约1500行），已保存到独立文件
 # 请运行以下命令手动合并：
-#   python3 /tmp/merge_v770_to_deepseek.py
+#   python3 /tmp/merge_v770_to_q wen.py
 # 或使用提供的部署脚本
 
 # ============================================================================
