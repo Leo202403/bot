@@ -263,6 +263,10 @@ def analyze_entry_timing_v2(
                     })
                 else:
                     # 已平仓交易，判断开仓质量
+                    # 🔧 V8.3.25.12: 提取开仓/平仓理由，传递给AI深度分析
+                    open_reason_full = trade.get('开仓理由', 'N/A')
+                    close_reason_full = trade.get('平仓理由', 'N/A')
+                    
                     if pnl < -0.5 and ('止损' in exit_reason or 'SL' in exit_reason.upper()):
                         # 虚假信号：开仓后快速止损
                         false_entries.append({
@@ -271,7 +275,9 @@ def analyze_entry_timing_v2(
                             'signal_score': signal_score,
                             'consensus': consensus,
                             'pnl': pnl,
-                            'reason': '虚假信号：开仓后快速止损'
+                            'reason': '虚假信号：开仓后快速止损',
+                            'ai_open_reason': open_reason_full,  # 🆕 AI开仓理由
+                            'ai_close_reason': close_reason_full  # 🆕 AI平仓理由
                         })
                         entry_stats['false_entries'] += 1
                     elif pnl > 0.1:  # 🔧 V8.3.25.11: 至少盈利0.1U才算正确
@@ -282,7 +288,9 @@ def analyze_entry_timing_v2(
                             'signal_score': signal_score,
                             'consensus': consensus,
                             'pnl': pnl,
-                            'reason': f'正确开仓：盈利{pnl:.2f}U'
+                            'reason': f'正确开仓：盈利{pnl:.2f}U',
+                            'ai_open_reason': open_reason_full,  # 🆕 AI开仓理由
+                            'ai_close_reason': close_reason_full  # 🆕 AI平仓理由
                         })
                         entry_stats['correct_entries'] += 1
                     else:
@@ -293,7 +301,9 @@ def analyze_entry_timing_v2(
                             'signal_score': signal_score,
                             'consensus': consensus,
                             'pnl': pnl,
-                            'reason': f'时机问题：盈亏接近0（{pnl:+.2f}U）'
+                            'reason': f'时机问题：盈亏接近0（{pnl:+.2f}U）',
+                            'ai_open_reason': open_reason_full,  # 🆕 AI开仓理由
+                            'ai_close_reason': close_reason_full  # 🆕 AI平仓理由
                         })
                         entry_stats['timing_issues'] += 1
                     
@@ -503,6 +513,10 @@ def analyze_exit_timing_v2(
                     is_premature = False
                     is_delayed = False
                     
+                    # 🔧 V8.3.25.12: 提取完整的开仓/平仓理由，传递给AI深度分析
+                    ai_open_reason = trade.get('开仓理由', 'N/A')
+                    ai_close_reason = trade.get('平仓理由', 'N/A')
+                    
                     if exit_type == '止盈' and missed_profit_pct > 2:
                         # 止盈后还有>2%利润，说明过早平仓
                         is_premature = True
@@ -516,7 +530,9 @@ def analyze_exit_timing_v2(
                             'exit_reason': exit_reason[:50],
                             'pnl': pnl,
                             'missed_profit_pct': missed_profit_pct,
-                            'recommendation': f'TP扩大{1.3:.1f}倍' if missed_profit_pct > 3 else 'TP扩大1.2倍'
+                            'recommendation': f'TP扩大{1.3:.1f}倍' if missed_profit_pct > 3 else 'TP扩大1.2倍',
+                            'ai_open_reason': ai_open_reason,  # 🆕 AI开仓理由
+                            'ai_close_reason': ai_close_reason  # 🆕 AI平仓理由
                         })
                     elif exit_type == '止损' and pnl < -1 and missed_profit_pct < -1:
                         # 止损后价格继续朝不利方向走，说明延迟止损
@@ -531,7 +547,9 @@ def analyze_exit_timing_v2(
                             'exit_reason': exit_reason[:50],
                             'pnl': pnl,
                             'extra_loss_pct': abs(missed_profit_pct),
-                            'recommendation': '提前止损或扩大止损距离'
+                            'recommendation': '提前止损或扩大止损距离',
+                            'ai_open_reason': ai_open_reason,  # 🆕 AI开仓理由
+                            'ai_close_reason': ai_close_reason  # 🆕 AI平仓理由
                         })
                     else:
                         # 最优平仓
@@ -543,7 +561,9 @@ def analyze_exit_timing_v2(
                             'exit_price': exit_price,
                             'exit_type': exit_type,
                             'pnl': pnl,
-                            'recommendation': '继续保持'
+                            'recommendation': '继续保持',
+                            'ai_open_reason': ai_open_reason,  # 🆕 AI开仓理由
+                            'ai_close_reason': ai_close_reason  # 🆕 AI平仓理由
                         })
                     
                     # 添加到表格数据
