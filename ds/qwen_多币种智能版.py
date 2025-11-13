@@ -5824,13 +5824,42 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         except Exception as e:
             print(f"  ⚠️  读取历史范围失败: {e}")
     
+    # 🔧 V8.3.30: 动态分析confirmed_opportunities的实际R:R分布
+    dynamic_rr_range = None
+    if confirmed_opportunities and use_confirmed_opps:
+        try:
+            print(f"\n  📊 【预分析】统计真实盈利机会的R:R分布...")
+            all_opps = (
+                confirmed_opportunities['scalping']['opportunities'] + 
+                confirmed_opportunities['swing']['opportunities']
+            )
+            
+            # 提取所有机会的risk_reward
+            rr_values = [opp.get('risk_reward', 0) for opp in all_opps if opp.get('risk_reward', 0) > 0]
+            
+            if rr_values:
+                import numpy as np
+                rr_p25 = np.percentile(rr_values, 25)  # 25分位
+                rr_p75 = np.percentile(rr_values, 75)  # 75分位
+                rr_median = np.percentile(rr_values, 50)  # 中位数
+                rr_max = np.percentile(rr_values, 95)  # 95分位（排除极端值）
+                
+                # 动态范围：从25分位到95分位
+                dynamic_rr_range = [max(1.2, rr_p25), min(6.0, rr_max)]  # 限制在[1.2, 6.0]内
+                
+                print(f"     ✓ 分析了{len(rr_values)}个机会的R:R")
+                print(f"     ✓ R:R分布: 25%={rr_p25:.2f}, 中位={rr_median:.2f}, 75%={rr_p75:.2f}, 95%={rr_max:.2f}")
+                print(f"     ✓ 动态优化范围: [{dynamic_rr_range[0]:.2f}, {dynamic_rr_range[1]:.2f}]")
+        except Exception as e:
+            print(f"     ⚠️  R:R分析失败: {e}，使用默认范围")
+    
     # 定义默认采样范围
     if historical_sampling_range:
         sampling_range = historical_sampling_range
     else:
         sampling_range = {
-            'min_risk_reward': [1.4, 3.5],
-            'min_indicator_consensus': [1, 3],  # 🔧 V8.3.29: 扩大到[1,3]，捕获高分低共振的机会
+            'min_risk_reward': dynamic_rr_range if dynamic_rr_range else [1.4, 3.5],  # 🔧 V8.3.30: 使用动态R:R范围
+            'min_indicator_consensus': [2, 5],  # 🔧 V8.3.30: 从2起步（避免假信号），到5（高质量共振）
             'atr_stop_multiplier': [1.4, 1.9],
             'min_signal_score': [50, 80]  # 🔧 V8.3.29: 新增signal_score优化范围
         }
@@ -5840,31 +5869,34 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     best_profit = -float('inf')
     found_profitable = False
     
-    # 🔧 V8.3.29: 生成9个战略采样点（增加signal_score维度）
+    # 🔧 V8.3.30: 生成10个战略采样点（动态R:R + 共振[2,5]）
     rr_min, rr_max = sampling_range['min_risk_reward']
-    consensus_min, consensus_max = sampling_range['min_indicator_consensus']
+    consensus_min, consensus_max = sampling_range['min_indicator_consensus']  # [2, 5]
     atr_min, atr_max = sampling_range['atr_stop_multiplier']
     score_min, score_max = sampling_range.get('min_signal_score', [50, 80])
     
+    print(f"  📐 测试范围: R:R [{rr_min:.2f}, {rr_max:.2f}], 共识 [{consensus_min}, {consensus_max}], 分数 [{score_min}, {score_max}]")
+    
     test_points = [
-        # 宽松组合（高召回）
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': atr_min, 'min_signal_score': score_min, 'name': '极宽松'},
-        {'min_risk_reward': (rr_min + rr_max) / 3, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': score_min, 'name': '偏宽松'},
+        # 宽松组合（高召回）- 低R:R + 低共振
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 2, 'atr_stop_multiplier': atr_min, 'min_signal_score': score_min, 'name': '极宽松'},
+        {'min_risk_reward': (rr_min + rr_max) / 3, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': score_min, 'name': '偏宽松'},
         
         # 平衡组合（Precision vs Recall）
         {'min_risk_reward': (rr_min + rr_max) / 2, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': (score_min + score_max) / 2, 'name': '标准平衡'},
-        {'min_risk_reward': (rr_min + rr_max) / 2, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': score_max, 'name': '高分低共振'},  # 关键！捕获高分单指标
+        {'min_risk_reward': (rr_min + rr_max) / 2, 'min_indicator_consensus': 3, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': score_max, 'name': '高分中共振'},  # 3指标共振
         
-        # 严格组合（高精准）
-        {'min_risk_reward': (rr_min * 2 + rr_max) / 3, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'min_signal_score': (score_min + score_max) / 2, 'name': '偏严格'},
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'min_signal_score': score_max, 'name': '严格'},
+        # 严格组合（高精准）- 高R:R + 中共振
+        {'min_risk_reward': (rr_min * 2 + rr_max) / 3, 'min_indicator_consensus': 3, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'min_signal_score': (score_min + score_max) / 2, 'name': '偏严格'},
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': 4, 'atr_stop_multiplier': atr_max, 'min_signal_score': score_max, 'name': '严格'},  # 4指标共振
         
-        # 极端组合（测试边界）
-        {'min_risk_reward': rr_max * 1.2, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'min_signal_score': score_max, 'name': '超严格'},
-        {'min_risk_reward': rr_max * 1.4, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'min_signal_score': 85, 'name': '极严格'},
+        # 超严格组合（极高精准）- 超高R:R + 高共振
+        {'min_risk_reward': rr_max * 1.1, 'min_indicator_consensus': 4, 'atr_stop_multiplier': atr_max, 'min_signal_score': score_max, 'name': '超严格'},
+        {'min_risk_reward': rr_max * 1.2, 'min_indicator_consensus': 5, 'atr_stop_multiplier': atr_max, 'min_signal_score': 85, 'name': '极严格'},  # 5指标完美共振
         
-        # 特殊组合（针对日志中的高分低共振机会）
-        {'min_risk_reward': rr_min * 1.5, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 85, 'name': '捕获高分单指标'},  # 🎯 专门针对BNB 85分/共振1
+        # 特殊组合（测试不同维度的极端值）
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 4, 'atr_stop_multiplier': atr_max, 'min_signal_score': 75, 'name': '低R:R高共振'},  # 测试：是否共振能补偿R:R
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': 2, 'atr_stop_multiplier': atr_min, 'min_signal_score': 75, 'name': '高R:R低共振'},  # 测试：是否R:R能补偿共振
     ]
     
     # 🔧 V8.3.25.23: 使用confirmed_opportunities或降级到market_snapshots
