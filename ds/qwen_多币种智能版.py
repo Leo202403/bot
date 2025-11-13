@@ -18882,7 +18882,15 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                 
                 # 安全获取数据
                 try:
-                    timestamp = str(current.get('time', ''))
+                    # 🔧 V8.3.25.18: 组合snapshot_date和time构建完整timestamp
+                    snapshot_date = str(current.get('snapshot_date', ''))
+                    time_str = str(current.get('time', ''))
+                    if snapshot_date and time_str:
+                        # 组合为 "YYYYMMDD HH:MM:SS" 格式
+                        timestamp = f"{snapshot_date} {time_str}"
+                    else:
+                        timestamp = time_str  # 降级处理
+                    
                     entry_price = float(current.get('close', 0))
                     if entry_price <= 0:
                         entry_price = float(current.get('price', 0))
