@@ -18400,9 +18400,9 @@ def analyze_trade_performance(trade, kline_snapshots):
 
 def recalculate_signal_score_from_snapshot(snapshot_row, signal_type):
     """
-    【V8.2新增】从历史快照的维度数据重新计算signal_score
+    【V8.3.32修复】从历史快照动态重新计算signal_score
     
-    这是V8.2架构的核心：评分标准改变时，历史数据自动重新计算
+    核心改进：不依赖CSV中的维度分数，而是从原始数据（OHLCV、指标）重新计算
     
     Args:
         snapshot_row: 历史快照的一行数据（pd.Series或dict）
@@ -18425,10 +18425,55 @@ def recalculate_signal_score_from_snapshot(snapshot_row, signal_type):
             return 0
     
     try:
-        # 基础分
+        # 🔧 V8.3.32: 优先从原始数据重新计算（而不是读取CSV中的维度分数）
+        # 构建market_data结构用于calculate_signal_score_components
+        if 'rsi_14' in snapshot_row or 'macd_histogram' in snapshot_row:
+            # 有原始指标数据，可以重新计算
+            market_data_for_calc = {
+                'price_action': {
+                    'momentum_slope': safe_score(snapshot_row.get('momentum_value', 0)),
+                    'consecutive': {'candles': int(safe_score(snapshot_row.get('scalp_consecutive_candles', 0)))} if signal_type == 'scalping' else None,
+                },
+                'moving_averages': {
+                    'ema20': safe_score(snapshot_row.get('ema20', 0)),
+                    'ema50': safe_score(snapshot_row.get('ema50', 0)),
+                },
+                # 可以继续添加更多字段映射
+            }
+            
+            try:
+                # 🔧 调用calculate_signal_score_components从原始数据计算
+                components = calculate_signal_score_components(market_data_for_calc, signal_type)
+                
+                # 累加各维度分数
+                total_score = 50  # 基础分
+                if signal_type == 'scalping':
+                    total_score += components.get('volume_surge_score', 0)
+                    total_score += components.get('breakout_score', 0)
+                    total_score += components.get('momentum_score', 0)
+                    total_score += components.get('consecutive_score', 0)
+                    total_score += components.get('pin_bar_score', 0)
+                    total_score += components.get('engulfing_score', 0)
+                    total_score += components.get('trend_alignment_score', 0)
+                elif signal_type == 'swing':
+                    total_score += components.get('trend_initiation_score', 0)
+                    total_score += components.get('trend_alignment_score', 0)
+                    total_score += components.get('trend_4h_strength_score', 0)
+                    total_score += components.get('ema_divergence_score', 0)
+                    total_score += components.get('swing_pullback_score', 0)
+                    total_score += components.get('swing_consecutive_score', 0)
+                    total_score += components.get('volume_confirmed_score', 0)
+                
+                return min(100, max(0, int(total_score)))
+            except Exception as calc_err:
+                # 重新计算失败，降级到方案B
+                if False:  # 调试模式
+                    print(f"⚠️ 【V8.3.32】从原始数据计算失败，降级读取CSV维度分数: {calc_err}")
+                pass  # 继续执行下面的降级逻辑
+        
+        # 【方案B降级】如果没有原始数据或计算失败，尝试读取CSV中的维度分数
         total_score = 50
         
-        # 【方案A】如果有维度数据，使用维度重新计算
         if 'volume_surge_score' in snapshot_row:
             if signal_type == 'scalping':
                 # 超短线维度加分（安全转换）
@@ -19277,7 +19322,11 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     consensus = int(float(current.get('indicator_consensus', 0)))
                     risk_reward = float(current.get('risk_reward', 0))
                     atr = float(current.get('atr', 0))
-                    signal_score = float(current.get('signal_score', 50))  # 【V8.3.21】添加signal_score
+                    
+                    # 🔧 V8.3.32: 动态计算signal_score（而不是读取CSV）
+                    # 先判断这是scalping还是swing类型
+                    signal_type_for_calc = str(current.get('signal_type', 'swing')).lower()
+                    signal_score = recalculate_signal_score_from_snapshot(current, signal_type_for_calc)
                     
                     # 【V8.3.21】获取上下文字段（用于4层过滤）
                     kline_ctx_bullish_ratio = float(current.get('kline_ctx_bullish_ratio', 0.5))

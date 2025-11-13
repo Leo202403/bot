@@ -263,28 +263,39 @@ def analyze_entry_timing_v2(
                                     time_diff_seconds = abs((decision_time - opp_time_dt).total_seconds())
                                     
                                     if time_diff_seconds < 600:  # 10分钟内
-                                        # 🔧 V8.3.32: 兼容新旧字段名
-                                        # 旧版：operations, 新版：actions
+                                        # 🔧 V8.3.32: 显示AI的整体决策思路（不只是单币种）
+                                        # 用户指出：错过的机会当然没有专门记录，应该看AI当时的综合分析
+                                        
+                                        # 获取AI的综合分析
+                                        analysis_summary = decision.get('analysis', '') or decision.get('思考过程', '')
+                                        risk_assessment = decision.get('risk_assessment', '')
+                                        
+                                        # 获取操作记录
                                         operations = decision.get('operations') or decision.get('actions', [])
                                         
-                                        if operations:
-                                            # 查找匹配币种的决策
-                                            matched_op = None
-                                            for op in operations:
-                                                op_coin = op.get('coin', '') or op.get('symbol', '')
-                                                # 标准化币种名称（BNB, BNBUSDT, BNB/USDT:USDT都匹配）
-                                                if coin in op_coin or op_coin in coin:
-                                                    matched_op = op
-                                                    break
+                                        # 构建综合决策理由
+                                        if analysis_summary:
+                                            # 截取前200字的分析摘要
+                                            ai_reason = f"AI当时决策（{time_diff_seconds/60:.1f}分钟内）：{analysis_summary[:200]}"
                                             
-                                            if matched_op:
-                                                ai_reason = matched_op.get('reason', '未记录理由')
-                                                break
-                                            else:
-                                                # 没有匹配币种，但有决策（可能是其他币种）
-                                                ai_reason = f"未针对{coin}的决策（{time_diff_seconds/60:.1f}分钟内有其他决策）"
+                                            # 如果有风险评估，追加
+                                            if risk_assessment:
+                                                ai_reason += f" | 风险评估：{risk_assessment[:100]}"
+                                            
+                                            # 列出实际操作的币种
+                                            if operations:
+                                                operated_coins = [op.get('coin', op.get('symbol', '')) for op in operations]
+                                                operated_coins = [c for c in operated_coins if c]  # 过滤空值
+                                                if operated_coins:
+                                                    ai_reason += f" | 实际操作：{', '.join(operated_coins[:3])}"
+                                        elif operations:
+                                            # 没有综合分析，只有操作记录
+                                            operated_coins = [op.get('coin', op.get('symbol', '')) for op in operations]
+                                            ai_reason = f"AI当时操作了：{', '.join(operated_coins[:5])}"
                                         else:
-                                            ai_reason = decision.get('summary_reason', '未记录理由')
+                                            # 决策记录不完整
+                                            ai_reason = decision.get('summary_reason', f"AI有决策记录但内容不完整（{time_diff_seconds/60:.1f}分钟内）")
+                                        
                                         break
                                 except Exception as e:
                                     if False:  # 调试模式
