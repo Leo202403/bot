@@ -153,6 +153,10 @@ def analyze_entry_timing_v2(
                 print()
         
         # ===== Step 3: 对比分析每个机会点 =====
+        # 🔧 V8.3.25.12: 统计有多少交易被匹配
+        matched_trades_count = 0
+        debug_first_snapshot = True  # 调试第一个snapshot
+        
         for idx, snapshot in yesterday_snapshots.iterrows():
             coin = snapshot.get('coin', '')
             snapshot_time = snapshot.get('time')  # HH:MM格式
@@ -169,6 +173,17 @@ def analyze_entry_timing_v2(
                     snapshot_time_dt = pd.to_datetime(f"{snapshot['snapshot_date']} {snapshot_time}", format='%Y%m%d %H:%M')
                 except:
                     continue  # 无法解析时间，跳过此快照
+            
+            # 🔧 V8.3.25.12: 调试第一个snapshot
+            if debug_first_snapshot:
+                print(f"  🔍 【调试】第一个snapshot:")
+                print(f"      币种: {coin}")
+                print(f"      snapshot_time_dt: {snapshot_time_dt} (type: {type(snapshot_time_dt)})")
+                print(f"      匹配窗口: {snapshot_time_dt - timedelta(minutes=5)} ~ {snapshot_time_dt + timedelta(minutes=5)}")
+                if len(yesterday_trades_df) > 0:
+                    first_trade_open_time = pd.to_datetime(yesterday_trades_df.iloc[0]['开仓时间'])
+                    print(f"      第一笔交易开仓时间: {first_trade_open_time}")
+                debug_first_snapshot = False
             
             matching_trades = yesterday_trades_df[
                 (yesterday_trades_df['币种'] == coin) &
@@ -200,6 +215,7 @@ def analyze_entry_timing_v2(
                     entry_stats['correctly_filtered'] += 1
             else:
                 # 情况2: AI开仓了
+                matched_trades_count += len(matching_trades)  # 🔧 V8.3.25.12: 统计匹配数
                 trade = matching_trades.iloc[0]
                 # 🔧 V8.3.25.12: 兼容多种字段名（盈亏(U)/盈亏/PnL/实际盈亏）+ 处理None
                 pnl_raw = trade.get('盈亏(U)', trade.get('盈亏', trade.get('PnL', trade.get('实际盈亏'))))
@@ -382,6 +398,8 @@ def analyze_entry_timing_v2(
     print(f"     └─ ⚠️ 时机问题: {entry_stats['timing_issues']}")
     print(f"     错过机会: {entry_stats['missed_profitable']}")
     print(f"     正确过滤: {entry_stats['correctly_filtered']}")
+    print(f"  🔍 【调试】共匹配到 {matched_trades_count} 笔交易与market snapshot关联")
+    print(f"  🔍 【调试】昨日交易总数: {len(yesterday_trades_df)} 笔")
     
     return {
         'entry_stats': entry_stats,
