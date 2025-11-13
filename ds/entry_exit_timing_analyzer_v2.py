@@ -226,13 +226,17 @@ def analyze_entry_timing_v2(
                     pnl != 0  # 🔧 V8.3.25.12: 如果pnl为0且有平仓时间，可能是数据未同步
                 )
                 
-                # 🔧 V8.3.25.12: 调试输出（仅前3笔）
+                # 🔧 V8.3.25.12: 调试输出（仅前3笔）+ 添加AI决策理由
                 if entry_stats['ai_opened'] <= 3:
+                    open_reason = trade.get('开仓理由', 'N/A')
+                    close_reason = trade.get('平仓理由', 'N/A')
                     print(f"     🔍 [{coin}] is_closed判断:")
                     print(f"        平仓时间: '{exit_time_value}' (isna: {pd.isna(exit_time_value)})")
                     print(f"        平仓价格: {exit_price_value}")
                     print(f"        盈亏: {pnl}")
                     print(f"        结果: is_closed={is_closed}")
+                    print(f"        📝 开仓理由: {open_reason[:100]}...")  # 显示前100字符
+                    print(f"        🔒 平仓理由: {close_reason[:100] if close_reason != 'N/A' else 'N/A'}...")
                 
                 # 🔧 V8.3.25.12: 如果交易还未平仓，标记为"进行中"
                 if not is_closed:
@@ -303,6 +307,34 @@ def analyze_entry_timing_v2(
                         'result': f'{pnl:+.2f}U',
                         'evaluation': '✅ 正确' if pnl > 0.1 else '❌ 虚假信号' if pnl < -0.5 else '⚠️ 时机问题'
                     })
+        
+        # 🔧 V8.3.25.12: 打印错过机会的详细信息（包括AI决策）
+        if missed_opportunities:
+            print(f"\n  💡 错过机会详细分析（TOP 5）:")
+            for idx, opp in enumerate(missed_opportunities[:5], 1):
+                print(f"     [{idx}] {opp['coin']} @ {opp['time']}")
+                print(f"         信号质量: {opp['signal_score']}分 / {opp['consensus']}共振")
+                print(f"         错过原因: {opp['reason']}")
+                
+                # 🔧 V8.3.25.12: 尝试从ai_decisions_list获取当时的AI决策
+                if ai_decisions_list:
+                    # 匹配时间窗口
+                    opp_time = opp['time']  # HH:MM格式
+                    matching_decisions = []
+                    for decision in ai_decisions_list:
+                        decision_time = decision.get('timestamp', '')
+                        if opp_time in decision_time:  # 简单匹配HH:MM
+                            # 检查是否有关于该币种的决策
+                            actions = decision.get('actions', [])
+                            for action in actions:
+                                if opp['coin'] in action.get('coin', ''):
+                                    matching_decisions.append(action.get('reason', 'N/A'))
+                    
+                    if matching_decisions:
+                        print(f"         🤖 AI当时决策: {matching_decisions[0][:80]}...")
+                    else:
+                        print(f"         🤖 AI当时决策: 无匹配记录（可能未到达决策阈值）")
+                print()
         
         # 添加错过的机会到表格
         for opp in missed_opportunities[:10]:  # TOP10
