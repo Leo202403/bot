@@ -1,0 +1,78 @@
+【V8.3.25.10】参数应用逻辑修复 - 部署说明
+==============================================
+
+✅ 语法检查：已通过
+✅ Git推送：已完成
+
+📋 部署步骤（在服务器上执行）
+==============================================
+
+1. SSH登录服务器：
+   ssh root@43.100.52.142
+   密码：j1lUcf9TbdCzZkPL
+
+2. 执行部署脚本：
+   bash /root/10-23-bot/ds/部署V8.3.25.10.sh
+
+   或者手动执行：
+   cd /root/10-23-bot
+   git pull
+   bash ~/快速重启_修复版.sh bots
+
+3. 验证部署成功：
+   supervisorctl status deepseek qwen
+   
+   应该看到：
+   deepseek    RUNNING   pid xxx, uptime x:xx:xx
+   qwen        RUNNING   pid xxx, uptime x:xx:xx
+
+📊 验证修复效果
+==============================================
+
+方法1：查看实时日志（等待下次定时回测）
+   tail -f /root/10-23-bot/ds/trading_data/qwen/ai_trading.log
+   
+   应该看到（在回测时）：
+   【第4.55步：提取AI洞察的参数建议】
+   🤖 发现AI洞察，提取参数建议...
+   ✅ 提取了X个AI建议参数
+   🤖 发现AI建议参数，加入测试候选集...
+   ✅ AI建议参数已加入（优先测试）
+
+方法2：手动触发回测（立即验证）
+   bash ~/快速重启_修复版.sh backtest
+   
+   观察输出是否包含上述日志
+
+方法3：检查参数配置文件
+   cat /root/10-23-bot/ds/trading_data/qwen/learning_config.json | grep -A 10 'scalping_params'
+   
+   确认参数已更新
+
+🎯 修复内容总结
+==============================================
+
+问题：
+  1. V8.3.21优化后的参数被误调用load_learning_config()覆盖
+  2. AI洞察的参数建议没有被加入V8.3.21回测测试集
+  3. 邮件显示的参数与实际应用的参数不一致
+
+修复：
+  1. 删除多余的load_learning_config()调用，确保save时保存的是内存中更新后的config
+  2. 新增第4.55步：从compressed_insights提取AI建议参数
+  3. 将AI建议参数传递给optimize_scalping_params/optimize_swing_params
+  4. backtest_optimizer_v8321.py接收ai_suggested_params并插入测试候选集首位
+
+结果：
+  ✅ 邮件显示的参数 = V8.3.21回测的最优参数 = 实际应用的参数
+  ✅ AI洞察的参数建议会被优先测试
+  ✅ 最终迭代出的是经过量化验证的最优参数
+
+📝 相关文档
+==============================================
+  - V8.3.25.10_参数应用逻辑修复报告.md（完整技术文档）
+  - 部署V8.3.25.10.sh（自动化部署脚本）
+
+==============================================
+部署完成后，系统将在下次定时回测时自动应用修复！
+
