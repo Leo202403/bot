@@ -5884,17 +5884,32 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         
         # 🔧 V8.3.25.23: 优先使用confirmed_opportunities回测
         if use_confirmed_opps:
-            # 使用V8.3.21的simulate函数
-            from backtest_optimizer_v8321 import simulate_params_with_v8321_filter
-            result_data = simulate_params_with_v8321_filter(all_opportunities, config_variant)
+            # 🔧 V8.3.25.24修复：confirmed_opportunities本身已是盈利机会，不应再过滤
+            # 直接统计满足参数条件的机会的平均利润
+            captured_opps = [
+                opp for opp in all_opportunities
+                if (opp.get('signal_score', 0) >= config_variant.get('min_signal_score', 50) and
+                    opp.get('consensus', 0) >= config_variant.get('min_indicator_consensus', 2))
+                # 🔧 注意：不过滤risk_reward，因为那是回测时的实际R:R，不是信号时的预测R:R
+            ]
             
-            # 转换为兼容格式
+            if captured_opps:
+                avg_profit = sum(opp.get('objective_profit', 0) for opp in captured_opps) / len(captured_opps)
+                total_profit = avg_profit * len(captured_opps)  # 累计利润
+                win_rate = 100  # confirmed_opportunities都是盈利的
+                capture_rate = len(captured_opps) / len(all_opportunities)
+            else:
+                avg_profit = 0
+                total_profit = 0
+                win_rate = 0
+                capture_rate = 0
+            
             result = {
-                'total_trades': result_data['captured_count'],
-                'win_rate': result_data['win_rate'],
-                'profit_ratio': result_data.get('profit_loss_ratio', 1.0),
-                'total_profit': result_data['avg_profit'] * result_data['captured_count'],  # 简化：总利润=平均*笔数
-                'capture_rate': result_data['capture_rate']
+                'total_trades': len(captured_opps),
+                'win_rate': win_rate,
+                'profit_ratio': 1.0,  # confirmed_opportunities都是盈利的
+                'total_profit': total_profit,
+                'capture_rate': capture_rate
             }
         else:
             # 降级：使用market_snapshots
