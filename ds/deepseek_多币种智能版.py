@@ -6102,28 +6102,32 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     # score维度：找最接近的阈值
                     score_precision = precision_data['by_score'].get(min_score, 0)
                     if score_precision == 0:
-                        # 插值估算
-                        available_scores = sorted([k for k in precision_data['by_score'].keys() if k <= min_score])
+                        # 插值估算（JSON序列化后键都是字符串）
+                        available_scores = sorted([int(k) for k in precision_data['by_score'].keys() if int(k) <= min_score])
                         if available_scores:
-                            score_precision = precision_data['by_score'][available_scores[-1]]
+                            # 使用字符串键查找
+                            score_precision = precision_data['by_score'][str(available_scores[-1])]
                         else:
                             score_precision = 1.0
                     
                     # consensus维度
                     consensus_precision = precision_data['by_consensus'].get(min_consensus, 0)
                     if consensus_precision == 0:
-                        available_consensus = sorted([k for k in precision_data['by_consensus'].keys() if k <= min_consensus])
+                        available_consensus = sorted([int(k) for k in precision_data['by_consensus'].keys() if int(k) <= min_consensus])
                         if available_consensus:
-                            consensus_precision = precision_data['by_consensus'][available_consensus[-1]]
+                            # 使用字符串键查找
+                            consensus_precision = precision_data['by_consensus'][str(available_consensus[-1])]
                         else:
                             consensus_precision = 1.0
                     
                     # R:R维度
                     rr_precision = precision_data['by_rr'].get(min_rr, 0)
                     if rr_precision == 0:
-                        available_rrs = sorted([k for k in precision_data['by_rr'].keys() if k <= min_rr])
+                        # R:R的键也是字符串
+                        available_rrs = sorted([float(k) for k in precision_data['by_rr'].keys() if float(k) <= min_rr])
                         if available_rrs:
-                            rr_precision = precision_data['by_rr'][available_rrs[-1]]
+                            # 使用字符串键查找
+                            rr_precision = precision_data['by_rr'][str(available_rrs[-1])]
                         else:
                             rr_precision = 1.0
                     
