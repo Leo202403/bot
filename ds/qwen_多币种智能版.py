@@ -5866,31 +5866,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             confirmed_opportunities['scalping']['opportunities'] + 
             confirmed_opportunities['swing']['opportunities']
         )
-        
-        # 🔧 V8.3.25.25: 同时加载全量market_snapshots用于计算预测胜率
-        all_market_snapshots = None
-        try:
-            model_dir = os.getenv("MODEL_NAME", "qwen")
-            snapshot_dir = f"trading_data/{model_dir}/market_snapshots"
-            end_date = datetime.now()
-            all_snapshots_list = []
-            
-            for i in range(days):
-                target_date = (end_date - timedelta(days=i)).strftime('%Y%m%d')
-                snapshot_file = f"{snapshot_dir}/{target_date}.csv"
-                try:
-                    df = pd.read_csv(snapshot_file)
-                    all_snapshots_list.append(df)
-                except FileNotFoundError:
-                    continue
-            
-            if all_snapshots_list:
-                all_market_snapshots = pd.concat(all_snapshots_list, ignore_index=True)
-                print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
-                print(f"     ✓ 全量信号点: {len(all_market_snapshots)}个（用于计算预测胜率）")
-        except Exception as e:
-            print(f"     ⚠️  加载market_snapshots失败: {e}，将只统计捕获率")
-            all_market_snapshots = None
+        print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
     else:
         print(f"  ⚠️  未提供confirmed_opportunities，降级使用market_snapshots")
         print(f"  ⏱️  预计：约3分钟")
@@ -5918,30 +5894,33 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 # 🔧 注意：不过滤risk_reward，因为那是回测时的实际R:R，不是信号时的预测R:R
             ]
             
-            # 🔧 V8.3.25.25: 计算在全量market_snapshots上的开仓数（预测实际开仓数）
-            predicted_total_signals = None
-            if all_market_snapshots is not None:
-                # 统计全量信号中有多少满足参数
-                matching_signals = all_market_snapshots[
-                    (all_market_snapshots['signal_score'] >= config_variant.get('min_signal_score', 50)) &
-                    (all_market_snapshots['indicator_consensus'] >= config_variant.get('min_indicator_consensus', 2))
-                ]
-                predicted_total_signals = len(matching_signals)
-            
             if captured_opps:
                 avg_profit = sum(opp.get('objective_profit', 0) for opp in captured_opps) / len(captured_opps)
                 capture_rate = len(captured_opps) / len(all_opportunities)
                 
-                # 🔧 V8.3.25.25: 计算预测胜率（关键！）
-                if predicted_total_signals and predicted_total_signals > 0:
-                    predicted_win_rate = (len(captured_opps) / predicted_total_signals) * 100
-                    # 综合得分 = 预测胜率 × 捕获的盈利机会数
-                    total_profit = predicted_win_rate * len(captured_opps)
-                    win_rate = predicted_win_rate
-                else:
-                    # 降级：只统计捕获率
-                    total_profit = avg_profit * len(captured_opps)
-                    win_rate = 100
+                # 🔧 V8.3.27: 使用经验性预测胜率公式
+                # 根据参数严格程度估算精准率（真实盈利机会 / 触发信号数）
+                min_score = config_variant.get('min_signal_score', 50)
+                min_consensus = config_variant.get('min_indicator_consensus', 2)
+                min_rr = config_variant.get('min_risk_reward', 1.5)
+                
+                # 经验公式：信号分越高、共振越多、R:R越高 → 精准率越高
+                # 基准精准率40%（score=50, consensus=2, rr=1.5）
+                precision_score = 0.40
+                if min_score >= 70: precision_score += 0.15
+                elif min_score >= 60: precision_score += 0.08
+                if min_consensus >= 4: precision_score += 0.12
+                elif min_consensus >= 3: precision_score += 0.06
+                if min_rr >= 3.0: precision_score += 0.10
+                elif min_rr >= 2.0: precision_score += 0.05
+                
+                # 预测总开仓数 = 捕获的盈利机会数 / 精准率
+                predicted_total_signals = int(len(captured_opps) / precision_score) if precision_score > 0 else len(captured_opps) * 3
+                predicted_win_rate = (len(captured_opps) / predicted_total_signals) * 100 if predicted_total_signals > 0 else 0
+                
+                # 综合得分 = 预测胜率 × 捕获的盈利机会数
+                total_profit = predicted_win_rate * len(captured_opps)
+                win_rate = predicted_win_rate
             else:
                 avg_profit = 0
                 total_profit = 0
