@@ -150,8 +150,7 @@ class MarketStateFingerprint:
             
             # MACD方向（而非精确值）
             'macd_direction': 'bull' if market_data.get('macd', {}).get('histogram', 0) > 0 else 'bear',
-            'macd_1h_direction': 'bull' if market_data.get('mid_term', {}).get('macd_histogram', 0) > 0 else 'bear',
-            
+                'macd_1h_direction': 'bull' if market_data.get('mid_term', {}).get('macd_histogram', 0) > 0 else 'bear',
             # 价格相对支撑阻力位置（±3%内认为相同）
             'price_position': _get_price_position(
                 market_data.get('current_price', 0),
@@ -656,14 +655,14 @@ SIGNAL_TIER_PARAMS = {
         "position_multiplier": 1.0,  # 标准仓位
         "description": "标准信号，多层趋势支持，中等胜率",
         "rationale": "Standard approach for moderate confidence signals. Balanced R:R of 2.0 provides cushion for 40-45% win rate scenarios."
-    },
+            },
     "LOW": {
         "min_risk_reward": 2.5,   # 保守盈亏比
         "atr_multiplier": 1.2,     # 更宽止损（避免噪音扫损）
         "position_multiplier": 0.7,  # 减小仓位30%
         "description": "低质量信号，弱趋势对齐，需要更高盈亏比保护",
         "rationale": "Low-confidence signals require higher R:R (2.5) to compensate for lower win rate (~35-40%). Wider stops prevent premature stop-outs in choppy markets."
-    }
+            }
 }
 
 # ==================== V7.6.5: 币种个性化画像 ====================
@@ -1359,13 +1358,13 @@ def clear_symbol_orders(symbol, verbose=True):
             print(f"  ⚠️ 处理条件单异常: {str(e)[:50]}")
     
     # 汇总结果
-        if verbose and (success_count > 0 or fail_count > 0):
-            print(f"  清理完成: 成功{success_count}个, 失败{fail_count}个")
+    if verbose and (success_count > 0 or fail_count > 0):
+        print(f"  清理完成: 成功{success_count}个, 失败{fail_count}个")
     elif verbose and success_count == 0 and fail_count == 0:
         print(f"  无需要清理的订单")
-        
-        return success_count, fail_count
-        
+    
+    return success_count, fail_count
+
 
 def set_tpsl_orders_via_papi(symbol: str, side: str, amount: float, stop_loss: float = None, take_profit: float = None, verbose: bool = True):
     """
@@ -1432,8 +1431,8 @@ def set_tpsl_orders_via_papi(symbol: str, side: str, amount: float, stop_loss: f
             else:
                 if verbose:
                     print(f"  ❌ 止损单设置失败: HTTP {response.status_code} - {response.text[:100]}")
-    except Exception as e:
-        if verbose:
+        except Exception as e:
+            if verbose:
                 print(f"  ❌ 止损单设置异常: {str(e)[:80]}")
     
     # 2. 设置止盈订单（使用TAKE_PROFIT_MARKET）
@@ -1621,7 +1620,7 @@ def sync_csv_with_exchange_positions(current_positions):
                     send_bark_notification(
                         f"[DS]{coin}自动平仓{pnl_emoji}",
                         f"{side}仓 {触发类型}触发 {pnl:+.2f}U\n{type_emoji}{type_name_cn} {actual_holding_minutes:.0f}分 {达标状态}\n开${entry_price:.0f}→平${close_price:.0f}"
-                    )
+                            )
                 except Exception as e:
                     print(f"  ⚠️ 发送Bark通知失败: {e}")
                 
@@ -2687,7 +2686,7 @@ def save_market_snapshot_v7(market_data_list):
             if ma7 > 0 and ma24 > 0:
                 divergence = (ma7 - ma24) / ma24 * 100
                 if abs(divergence) >= 2.0:  # 至少2%的发散
-                indicator_consensus += 1
+                    indicator_consensus += 1
             
             # 2. MACD明确金叉/死叉（histogram显著>0或<0，至少0.01）
             macd_hist = macd_data.get("histogram", 0)
@@ -3211,12 +3210,12 @@ def daily_review_with_kline_v7():
                     swing_missed = missed[missed['推测类型'] == '🌊Swing']
                     
                     if not scalping_missed.empty or not swing_missed.empty:
-                    review_lines.append("\n【错过的机会】")
+                        review_lines.append("\n【错过的机会】")
                         
                         if not scalping_missed.empty:
                             review_lines.append("  ⚡超短线机会:")
                             for _, row in scalping_missed.head(2).iterrows():
-                        review_lines.append(
+                                review_lines.append(
                                     f"    {row['coin']}: {row['time']} 共振{row['indicator_consensus']}/5 "
                                     f"价格{row['price']:.0f} 分{row.get('signal_score', 0):.0f}"
                                 )
@@ -3227,7 +3226,7 @@ def daily_review_with_kline_v7():
                                 review_lines.append(
                                     f"    {row['coin']}: {row['time']} 共振{row['indicator_consensus']}/5 "
                                     f"价格{row['price']:.0f} 分{row.get('signal_score', 0):.0f}"
-                        )
+                                )
         
         return "\n".join(review_lines)
         
@@ -3535,7 +3534,7 @@ def check_signal_type_risk_budget(signal_type, current_positions, planned_positi
         same_type_positions = [
             p for p in current_positions 
             if p.get('signal_type') == signal_type or p.get('_temp_signal_type') == signal_type
-        ]
+                ]
         
         # 检查数量限制
         type_name_cn = "超短线" if signal_type == 'scalping' else "波段"
@@ -3563,7 +3562,7 @@ def check_signal_type_risk_budget(signal_type, current_positions, planned_positi
         same_type_positions = [
             p for p in current_positions 
             if p.get('_temp_signal_type') == signal_type
-        ]
+                ]
         
         total_same_type_risk = sum([abs(p.get('unrealized_pnl', 0)) for p in same_type_positions])
         
@@ -4562,7 +4561,7 @@ def backtest_parameters(config_variant, days=7, verbose=False):
                 'total_snapshots': total_records,  # 🔧 修复：使用 total_records
                 'potential_opportunities': captured_opps + missed_opps,  # 🆕 潜在机会数
                 'filter_strictness': 'TOO_STRICT' if (captured_opps + missed_opps) > 0 else 'NO_OPPORTUNITIES'  # 🆕 严格程度判断
-            }
+                    }
             
     except Exception as e:
         print(f"⚠️ 回测失败: {e}")
@@ -4646,29 +4645,29 @@ This metric balances three dimensions:
 
 ### Control Group: Original Parameters (7-Day Historical Backtest)
 {f"- Win Rate: {backtest_original['win_rate']*100:.1f}%" if backtest_original else "- Backtest Failed"}
-{f"- Weighted Win Rate (Recent-Biased): {original_weighted_wr*100:.1f}%" if backtest_original else ""}
+    {f"- Weighted Win Rate (Recent-Biased): {original_weighted_wr*100:.1f}%" if backtest_original else ""}
 {f"- Profit Ratio: {backtest_original['profit_ratio']:.2f}:1" if backtest_original else ""}
-{f"- Weighted Profit Ratio: {original_weighted_pr:.2f}:1" if backtest_original else ""}
+    {f"- Weighted Profit Ratio: {original_weighted_pr:.2f}:1" if backtest_original else ""}
 {f"- Opportunity Capture Rate: {backtest_original['capture_rate']*100:.1f}%" if backtest_original else ""}
-{f"- 🎯 **Composite Profit Metric**: {original_composite:.4f}" if backtest_original else ""}
+    {f"- 🎯 **Composite Profit Metric**: {original_composite:.4f}" if backtest_original else ""}
 {f"     (= {original_weighted_wr:.2f} × {original_weighted_pr:.2f} × {backtest_original['capture_rate']:.2f})" if backtest_original else ""}
-{f"- Total P&L: {backtest_original['total_profit']:.2f}%" if backtest_original else ""}
+    {f"- Total P&L: {backtest_original['total_profit']:.2f}%" if backtest_original else ""}
 
 ### Treatment Group: Optimized Parameters (7-Day Historical Backtest)
 {f"- Win Rate: {backtest_optimized['win_rate']*100:.1f}%" if backtest_optimized else "- Backtest Failed"}
-{f"- Weighted Win Rate (Recent-Biased): {optimized_weighted_wr*100:.1f}%" if backtest_optimized else ""}
+    {f"- Weighted Win Rate (Recent-Biased): {optimized_weighted_wr*100:.1f}%" if backtest_optimized else ""}
 {f"- Profit Ratio: {backtest_optimized['profit_ratio']:.2f}:1" if backtest_optimized else ""}
-{f"- Weighted Profit Ratio: {optimized_weighted_pr:.2f}:1" if backtest_optimized else ""}
+    {f"- Weighted Profit Ratio: {optimized_weighted_pr:.2f}:1" if backtest_optimized else ""}
 {f"- Opportunity Capture Rate: {backtest_optimized['capture_rate']*100:.1f}%" if backtest_optimized else ""}
-{f"- 🎯 **Composite Profit Metric**: {optimized_composite:.4f}" if backtest_optimized else ""}
+    {f"- 🎯 **Composite Profit Metric**: {optimized_composite:.4f}" if backtest_optimized else ""}
 {f"     (= {optimized_weighted_wr:.2f} × {optimized_weighted_pr:.2f} × {backtest_optimized['capture_rate']:.2f})" if backtest_optimized else ""}
-{f"- Total P&L: {backtest_optimized['total_profit']:.2f}%" if backtest_optimized else ""}
+    {f"- Total P&L: {backtest_optimized['total_profit']:.2f}%" if backtest_optimized else ""}
 
 ### 🎯 **CORE DECISION INDICATOR**
 {f"**Composite Profit Metric Change**: {composite_improvement:+.1f}%" if backtest_original and backtest_optimized else "- Unable to calculate"}
-{f"  - Original: {original_composite:.4f}" if backtest_original else ""}
+    {f"  - Original: {original_composite:.4f}" if backtest_original else ""}
 {f"  - Optimized: {optimized_composite:.4f}" if backtest_optimized else ""}
-{f"  - {'✅ IMPROVED' if composite_improvement > 0 else '❌ DEGRADED'}" if backtest_original and backtest_optimized else ""}
+    {f"  - {'✅ IMPROVED' if composite_improvement > 0 else '❌ DEGRADED'}" if backtest_original and backtest_optimized else ""}
 
 **NOTE**: 
 - Weighted metrics emphasize recent data (Day 0: 1.0x → Day 6: 0.4x weight) to reflect current market conditions
@@ -4698,12 +4697,12 @@ This metric balances three dimensions:
   "is_effective": true/false,
   "improvement_summary": "[中文] Quantitative comparison summary (3-4 sentences, must include specific numeric deltas)",
   "root_cause_analysis": "[中文] If underperforming, root cause analysis (3-4 sentences with trade examples)",
-  "final_recommendation": "[中文] Final binary decision with implementation plan (2-3 sentences)",
+      "final_recommendation": "[中文] Final binary decision with implementation plan (2-3 sentences)",
   "revised_adjustments": {{
     "global": {{
       "min_risk_reward": 1.6,
       "_comment": "If revision needed, provide refined parameters; if not, return empty object"
-    }}
+          }}
   }},
   "confidence": 0.85,
   "should_apply": true/false,
@@ -4722,8 +4721,8 @@ This metric balances three dimensions:
 2. **Deployment Decision Logic** (`should_apply`):
    - ✅ `should_apply = true` IF: **Composite Profit Metric improves ≥10%**
    - ⚠️ `should_apply = true` (with caution) IF:
-     * Composite Profit Metric improves 5-10% AND no single dimension degrades >15%
-   - ❌ `should_apply = false` OTHERWISE
+       * Composite Profit Metric improves 5-10% AND no single dimension degrades >15%
+  - ❌ `should_apply = false` OTHERWISE
    
 3. **Balanced Trade-offs**:
    - If win rate ↑ but capture rate ↓↓ → Check if composite metric improves overall
@@ -4883,7 +4882,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
                 f"    • {r['name']}: 总盈利={r.get('total_profit', 0):.2f}%, 胜率={r.get('win_rate', 0)*100:.1f}%, "
                 f"盈亏比={r.get('profit_ratio', 0):.2f}:1"
                 for r in all_results if 'name' in r
-            ])
+                    ])
             
             ai_prompt = f"""
 ## AI任务：分析Round 1结果，推荐新的盈利搜索区域
@@ -4997,9 +4996,9 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
             # 构建完整历史摘要
             all_summary = "\n".join([
                 f"    Round {i+1}: {len([r for r in all_results if r.get('round') == i+1])}个点, "
-                f"盈利: {len([r for r in all_results if r.get('round') == i+1 and r.get('is_profitable')])}个"
+                    f"盈利: {len([r for r in all_results if r.get('round') == i+1 and r.get('is_profitable')])}个"
                 for i in range(round_num - 1)
-            ])
+                    ])
             
             ai_deep_prompt = f"""
 ## 深度分析：经过{round_num-1}轮探索仍未找到盈利
@@ -5172,7 +5171,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
             'round': round_num,
             'strategy': test_points[0].get('name', f'Round{round_num}') if test_points else f'Round{round_num}',
             'tested_points': len(test_points),
-            'found_profitable': len(round_profitable)
+                'tested_points': len(test_points),
         })
         
         # 检查是否找到盈利
@@ -5404,7 +5403,7 @@ def profit_expansion_phase_v770(profitable_center, all_results, days=7, max_iter
         'best_metric': best_metric,
         'best_profit': best_profit,
         'best_result': best_result if best_result else all_profitable[0] if all_profitable else {},  # 🆕 添加完整回测结果
-        'all_profitable': all_profitable,
+            'all_profitable': all_profitable,
         'expansion_path': expansion_path,
         'rounds': total_rounds
     }
@@ -6395,7 +6394,7 @@ def iterative_parameter_optimization_v770(data_summary, current_config, original
         'phase4': phase4_result,
         'total_rounds': total_rounds,
         'baseline_metric': phase1_result['all_results'][0].get('composite_profit_metric', 0) if phase1_result['all_results'] else 0,
-        'rounds': [
+            'rounds': [
             {'round_num': 1, 'metric': final_metric, 'status': 'COMPLETED'}
         ]
     }
@@ -6492,9 +6491,9 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
         strategic_points = [
             {'min_risk_reward': rr_range[0], 'min_indicator_consensus': cons_range[0], 'atr_stop_multiplier': atr_range[0], 'name': '#1 极宽松'},
             {'min_risk_reward': (rr_range[0] + rr_range[1]) * 0.375 + rr_range[0] * 0.625, 'min_indicator_consensus': cons_range[0] if cons_range[0] == cons_range[1] else cons_range[0] + 1, 'atr_stop_multiplier': (atr_range[0] + atr_range[1]) / 2, 'name': '#2 偏宽松'},
-            {'min_risk_reward': (rr_range[0] + rr_range[1]) / 2, 'min_indicator_consensus': int((cons_range[0] + cons_range[1]) / 2), 'atr_stop_multiplier': (atr_range[0] + atr_range[1]) / 2, 'name': '#3 标准'},
+                {'min_risk_reward': (rr_range[0] + rr_range[1]) / 2, 'min_indicator_consensus': int((cons_range[0] + cons_range[1]) / 2), 'atr_stop_multiplier': (atr_range[0] + atr_range[1]) / 2, 'name': '#3 标准'},
             {'min_risk_reward': (rr_range[0] + rr_range[1]) * 0.625 + rr_range[1] * 0.375, 'min_indicator_consensus': cons_range[1] if cons_range[0] == cons_range[1] else cons_range[1] - 1, 'atr_stop_multiplier': (atr_range[0] + atr_range[1]) / 2, 'name': '#4 偏严格'},
-            {'min_risk_reward': rr_range[1], 'min_indicator_consensus': cons_range[1], 'atr_stop_multiplier': atr_range[1], 'name': '#5 严格'},
+                {'min_risk_reward': rr_range[1], 'min_indicator_consensus': cons_range[1], 'atr_stop_multiplier': atr_range[1], 'name': '#5 严格'},
         ]
         print(f"  ℹ️ 使用历史最优范围")
     else:
@@ -6653,7 +6652,7 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
                     model="deepseek-reasoner",
                     messages=[
                         {"role": "system", "content": "You are a professional quantitative trading analyst specializing in parameter optimization and profitability discovery. Respond in Chinese for designated fields."},
-                        {"role": "user", "content": profit_discovery_prompt}
+                            {"role": "user", "content": profit_discovery_prompt}
                     ],
                     temperature=0.7,
                     max_tokens=2000
@@ -6971,7 +6970,7 @@ Based on the 5 strategic sampling points above:
    - Which ATR multiplier works best? (e.g., 1.6-1.9)
 
 2. **Design 4 TARGETED TESTS for Round 3** (local fine-grained search):
-   - Test points around the current best ({round1_best['point_name']})
+    - Test points around the current best ({round1_best['point_name']})
    - Explore slight variations in R:R, consensus, and ATR
    - Goal: Find the TRUE MAXIMUM within ±0.2 range
 
@@ -7482,7 +7481,7 @@ Based on the 5 strategic sampling points above:
         'total_rounds': 4,
         'strategic_sampling': round1_results,
         'local_search': round3_results if 'round3_results' in locals() else [],
-        'all_backtest_results': all_backtest_results,
+            'all_backtest_results': all_backtest_results,
         'optimal_sampling_range': optimal_sampling_range,
         # 🆕 V7.6.5: 盈利判断结果
         'is_profitable': is_profitable_param,
@@ -7699,7 +7698,7 @@ def analyze_and_adjust_params():
         risky_count = sum(
             1
             for _, row in losses.iterrows()
-            if any(k in str(row["平仓理由"]) for k in risky_keywords)
+                if any(k in str(row["平仓理由"]) for k in risky_keywords)
         )
         risk_ratio = risky_count / len(losses) if len(losses) > 0 else 0
 
@@ -8087,12 +8086,12 @@ def analyze_and_adjust_params():
         elif ENABLE_V770_FULL_OPTIMIZATION:
             # 完整V7.7.0优化（7-10分钟）
             print(f"  ℹ️  使用完整V7.7.0优化模式")
-        iterative_result = iterative_parameter_optimization(
-            data_summary=data_summary,
-            current_config=config,
-            original_stats=original_stats,
-            max_rounds=5
-        )
+            iterative_result = iterative_parameter_optimization(
+                data_summary=data_summary,
+                current_config=config,
+                original_stats=original_stats,
+                max_rounds=5
+            )
             global_initial_params = iterative_result.get('final_params') if iterative_result else None
             
         else:
@@ -8167,7 +8166,7 @@ def analyze_and_adjust_params():
                 'baseline_metric': baseline_metric,
                 'best_metric': best_metric,
                 'improvement_pct': ((best_metric - baseline_metric) / baseline_metric * 100) if baseline_metric > 0 else 0,
-                'best_config': best_config,
+                    'best_config': best_config,
                 'rounds_summary': [
                     {
                         'round': r.get('round_num', 1),
@@ -8177,7 +8176,7 @@ def analyze_and_adjust_params():
                         'status': r.get('status', 'N/A')  # 新增：保存V7.7.0的status
                     }
                     for r in iterative_result['rounds']
-                ]
+                        ]
             }
             
             with open(history_file, 'a', encoding='utf-8') as f:
@@ -8202,7 +8201,7 @@ def analyze_and_adjust_params():
             optimization = {
                 'diagnosis': f'完成{iterative_result["total_rounds"]}轮迭代优化',
                 'reasoning': f'综合利润指标提升{improvement_pct:.1f}%' if baseline_metric > 0 else '找到最优参数配置',
-                'adjustments': adjustments,
+                    'adjustments': adjustments,
                 'best_round': best_round_num,
                 'baseline_metric': baseline_metric,
                 'best_metric': best_metric
@@ -8633,7 +8632,7 @@ def analyze_and_adjust_params():
 """
                     
                     # 显示超短线机会（始终显示）
-                        opportunity_stats_html += """
+                    opportunity_stats_html += """
         <h4 style="margin: 15px 0 5px 0; color: #ff6f00;">⚡ 超短线机会</h4>
 """
                     if scalping_opps_sorted:
@@ -8663,7 +8662,7 @@ def analyze_and_adjust_params():
                                 if opp_date and len(str(opp_date)) == 8:
                                     date_str = str(opp_date)
                                     datetime_str = f"{date_str[4:6]}-{date_str[6:]} {time_str}"
-                            else:
+                                else:
                                     datetime_str = time_str
                             else:
                                 datetime_str = 'N/A'
@@ -8736,7 +8735,7 @@ def analyze_and_adjust_params():
 """
                     
                     # 【V8.2.6.1修复】显示波段机会（独立section，不在else内）
-                        opportunity_stats_html += """
+                    opportunity_stats_html += """
         <h4 style="margin: 15px 0 5px 0; color: #1976d2;">🌊 波段机会</h4>
 """
                     if swing_opps_sorted:
@@ -8755,7 +8754,7 @@ def analyze_and_adjust_params():
 """
                         # 【V8.2.1】增加显示数量到15个，优先显示错过的高利润机会
                         for opp in swing_opps_sorted[:15]:
-                        coin = opp.get('coin', 'N/A')
+                            coin = opp.get('coin', 'N/A')
                             
                             # 【V8.2.1】修复时间格式，处理N/A情况
                             raw_time = opp.get('time', '')
@@ -8766,12 +8765,12 @@ def analyze_and_adjust_params():
                                 if opp_date and len(str(opp_date)) == 8:
                                     date_str = str(opp_date)
                                     datetime_str = f"{date_str[4:6]}-{date_str[6:]} {time_str}"
-                            else:
+                                else:
                                     datetime_str = time_str
                             else:
                                 datetime_str = 'N/A'
                             
-                        signal_score = opp.get('signal_score', 0)
+                            signal_score = opp.get('signal_score', 0)
                             actual_profit = opp.get('actual_profit_pct', 0)
                             
                             # 🔧 V7.9.2: 获取捕获利润和效率
@@ -8783,7 +8782,7 @@ def analyze_and_adjust_params():
                             new_efficiency = opp.get('new_efficiency', 0)
                             old_exit_type = opp.get('old_exit_type', 'N/A')
                             new_exit_type = opp.get('new_exit_type', 'N/A')
-                        was_traded = opp.get('was_traded', False)
+                            was_traded = opp.get('was_traded', False)
                         
                             # 【V8.2.2】修复显示格式：正确处理正负号
                             if old_can_entry:
@@ -8813,12 +8812,12 @@ def analyze_and_adjust_params():
                             elif old_can_entry and not new_can_entry:
                                 analysis = '⚪ 新参数略严格（质量更优）'
                                 row_bg = 'background: #f5f5f5;'
-                        else:
+                            else:
                                 miss_reason = opp.get('miss_reason', '信号质量不足')
                                 analysis = miss_reason if miss_reason else '信号质量不足'
                                 row_bg = 'background: #ffebee;'
                         
-                        opportunity_stats_html += f'''
+                            opportunity_stats_html += f'''
             <tr style="{row_bg}">
                 <td style="padding: 6px; border: 1px solid #e0e0e0;"><strong>{coin}</strong></td>
                 <td style="padding: 6px; text-align: center; border: 1px solid #e0e0e0; font-size: 0.85em;">{datetime_str}</td>
@@ -8929,7 +8928,7 @@ def analyze_and_adjust_params():
             <li><strong>成功捕获：</strong><span class="success">{caught_opportunities}个</span></li>
             <li><strong>错过机会：</strong><span class="{'warning' if len(missed_opportunities) > 2 else 'success'}">{len(missed_opportunities)}个</span></li>
             <li><strong>捕获率：</strong><span class="{'success' if catch_rate >= 70 else 'warning' if catch_rate >= 50 else 'danger'}">{catch_rate:.1f}%</span></li>
-        </ul>
+                </ul>
     </div>
 """
                 
@@ -8973,7 +8972,7 @@ def analyze_and_adjust_params():
                 <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;"><strong>第{round_num}轮</strong></td>
                 <td style="padding: 8px; border: 1px solid #e0e0e0;">{direction[:50] if direction else 'N/A'}...</td>
                 <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;">{r.get('metric', 0):.4f} ({r.get('improvement_pct', 0):+.1f}%)</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;">{status_icon}</td>
+                    <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;">{r.get('metric', 0):.4f} ({r.get('improvement_pct', 0):+.1f}%)</td>
             </tr>
 """
                     
@@ -9117,7 +9116,7 @@ def analyze_and_adjust_params():
                 <tr>
                     <td style="padding: 8px; border: 1px solid #e0e0e0;">💰 回测盈利</td>
                     <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0; font-size: 1.2em; font-weight: bold; color: {'#4caf50' if backtest_profit > 0 else '#f44336' if backtest_profit < 0 else '#666'};">{backtest_profit:+.2f}%</td>
-                </tr>
+                        </tr>
                 <tr>
                     <td style="padding: 8px; border: 1px solid #e0e0e0;">📈 模拟交易数</td>
                     <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;">{backtest_trades}笔</td>
@@ -9156,8 +9155,7 @@ def analyze_and_adjust_params():
                 <li><strong>杠杆设置：</strong>最高5倍（系统动态调整）</li>
                 <li><strong>回测盈利：</strong>{backtest_profit:+.2f}% = {'盈利' if backtest_profit > 0 else '亏损' if backtest_profit < 0 else '持平'} {abs(backtest_profit):.2f} USDT</li>
                 <li><strong>⚠️ 重要：</strong>盈利百分比<strong>已包含杠杆效果</strong>，不是再乘以5倍！</li>
-                <li><strong>实际收益：</strong>如果实际运行，100U本金 → {100 + backtest_profit:.2f}U（理论值）</li>
-            </ul>
+                    <li><strong>⚠️ 重要：</strong>盈利百分比<strong>已包含杠杆效果</strong>，不是再乘以5倍！</li>
             <p style="margin: 10px 0 0 0; padding: 10px; background: #fff3e0; border-radius: 3px; font-size: 0.9em;">
                 <strong>📌 说明：</strong>杠杆既放大盈利也放大亏损。如果使用5倍杠杆，价格波动1%，你的账户盈亏是5%。
                 最终的{abs(backtest_profit):.2f}%盈利，就是在使用杠杆的情况下，对你的本金的净影响。
@@ -9181,23 +9179,23 @@ def analyze_and_adjust_params():
             <tr>
                 <td style="padding: 8px; border: 1px solid #e3f2fd;">当前胜率</td>
                 <td style="padding: 8px; text-align: center; border: 1px solid #e3f2fd;"><span class="{'success' if win_rate >= 0.5 else 'warning'}">{win_rate*100:.1f}%</span></td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #e3f2fd;"><span class="success">预计{'保持' if win_rate >= 0.5 else '提升'}</span></td>
+                    <td style="padding: 8px; text-align: center; border: 1px solid #e3f2fd;"><span class="success">预计{'保持' if win_rate >= 0.5 else '提升'}</span></td>
             </tr>
             <tr>
                 <td style="padding: 8px; border: 1px solid #e3f2fd;">盈亏比</td>
                 <td style="padding: 8px; text-align: center; border: 1px solid #e3f2fd;"><span class="{'danger' if win_loss_ratio < 1.0 else 'warning' if win_loss_ratio < 1.5 else 'success'}">{win_loss_ratio:.2f}:1</span></td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #e3f2fd;"><span class="success">{optimization.get('expected_effect', '预期改善').split('盈亏比')[1].split('，')[0] if '盈亏比' in optimization.get('expected_effect', '') else '预期改善'}</span></td>
+                    <td style="padding: 8px; text-align: center; border: 1px solid #e3f2fd;"><span class="success">{optimization.get('expected_effect', '预期改善').split('盈亏比')[1].split('，')[0] if '盈亏比' in optimization.get('expected_effect', '') else '预期改善'}</span></td>
             </tr>
             <tr>
                 <td style="padding: 8px; border: 1px solid #e3f2fd;">机会捕获率</td>
                 <td style="padding: 8px; text-align: center; border: 1px solid #e3f2fd;"><span class="{'success' if catch_rate >= 70 else 'warning' if catch_rate >= 50 else 'danger'}">{catch_rate:.1f}%</span></td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #e3f2fd;"><span class="success">预计{'保持' if catch_rate >= 70 else '提升'}至{min(95, catch_rate + 15):.0f}%+</span></td>
+                    <td style="padding: 8px; text-align: center; border: 1px solid #e3f2fd;"><span class="success">预计{'保持' if catch_rate >= 70 else '提升'}至{min(95, catch_rate + 15):.0f}%+</span></td>
             </tr>
             <tr>
                 <td style="padding: 8px; border: 1px solid #e3f2fd;">AI置信度</td>
                 <td style="padding: 8px; text-align: center; border: 1px solid #e3f2fd;" colspan="2">
                     <span class="{'success' if optimization.get('confidence', 0) >= 0.7 else 'warning'}">{optimization.get('confidence', 0)*100:.0f}%</span>
-                </td>
+                        </td>
             </tr>
         </table>
         <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
@@ -9690,7 +9688,7 @@ def analyze_and_adjust_params():
                                 
                                 trader_summary_html += f"""
             <li><b>📉 最大连续亏损:</b> {max_consec_loss}笔 {'⚠️需关注' if max_consec_loss >= 3 else '✓正常'}</li>
-"""
+                """
                                 
                                 # 实际盈亏比
                                 if not scalping.empty:
@@ -10090,8 +10088,8 @@ def analyze_and_adjust_params():
                     )
                 except Exception as email_err:
                     print(f"⚠️ 邮件发送失败（不影响主流程）: {email_err}")
-        else:
-            print("\n→ 参数无需调整")
+            else:
+                print("\n→ 参数无需调整")
 
         print("=" * 70 + "\n")
         
@@ -10565,7 +10563,7 @@ def identify_pullback_type(df_15m):
                             "depth_pct": pullback_depth,
                             "recovery_pct": recovery,
                             "signal": "entry_ready",
-                        }
+                                }
 
                 # 复杂回调：回撤 38.2%-61.8%，形成整理
                 elif 38.2 <= pullback_depth <= 61.8:
@@ -10608,7 +10606,7 @@ def identify_pullback_type(df_15m):
                             "depth_pct": bounce_depth,
                             "recovery_pct": recovery,
                             "signal": "entry_ready",
-                            "direction": "short",
+                                "direction": "short",
                         }
 
                 elif 38.2 <= bounce_depth <= 61.8:
@@ -10668,7 +10666,7 @@ def detect_trend_initiation(df_15m, df_4h):
             h4_trend = (
                 "up"
                 if len(df_4h) >= 2 and df_4h.iloc[-1]["close"] > df_4h.iloc[-2]["close"]
-                else "unknown"
+                    else "unknown"
             )
 
             if all_bullish and h4_trend == "up":
@@ -10677,7 +10675,7 @@ def detect_trend_initiation(df_15m, df_4h):
                     "direction": "long",
                     "strength": "strong",
                     "entry_signal": "immediate",
-                    "reason": "强力突破+连续多头+4H确认",
+                        "reason": "强力突破+连续多头+4H确认",
                 }
             elif is_strong_bull:
                 return {
@@ -10685,7 +10683,7 @@ def detect_trend_initiation(df_15m, df_4h):
                     "direction": "long",
                     "strength": "moderate",
                     "entry_signal": "wait_confirm",
-                    "reason": "强力突破K线",
+                        "reason": "强力突破K线",
                 }
 
         elif is_strong_bear:
@@ -10694,7 +10692,7 @@ def detect_trend_initiation(df_15m, df_4h):
             h4_trend = (
                 "down"
                 if len(df_4h) >= 2 and df_4h.iloc[-1]["close"] < df_4h.iloc[-2]["close"]
-                else "unknown"
+                    else "unknown"
             )
 
             if all_bearish and h4_trend == "down":
@@ -10703,7 +10701,7 @@ def detect_trend_initiation(df_15m, df_4h):
                     "direction": "short",
                     "strength": "strong",
                     "entry_signal": "immediate",
-                    "reason": "强力突破+连续空头+4H确认",
+                        "reason": "强力突破+连续空头+4H确认",
                 }
             elif is_strong_bear:
                 return {
@@ -10711,7 +10709,7 @@ def detect_trend_initiation(df_15m, df_4h):
                     "direction": "short",
                     "strength": "moderate",
                     "entry_signal": "wait_confirm",
-                    "reason": "强力突破K线",
+                        "reason": "强力突破K线",
                 }
 
         return None
@@ -10782,7 +10780,7 @@ def detect_trend_exhaustion(df_15m):
             recent_bodies = [
                 abs(recent.iloc[i]["close"] - recent.iloc[i]["open"])
                 for i in range(len(recent))
-            ]
+                    ]
 
             if len(recent_bodies) >= 3:
                 avg_body_early = np.mean(recent_bodies[:2])
@@ -10842,7 +10840,7 @@ def detect_trend_exhaustion(df_15m):
             recent_bodies = [
                 abs(recent.iloc[i]["close"] - recent.iloc[i]["open"])
                 for i in range(len(recent))
-            ]
+                    ]
 
             if len(recent_bodies) >= 3:
                 avg_body_early = np.mean(recent_bodies[:2])
@@ -11025,10 +11023,10 @@ def detect_breakout_failure(df_15m: pd.DataFrame, sr_levels: dict) -> dict:
                         'direction': 'SHORT',
                         'strength': strength,
                         'entry_price': res_price,
-                        'sr_strength': res_strength,
+                            'sr_strength': res_strength,
                         'rationale': f'突破{res_price:.2f}失败，Fading被困多头',
                         'pattern': 'long_wick' if failed else 'engulfing'
-                    }
+                            }
         
         # === 空头BOF：跌破支撑失败 ===
         if support.get('price'):
@@ -11056,10 +11054,10 @@ def detect_breakout_failure(df_15m: pd.DataFrame, sr_levels: dict) -> dict:
                         'direction': 'LONG',
                         'strength': strength,
                         'entry_price': sup_price,
-                        'sr_strength': sup_strength,
+                            'sr_strength': sup_strength,
                         'rationale': f'跌破{sup_price:.2f}失败，Fading被困空头',
                         'pattern': 'long_wick' if failed else 'engulfing'
-                    }
+                            }
         
         return None
     except:
@@ -11114,7 +11112,7 @@ def detect_breakout_pullback(df_15m: pd.DataFrame, df_1h: pd.DataFrame, sr_level
                     'signal_type': 'BPB',
                     'direction': 'LONG',
                     'strength': 5 if res_strength >= 4 else 4,
-                    'entry_price': res_price,
+                        'entry_price': res_price,
                     'sr_strength': res_strength,
                     'rationale': f'突破{res_price:.2f}后回踩极性转换位，Fading弱势回调',
                     'confirmation': '1H_confirmed'
@@ -11139,7 +11137,7 @@ def detect_breakout_pullback(df_15m: pd.DataFrame, df_1h: pd.DataFrame, sr_level
                     'signal_type': 'BPB',
                     'direction': 'SHORT',
                     'strength': 5 if sup_strength >= 4 else 4,
-                    'entry_price': sup_price,
+                        'entry_price': sup_price,
                     'sr_strength': sup_strength,
                     'rationale': f'跌破{sup_price:.2f}后反抽极性转换位，Fading弱势反弹',
                     'confirmation': '1H_confirmed'
@@ -11198,7 +11196,7 @@ def detect_support_resistance_test(df_15m: pd.DataFrame, sr_levels: dict, moment
                     'direction': 'SHORT',
                     'strength': min(5, res_strength + bonus_strength),
                     'entry_price': res_price,
-                    'sr_strength': res_strength,
+                        'sr_strength': res_strength,
                     'rationale': f'弱势测试强阻力{res_price:.2f}+动能停滞，Fading测试者',
                     'momentum_slope': momentum_slope,
                     'fast_rejection': resistance.get('is_fast_rejection', False)
@@ -11220,7 +11218,7 @@ def detect_support_resistance_test(df_15m: pd.DataFrame, sr_levels: dict, moment
                     'direction': 'LONG',
                     'strength': min(5, sup_strength + bonus_strength),
                     'entry_price': sup_price,
-                    'sr_strength': sup_strength,
+                        'sr_strength': sup_strength,
                     'rationale': f'弱势测试强支撑{sup_price:.2f}+动能停滞，Fading测试者',
                     'momentum_slope': momentum_slope,
                     'fast_rejection': support.get('is_fast_rejection', False)
@@ -11997,11 +11995,11 @@ def calculate_unified_risk_reward(entry_price, side, sr_levels, atr_14, min_rr=N
             
             stop_reason = (
                 f"支撑{support_price:.0f}-ATR缓冲" if nearest_support else "ATR×1.5"
-            )
+                    )
             tp_reason = (
                 f"阻力{nearest_resistance['price']:.0f}前"
                 if nearest_resistance
-                else f"盈亏比{min_rr}:1"
+                    else f"盈亏比{min_rr}:1"
             )
             
             return {
@@ -12065,12 +12063,12 @@ def calculate_unified_risk_reward(entry_price, side, sr_levels, atr_14, min_rr=N
             stop_reason = (
                 f"阻力{resistance_price:.0f}+ATR缓冲"
                 if nearest_resistance
-                else "ATR×1.5"
+                    else "ATR×1.5"
             )
             tp_reason = (
                 f"支撑{nearest_support['price']:.0f}前"
                 if nearest_support
-                else f"盈亏比{min_rr}:1"
+                    else f"盈亏比{min_rr}:1"
             )
             
             return {
@@ -12450,14 +12448,14 @@ def get_ohlcv_data(symbol):
                 "rsi_7": rsi_7,
                 "rsi_14": rsi_14,
                 "status": "超买" if rsi_14 > 70 else "超卖" if rsi_14 < 30 else "中性",
-            },
+                    },
             "atr": {
                 "atr_3": atr_3,
                 "atr_14": atr_14,
                 "volatility": (
                     "高"
                     if atr_14 > atr_3 * 1.5
-                    else "低" if atr_14 < atr_3 * 0.7 else "正常"
+                        else "低" if atr_14 < atr_3 * 0.7 else "正常"
                 ),
             },
             # 长期指标（4小时）
@@ -12593,10 +12591,10 @@ def get_all_positions():
                 leverage = (
                     trade_info["leverage"]
                     if trade_info
-                    else (
+                        else (
                         float(pos["leverage"])
                         if pos["leverage"]
-                        else TRADE_CONFIG["max_leverage"]
+                            else TRADE_CONFIG["max_leverage"]
                     )
                 )
                 
@@ -12605,7 +12603,7 @@ def get_all_positions():
                     "side": pos["side"],
                     "size": float(pos["contracts"]),
                     "entry_price": float(pos["entryPrice"]) if pos["entryPrice"] else 0,
-                    "unrealized_pnl": (
+                        "unrealized_pnl": (
                         float(pos["unrealizedPnl"]) if pos["unrealizedPnl"] else 0
                     ),
                     "leverage": leverage,  # 使用CSV中记录的准确杠杆率
@@ -12819,9 +12817,9 @@ def ai_portfolio_decision(
     # 🆕 构建决策上下文（压缩洞察+持仓承诺）
     current_positions_dict = {
         pos.get("symbol", "").split("/")[0]: pos.get("entry_price", 0) 
-        for pos in current_positions 
+            for pos in current_positions 
         if pos.get("symbol")
-    }
+            }
     decision_context = build_decision_context(current_positions_dict)
     
     # 构建市场概览（V3.0：增加裸K分析）
@@ -12877,7 +12875,7 @@ def ai_portfolio_decision(
                     breakout_desc = f"⚠️ Break Support ${level:.0f} (-{strength_pct:.2f}%) ✓✓✓"
             # Legacy logic: Volume breakout candle
             elif pa["breakout"].get("volume_ratio"):
-            ratio = pa["breakout"]["volume_ratio"]
+                ratio = pa["breakout"]["volume_ratio"]
                 breakout_desc = f"🚀 Breakout Candle (Vol {ratio:.1f}x) ✓✓✓"
 
         consecutive_desc = "None"
@@ -13067,7 +13065,7 @@ Price: ${price:,.2f} ({data['price_change']:+.2f}%)
                     [
                         line
                         for line in TRADES_FILE.read_text().split("\n")
-                        if line.strip()
+                            if line.strip()
                     ]
                 )
                 - 1
@@ -13160,11 +13158,11 @@ When you identify a signal, explicitly state:
 Example:
 "Signal Type: Swing
 Rationale: Strong Trend Inception with 4H+1H alignment, this is a wave-riding opportunity not a quick bounce
-Expected Holding: 4-6 hours
+    Expected Holding: 4-6 hours
 TP Target: 1H resistance level"
 
 **CRITICAL**: Don't use Swing strategy for reversal signals, and don't use Scalping strategy for trend signals. Mismatching mode and signal type leads to premature exits or excessive risk.
-"""
+    """
     
     # 🆕 V7.6.5: 构建信号分级提示
     signal_tier_info = """
@@ -13287,7 +13285,7 @@ If you see exit lessons in "Yesterday's Lessons":
 **LESSON TAGGING (V7.9):**
 - When applying a lesson, explicitly tag: `[Scalping Lesson]` or `[Swing Lesson]`
 - Example: "Entry at support - [Swing Lesson: stricter confluence after yesterday's SL]"
-- If lesson type mismatches signal type, explicitly state: "[Ignored - wrong signal type]"
+    - If lesson type mismatches signal type, explicitly state: "[Ignored - wrong signal type]"
 
 **IMPORTANT**: In your `reason` field, state which lesson you applied and verify signal type match. Misapplying lessons across signal types causes strategy confusion.
 
@@ -13784,7 +13782,7 @@ Final leverage = min(sum, 5)
             "lwp_reference": 0.0,  // LWP reference price
             "price_vs_lwp": "UNKNOWN",  // OPTIMAL|ACCEPTABLE|CHASING|UNKNOWN
             "overriding_4h_trend": false  // Counter-trend entry (only when YTC signal + S/R≥4 OR weakness≥0.85)
-        }}
+                }}
     ],
     "risk_assessment": "[Must be complete] Overall risk assessment",
     
@@ -13793,7 +13791,7 @@ Final leverage = min(sum, 5)
         "part1_target": "Immediate opposing S/R (Quick profit)",
         "part2_target": "Next major HTF S/R OR Trail stop aggressively using 15m structural moves",
         "scaling_strategy": "Consider scaling out 50% at Part 1, trail remaining with YTC SCRATCH logic"
-    }}
+            }}
 }}
 
 **Trade Management Intention (Simulation):**
@@ -13923,7 +13921,7 @@ Your core principles:
                 print(f"已添加 {open_brackets} 个 ] 和 {open_braces} 个 }}")
             
             try:
-            decision = json.loads(json_str)
+                decision = json.loads(json_str)
             except json.JSONDecodeError as e:
                 print(f"JSON解析失败: {e}")
                 # 如果修复失败，尝试使用提取函数
@@ -15219,7 +15217,7 @@ def request_ai_close_confirmation(symbol, position, market_data, invalidation_re
 - Profit protection: Only exit if multi-timeframe (1H+4H) trend reverses
 - Time factor: If held <2 hours, give it more time to develop
 - Key levels: Only worry if breaking through support/resistance
-"""
+    """
         
         # 构建AI Prompt（【V7.9】增加周期感知）
         prompt = f"""You are reviewing a {side} position on {coin_name}. The system has flagged potential premise invalidation. Evaluate whether to close this position.
@@ -15668,7 +15666,7 @@ def get_time_of_day_preference():
         # 提取UTC小时
         recent['utc_hour'] = recent['开仓时间_dt'].dt.tz_localize(None).apply(
             lambda x: x.hour if pd.notna(x) else -1
-        )
+                )
         
         # 分时段统计
         def get_period(hour):
@@ -16142,23 +16140,23 @@ def monitor_positions_for_invalidation(market_data_list: list, current_positions
                     # === Scalping模式：保持敏感检查 ===
                     
                     # 检查1：价格停滞
-            momentum_slope = market_data.get('price_action', {}).get('momentum_slope', 0)
-            unrealized_pnl = position.get('unrealized_pnl', 0)
-            
-            if abs(momentum_slope) < momentum_min and unrealized_pnl <= profit_min:
-                invalidation_reasons.append(
+                    momentum_slope = market_data.get('price_action', {}).get('momentum_slope', 0)
+                    unrealized_pnl = position.get('unrealized_pnl', 0)
+                    
+                    if abs(momentum_slope) < momentum_min and unrealized_pnl <= profit_min:
+                        invalidation_reasons.append(
                             f'Scalping动能停滞(slope={momentum_slope:.3f}<{momentum_min})+未盈利'
-                )
-            
+                        )
+                    
                     # 检查2：反向价格行为（单个K线即触发）
-            price_action = market_data.get('price_action', {})
-            is_reversal, reversal_type = check_reversal_signal(price_action, side)
-            if is_reversal:
+                    price_action = market_data.get('price_action', {})
+                    is_reversal, reversal_type = check_reversal_signal(price_action, side)
+                    if is_reversal:
                         invalidation_reasons.append(f'Scalping反向信号:{reversal_type}')
-            
+                    
                     # 检查3：时间失效
-            if check_time_invalidation(entry_time, max_hours=max_hours):
-                time_limit = max_hours * time_pct
+                    if check_time_invalidation(entry_time, max_hours=max_hours):
+                        time_limit = max_hours * time_pct
                         invalidation_reasons.append(f'Scalping超时(>{time_limit:.1f}h)')
                 
                 else:  # swing
@@ -16302,7 +16300,7 @@ def _execute_single_close_action(action, current_positions):
                     "entry_price": float(pos["entryPrice"]) if pos["entryPrice"] else 0,
                     "unrealized_pnl": float(pos["unrealizedPnl"]) if pos["unrealizedPnl"] else 0,
                     "mark_price": float(pos["markPrice"]) if pos["markPrice"] else 0,
-                }
+                        }
                 break
         
         if not real_pos:
@@ -16486,7 +16484,7 @@ def _execute_single_close_action(action, current_positions):
         send_bark_notification(
             f"[DS]{coin_name}平仓{pnl_emoji}{partial_mark}",
             f"{position_type}仓 {pnl:+.2f}U {holding_info}\n开${real_pos.get('entry_price', 0):.0f}→平${real_pos.get('mark_price', 0):.0f}\n{close_reason}",
-        )
+                )
 
         # 更新交易记录
         update_close_position(
@@ -16496,15 +16494,15 @@ def _execute_single_close_action(action, current_positions):
             order.get("average", 0) if order else 0,
             pnl,  # 🆕 V7.9: 使用按比例计算的盈亏
             action.get("reason", "N/A") + (f" [分批{close_pct:.0f}%]" if close_pct < 100 else ""),
-        )
+                )
         
         # 🆕 V7.9: 只有完全平仓才清理决策上下文
         if close_pct >= 100:
-        try:
-            clear_position_context(coin=coin_name)
+            try:
+                clear_position_context(coin=coin_name)
                 print(f"✓ 已清理 {coin_name} 的决策上下文")
-        except Exception as ctx_err:
-            print(f"⚠️ 清理决策上下文失败: {ctx_err}")
+            except Exception as ctx_err:
+                print(f"⚠️ 清理决策上下文失败: {ctx_err}")
         else:
             print(f"  ⚠️ 分批平仓，保留 {coin_name} 的决策上下文")
 
@@ -16800,7 +16798,7 @@ def _execute_single_open_action_v55(
             type_name_cn = "超短线" if signal_type == 'scalping' else "波段"
             print(f"⚠️ AI建议{ai_leverage}x被限制到{type_name_cn}最大{max_leverage_for_type}x")
         else:
-        print(f"✓ 使用AI建议杠杆: {leverage}x")
+            print(f"✓ 使用AI建议杠杆: {leverage}x")
     else:
         leverage = min(suggested_leverage, max_leverage_for_type)
         print(f"✓ 使用系统建议杠杆: {leverage}x (上限{max_leverage_for_type}x)")
@@ -17080,7 +17078,7 @@ def _execute_single_open_action_v55(
 
         print(
             f"\n开{'多' if operation=='OPEN_LONG' else '空'}仓: ${planned_position:.2f} {leverage}x杠杆 (约{amount:.6f}个)"
-        )
+                )
 
         order_side = "buy" if operation == "OPEN_LONG" else "sell"
         order = exchange.create_market_order(
@@ -17260,7 +17258,7 @@ def execute_portfolio_actions(
         open_actions = [
             a
             for a in decision["actions"]
-            if a.get("action") in ["OPEN_LONG", "OPEN_SHORT"]
+                if a.get("action") in ["OPEN_LONG", "OPEN_SHORT"]
         ]
         close_actions = [a for a in decision["actions"] if a.get("action") == "CLOSE"]
         hold_actions = [a for a in decision["actions"] if a.get("action") == "HOLD"]
@@ -17553,7 +17551,7 @@ def execute_portfolio_actions(
                     send_bark_notification(
                         f"[DeepSeek]{coin_name}平仓{pnl_emoji}",
                         f"{position_type}仓平仓 盈亏:{pnl:+.2f}U\n开仓价:{current_pos.get('entry_price', 0):.2f} 平仓价:{current_pos.get('mark_price', 0):.2f}\n平仓理由:{close_reason}",
-                    )
+                            )
                     
                     # 更新交易记录
                     update_close_position(
@@ -17780,7 +17778,7 @@ def trading_bot():
             # 重试机制
             for attempt in range(max_retries + 1):
                 try:
-            data = get_ohlcv_data(symbol)
+                    data = get_ohlcv_data(symbol)
                     
                     # 【V8.1.3关键】检查kline_data是否完整
                     if data:
@@ -17966,7 +17964,7 @@ def trading_bot():
                     "盈亏": p["unrealized_pnl"],
                 }
                 for p in current_positions_updated
-            ],
+                    ],
             "市场概况": [
                 {
                     "币种": d["symbol"].split("/")[0],
@@ -17974,7 +17972,7 @@ def trading_bot():
                     "涨跌": f"{d['price_change']:+.2f}%",
                 }
                 for d in market_data_list
-                if d is not None  # 跳过获取失败的币种
+                    if d is not None  # 跳过获取失败的币种
             ],
             "AI分析": decision.get("analysis", "N/A"),
             "风险评估": decision.get("risk_assessment", "N/A"),
@@ -18011,8 +18009,8 @@ def trading_bot():
             print(f"   建议: 检查系统负载 (free -h, top)")
             # 时间戳错误不发送通知（太频繁）
         else:
-        print(f"\n❌ 交易循环异常 (耗时: {elapsed:.1f}秒): {e}")
-        send_bark_notification("[DeepSeek]系统异常⚠️", f"交易循环出错 {str(e)}")
+            print(f"\n❌ 交易循环异常 (耗时: {elapsed:.1f}秒): {e}")
+            send_bark_notification("[DeepSeek]系统异常⚠️", f"交易循环出错 {str(e)}")
 
         import traceback
         traceback.print_exc()
@@ -18253,7 +18251,7 @@ def detect_major_trends(kline_snapshots, coin=None):
                     "amplitude": round(amplitude, 2),
                     "duration": 60,
                     "quality": "优质" if max_drawdown < 0.5 else "良好"
-                })
+                        })
         
         # === 识别单边下跌 ===
         for i in range(len(coin_data) - 3):
@@ -18741,9 +18739,9 @@ def analyze_opportunities_with_new_params(market_snapshots, actual_trades, new_c
                 except:
                     opp_date = None
             
-        opportunity = {
-            'coin': coin,
-            'time': timestamp,
+            opportunity = {
+                'coin': coin,
+                'time': timestamp,
                 'date': opp_date,  # 🆕 V7.9.2: 添加日期字段
                 'direction': direction,
                 'entry_price': entry_price,
@@ -18787,7 +18785,7 @@ def analyze_opportunities_with_new_params(market_snapshots, actual_trades, new_c
             else:
                 opportunity['miss_reason'] = ""
             
-        all_opportunities.append(opportunity)
+            all_opportunities.append(opportunity)
         
     # 【V8.1.4】分类统计：总体 + 超短线 + 波段
     old_captured = [o for o in all_opportunities if o['old_can_entry']]
@@ -19051,8 +19049,8 @@ def _simulate_trade_with_params(entry_price, direction, atr, future_data,
     """
     # 1. 判断是否会入场
     can_entry = (
-            signal_score >= min_signal_score and
-            consensus >= min_consensus and
+        signal_score >= min_signal_score and
+        consensus >= min_consensus and
         risk_reward >= min_risk_reward
     )
     
@@ -20421,7 +20419,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
     
     if len(opportunities) < 10:
         print("  ⚠️  超短线机会不足10个，跳过优化")
-    return {
+        return {
             'optimized_params': current_params,
             'improvement': None
         }
@@ -21572,11 +21570,11 @@ def analyze_missed_opportunities(trends, actual_trades, config):
             else:
                 end_time_int = int(trend['end_time'])
             
-        opened = any(
-            t.get('币种') == coin and 
+            opened = any(
+                t.get('币种') == coin and 
                 start_time_int <= int(pd.to_datetime(t.get('开仓时间', ''), errors='coerce').strftime('%H%M') if t.get('开仓时间') else '0000') <= end_time_int
-            for t in actual_trades
-        )
+                for t in actual_trades
+            )
         except (ValueError, TypeError):
             # 时间格式转换失败，跳过此趋势
             continue

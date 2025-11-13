@@ -2917,7 +2917,7 @@ def save_market_snapshot_v7(market_data_list):
                 "ytc_strength": (price_action.get("ytc_signal") or {}).get("strength", 0),  # 信号强度1-5
                 "ytc_sr_strength": (price_action.get("ytc_signal") or {}).get("sr_strength", 0),  # S/R强度1-5
                 "ytc_entry_price": (price_action.get("ytc_signal") or {}).get("entry_price", 0),  # 建议入场价
-                    "ytc_rationale": (price_action.get("ytc_signal") or {}).get("rationale", ""),  # 信号原因
+                "ytc_rationale": (price_action.get("ytc_signal") or {}).get("rationale", ""),  # 信号原因
                 
                 # S/R质量评估（15分钟）
                 "support_strength": ((data.get("support_resistance") or {}).get("nearest_support") or {}).get("strength", 1),  # 支撑强度1-5
@@ -4382,7 +4382,7 @@ def backtest_parameters(config_variant, days=7, verbose=False):
                                         'coin': coin,
                                         'direction': direction,
                                         'entry_price': entry_price,
-                                            'exit_price': take_profit,
+                                        'exit_price': take_profit,
                                         'profit_pct': profit * 100,
                                         'result': 'WIN',
                                         'exit_reason': 'TP',
@@ -4396,7 +4396,7 @@ def backtest_parameters(config_variant, days=7, verbose=False):
                                         'coin': coin,
                                         'direction': direction,
                                         'entry_price': entry_price,
-                                            'exit_price': stop_loss,
+                                        'exit_price': stop_loss,
                                         'profit_pct': -loss * 100,
                                         'result': 'LOSS',
                                         'exit_reason': 'SL',
@@ -4415,10 +4415,10 @@ def backtest_parameters(config_variant, days=7, verbose=False):
                                         'coin': coin,
                                         'direction': direction,
                                         'entry_price': entry_price,
-                                            'exit_price': last_price,
+                                        'exit_price': last_price,
                                         'profit_pct': profit_pct,
                                         'result': 'WIN' if profit_pct > 0 else 'LOSS',
-                                            'exit_reason': 'HOLD',
+                                        'exit_reason': 'HOLD',
                                         'signal_type': inferred_signal_type,  # V7.9
                                         'holding_bars': len(future_data),  # V7.9
                                         'weight': day_weight
