@@ -5769,9 +5769,10 @@ def iterative_parameter_optimization(data_summary, current_config, original_stat
     return iterative_parameter_optimization_v770(data_summary, current_config, original_stats)
 
 
-def quick_global_search_v8316(data_summary, current_config):
+def quick_global_search_v8316(data_summary, current_config, confirmed_opportunities=None):
     """
     【V8.3.16】快速全局探索（技术债1修复）
+    【V8.3.25.23】修复：使用confirmed_opportunities代替market_snapshots
     
     目的：为V8.3.12分离策略优化提供高质量的初始参数
     
@@ -5779,6 +5780,11 @@ def quick_global_search_v8316(data_summary, current_config):
     - 只做7组战略采样（V7.7.0阶段1）
     - 找到盈利范围即返回
     - 不做盈利扩大和AI优化
+    
+    Args:
+        data_summary: 数据摘要（传统参数，保持兼容）
+        current_config: 当前配置
+        confirmed_opportunities: 【V8.3.25.23新增】确认的盈利机会 {'scalping': {...}, 'swing': {...}}
     
     返回：
     {
@@ -5788,7 +5794,7 @@ def quick_global_search_v8316(data_summary, current_config):
         'found_profitable': bool
     }
     
-    耗时：约3分钟（减少5-7分钟vs完整V7.7.0）
+    耗时：约1-2分钟（使用confirmed_opportunities更快）
     """
     print(f"\n{'='*70}")
     print(f"【V8.3.16 快速全局探索】")
@@ -5848,16 +5854,51 @@ def quick_global_search_v8316(data_summary, current_config):
         {'min_risk_reward': rr_max * 1.4, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'name': '极严格'},
     ]
     
+    # 🔧 V8.3.25.23: 使用confirmed_opportunities或降级到market_snapshots
+    use_confirmed_opps = confirmed_opportunities is not None and \
+                         confirmed_opportunities.get('scalping', {}).get('opportunities') and \
+                         confirmed_opportunities.get('swing', {}).get('opportunities')
+    
+    if use_confirmed_opps:
+        print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
+        # 合并超短线和波段机会
+        all_opportunities = (
+            confirmed_opportunities['scalping']['opportunities'] + 
+            confirmed_opportunities['swing']['opportunities']
+        )
+        print(f"     总机会数: {len(all_opportunities)}（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
+    else:
+        print(f"  ⚠️  未提供confirmed_opportunities，降级使用market_snapshots")
+        print(f"  ⏱️  预计：约3分钟")
+        all_opportunities = None
+    
     print(f"\n  🔍 测试7组战略采样...")
+    
     for i, test_params in enumerate(test_points):
-        # 【V8.3.16.2】组装config_variant参数，调用backtest_parameters
         config_variant = {
             'min_risk_reward': test_params['min_risk_reward'],
             'min_indicator_consensus': test_params['min_indicator_consensus'],
             'atr_stop_multiplier': test_params['atr_stop_multiplier'],
             'min_signal_score': current_config.get('global', {}).get('min_signal_score', 55)
         }
-        result = backtest_parameters(config_variant, days=days, verbose=False)
+        
+        # 🔧 V8.3.25.23: 优先使用confirmed_opportunities回测
+        if use_confirmed_opps:
+            # 使用V8.3.21的simulate函数
+            from backtest_optimizer_v8321 import simulate_params_with_v8321_filter
+            result_data = simulate_params_with_v8321_filter(all_opportunities, config_variant)
+            
+            # 转换为兼容格式
+            result = {
+                'total_trades': result_data['captured_count'],
+                'win_rate': result_data['win_rate'],
+                'profit_ratio': result_data.get('profit_loss_ratio', 1.0),
+                'total_profit': result_data['avg_profit'] * result_data['captured_count'],  # 简化：总利润=平均*笔数
+                'capture_rate': result_data['capture_rate']
+            }
+        else:
+            # 降级：使用market_snapshots
+            result = backtest_parameters(config_variant, days=days, verbose=False)
         
         if result['total_profit'] > best_profit:
             best_profit = result['total_profit']
@@ -7699,11 +7740,28 @@ def analyze_and_adjust_params():
         iterative_result = None
         
         if ENABLE_V770_QUICK_SEARCH:
-            # 快速探索模式（3分钟）- 为V8.3.12提供初始参数
+            # 快速探索模式（1-2分钟）- 为V8.3.12提供初始参数
             print(f"  ℹ️  使用快速探索模式（V8.3.16）")
+            
+            # 🔧 V8.3.25.23: 先生成confirmed_opportunities用于快速探索
+            quick_search_opportunities = None
+            if kline_snapshots is not None and not kline_snapshots.empty:
+                try:
+                    print(f"  📊 准备confirmed_opportunities用于快速探索...")
+                    quick_search_opportunities = analyze_separated_opportunities(
+                        market_snapshots=kline_snapshots,
+                        old_config=config
+                    )
+                    print(f"     ✓ 超短线机会: {len(quick_search_opportunities['scalping']['opportunities'])}个")
+                    print(f"     ✓ 波段机会: {len(quick_search_opportunities['swing']['opportunities'])}个")
+                except Exception as e:
+                    print(f"     ⚠️  生成机会失败: {e}，将降级使用market_snapshots")
+                    quick_search_opportunities = None
+            
             iterative_result = quick_global_search_v8316(
                 data_summary=data_summary,
-                current_config=config
+                current_config=config,
+                confirmed_opportunities=quick_search_opportunities  # 🔧 V8.3.25.23: 传入确认机会
             )
             # 提取final_params作为global_initial_params（兼容后续代码）
             global_initial_params = iterative_result.get('final_params')
