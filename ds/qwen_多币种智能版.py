@@ -7501,13 +7501,36 @@ def analyze_and_adjust_params():
         print("\n【开仓时机分析】")
         entry_analysis = None
         try:
-            # V2需要：昨日开仓交易、市场快照、AI决策记录、昨日日期
-            # 注意：这里使用yesterday_closed_trades（昨天平仓的），才有完整的盈亏数据
+            # 🔧 V8.3.25.15: 提前分析确认的盈利机会（用于开仓时机分析）
+            confirmed_opportunities = None
+            if kline_snapshots is not None and not kline_snapshots.empty:
+                try:
+                    from_dt = datetime.strptime(yesterday, '%Y%m%d')
+                    confirmed_opps = analyze_separated_opportunities(kline_snapshots, config)
+                    # 合并超短线和波段机会，只保留昨日的
+                    all_opps = []
+                    if confirmed_opps and 'scalping' in confirmed_opps:
+                        all_opps.extend(confirmed_opps['scalping'].get('opportunities', []))
+                    if confirmed_opps and 'swing' in confirmed_opps:
+                        all_opps.extend(confirmed_opps['swing'].get('opportunities', []))
+                    
+                    # 筛选昨日的机会（timestamp匹配yesterday）
+                    confirmed_opportunities = [
+                        opp for opp in all_opps
+                        if isinstance(opp.get('timestamp'), str) and opp['timestamp'].startswith(yesterday)
+                    ]
+                    print(f"  ✓ 提取了{len(confirmed_opportunities)}个确认盈利的机会（昨日）")
+                except Exception as e:
+                    print(f"  ⚠️ 提取确认机会失败: {e}")
+                    confirmed_opportunities = None
+            
+            # V2需要：昨日开仓交易、市场快照、AI决策记录、昨日日期、确认的机会
             entry_analysis = analyze_entry_timing_v2(
                 yesterday_closed_trades,  # 🔧 V8.3.25.12: 改用yesterday_closed_trades
                 kline_snapshots,
                 ai_decisions_for_entry,  # 🔧 V8.3.25.12: 传入加载的AI决策
-                yesterday_date_formatted
+                yesterday_date_formatted,
+                confirmed_opportunities  # 🔧 V8.3.25.15: 传入确认的盈利机会
             )
             # V2会自动打印统计信息和改进建议
         except Exception as e:

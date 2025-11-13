@@ -23,32 +23,34 @@ def analyze_entry_timing_v2(
     yesterday_trades_df,
     market_snapshots_df,
     ai_decisions_list,
-    yesterday_date_str
+    yesterday_date_str,
+    confirmed_opportunities=None
 ):
     """
-    【V8.3.25.14】完整的开仓时机分析（增强：K线回测错过机会）
+    【V8.3.25.15】完整的开仓时机分析（核心改进：使用回测确认的盈利机会）
     
     核心逻辑：
-    1. 获取昨日所有市场快照（AI识别的所有机会点）
+    1. 使用回测确认的盈利机会（而非所有市场快照）作为基准
     2. 对比AI实际开仓记录
     3. 分类分析：
-       - 正确开仓：AI开了，市场走势验证是对的
+       - 正确开仓：AI开了，且实际盈利
        - 错误开仓：AI开了，但快速止损（虚假信号）
-       - 错过机会：市场有机会，AI没开，且K线回测确认后续能盈利（NEW！）
+       - 错过机会：回测确认能盈利的机会，但AI没开（查AI当时的决策理由）
        - 时机问题：开了但太早/太晚
     
     Args:
         yesterday_trades_df: DataFrame, 昨日开仓的交易
-        market_snapshots_df: DataFrame, 昨日市场快照（包含K线数据+识别的机会点）
+        market_snapshots_df: DataFrame, 昨日市场快照（包含K线数据）
         ai_decisions_list: list, AI历史决策记录
         yesterday_date_str: str, 昨日日期（YYYY-MM-DD格式）
+        confirmed_opportunities: list, 回测确认的盈利机会（来自analyze_separated_opportunities）
     
     Returns:
         {
             'entry_stats': {...},  # 统计数据
             'correct_entries': [...],  # 正确开仓案例
             'false_entries': [...],  # 虚假信号开仓
-            'missed_opportunities': [...],  # 错过的机会（AI没开，且K线回测确认能盈利）
+            'missed_opportunities': [...],  # 错过的机会（回测确认能盈利，且AI没开）
             'timing_issues': [...],  # 时机问题（太早/太晚）
             'entry_table_data': [...],  # 邮件表格数据
             'entry_lessons': [...]  # 改进建议
@@ -119,7 +121,27 @@ def analyze_entry_timing_v2(
             'entry_lessons': ['昨日无市场快照数据']
         }
     
-    entry_stats['total_opportunities'] = len(yesterday_snapshots)
+    # 🔧 V8.3.25.15: 如果有confirmed_opportunities，使用它代替yesterday_snapshots
+    if confirmed_opportunities and len(confirmed_opportunities) > 0:
+        print(f"  ✓ 使用回测确认的盈利机会：{len(confirmed_opportunities)}个")
+        entry_stats['total_opportunities'] = len(confirmed_opportunities)
+        # 将confirmed_opportunities转换为类似snapshot的格式，方便后续处理
+        opportunities_to_check = []
+        for opp in confirmed_opportunities:
+            opportunities_to_check.append({
+                'coin': opp.get('coin'),
+                'timestamp': opp.get('timestamp'),
+                'signal_score': opp.get('signal_score', 0),
+                'consensus': opp.get('consensus', 0),
+                'objective_profit': opp.get('objective_profit', 0),
+                'direction': opp.get('direction'),
+                'entry_price': opp.get('entry_price', 0)
+            })
+    else:
+        print(f"  ⚠️ 未提供confirmed_opportunities，使用原逻辑（所有market snapshots）")
+        entry_stats['total_opportunities'] = len(yesterday_snapshots)
+        opportunities_to_check = None  # 标记使用原逻辑
+    
     print(f"  ✓ 昨日识别到 {entry_stats['total_opportunities']} 个机会点")
     
     # 🔧 V8.3.25.12: 打印AI决策数据摘要
@@ -181,236 +203,342 @@ def analyze_entry_timing_v2(
                 print()
         
         # ===== Step 3: 对比分析每个机会点 =====
-        # 🔧 V8.3.25.12: 统计有多少交易被匹配
+        # 🔧 V8.3.25.15: 根据opportunities_to_check选择不同的处理路径
         matched_trades_count = 0
         debug_first_snapshot = True  # 调试第一个snapshot
         
-        for idx, snapshot in yesterday_snapshots.iterrows():
-            coin = snapshot.get('coin', '')
-            snapshot_time = snapshot.get('time')  # HH:MM格式
-            signal_score = snapshot.get('signal_score', 0)
-            consensus = snapshot.get('consensus', 0)
-            
-            # 查找是否有对应的开仓记录（±5分钟窗口）
-            # 🔧 V8.3.25.8: 使用full_datetime列（包含日期和时间）
-            if 'full_datetime' in snapshot and pd.notna(snapshot['full_datetime']):
-                snapshot_time_dt = snapshot['full_datetime']
-            else:
-                # Fallback：尝试从snapshot_date和time构建时间戳
+        if opportunities_to_check is not None:
+            # 【新逻辑】使用confirmed_opportunities
+            for opp in opportunities_to_check:
+                coin = opp.get('coin', '')
+                timestamp_str = opp.get('timestamp', '')  # YYYYMMDD HH:MM:SS格式
+                signal_score = opp.get('signal_score', 0)
+                consensus = opp.get('consensus', 0)
+                objective_profit = opp.get('objective_profit', 0)
+                
+                # 解析时间戳
                 try:
-                    snapshot_time_dt = pd.to_datetime(f"{snapshot['snapshot_date']} {snapshot_time}", format='%Y%m%d %H:%M')
+                    opp_time_dt = pd.to_datetime(timestamp_str)
                 except:
-                    continue  # 无法解析时间，跳过此快照
-            
-            # 🔧 V8.3.25.12: 调试第一个snapshot
-            if debug_first_snapshot:
-                print(f"  🔍 【调试】第一个snapshot:")
-                print(f"      币种: {coin}")
-                print(f"      snapshot_time_dt: {snapshot_time_dt} (type: {type(snapshot_time_dt)})")
-                print(f"      匹配窗口: {snapshot_time_dt - timedelta(minutes=5)} ~ {snapshot_time_dt + timedelta(minutes=5)}")
-                if len(yesterday_trades_df) > 0:
-                    first_trade_open_time = pd.to_datetime(yesterday_trades_df.iloc[0]['开仓时间'])
-                    print(f"      第一笔交易开仓时间: {first_trade_open_time}")
-                debug_first_snapshot = False
-            
-            matching_trades = yesterday_trades_df[
-                (yesterday_trades_df['币种'] == coin) &
-                (pd.to_datetime(yesterday_trades_df['开仓时间']) >= snapshot_time_dt - timedelta(minutes=5)) &
-                (pd.to_datetime(yesterday_trades_df['开仓时间']) <= snapshot_time_dt + timedelta(minutes=5))
-            ]
-            
-            if matching_trades.empty:
-                # 情况1: AI没开仓（错过机会 or 正确过滤）
-                # 🔧 V8.3.25.14: 使用K线回测确认是否真的错过盈利机会
+                    continue
                 
-                # 获取这个snapshot的后续K线数据（后续4小时）
-                coin_klines = market_snapshots_df[
-                    (market_snapshots_df['coin'] == coin) &
-                    (market_snapshots_df['full_datetime'] > snapshot_time_dt) &
-                    (market_snapshots_df['full_datetime'] <= snapshot_time_dt + timedelta(hours=4))
-                ].copy()
+                # 匹配AI开仓记录（±5分钟）
+                matching_trades = yesterday_trades_df[
+                    (yesterday_trades_df['币种'] == coin) &
+                    (pd.to_datetime(yesterday_trades_df['开仓时间']) >= opp_time_dt - timedelta(minutes=5)) &
+                    (pd.to_datetime(yesterday_trades_df['开仓时间']) <= opp_time_dt + timedelta(minutes=5))
+                ]
                 
-                is_truly_missed = False
-                potential_profit_pct = 0
-                
-                if not coin_klines.empty:
-                    # 从snapshot中获取方向和TP/SL信息
-                    direction = snapshot.get('direction', 'N/A')  # 'long' or 'short'
-                    entry_price = snapshot.get('close', 0)  # 使用snapshot的close价格作为入场价
-                    tp_price = snapshot.get('tp', 0)
-                    sl_price = snapshot.get('sl', 0)
+                if matching_trades.empty:
+                    # AI没开仓 → 错过的机会
+                    # 查找AI当时的决策理由
+                    ai_reason = "未找到AI决策记录"
+                    if ai_decisions_list:
+                        for decision in ai_decisions_list:
+                            decision_time_str = decision.get('timestamp', '')
+                            if decision_time_str:
+                                try:
+                                    decision_time = pd.to_datetime(decision_time_str)
+                                    if abs((decision_time - opp_time_dt).total_seconds()) < 600:  # 10分钟内
+                                        # 找到最接近的决策
+                                        operations = decision.get('operations', [])
+                                        if operations:
+                                            op = operations[0]
+                                            ai_reason = op.get('reason', '未记录理由')
+                                        else:
+                                            ai_reason = decision.get('summary_reason', '未记录理由')
+                                        break
+                                except:
+                                    continue
                     
-                    if entry_price > 0 and tp_price > 0:
-                        # 检查后续K线是否触及TP
-                        if direction == 'long':
-                            # 多单：检查high是否触及TP
-                            hit_tp = (coin_klines['high'] >= tp_price).any()
-                            hit_sl = (coin_klines['low'] <= sl_price).any() if sl_price > 0 else False
-                            
-                            if hit_tp:
-                                # 检查TP是否在SL之前触发
-                                if hit_sl:
-                                    # 找到第一个触及TP和SL的时间
-                                    tp_time = coin_klines[coin_klines['high'] >= tp_price]['full_datetime'].min()
-                                    sl_time = coin_klines[coin_klines['low'] <= sl_price]['full_datetime'].min()
-                                    if tp_time < sl_time:
-                                        is_truly_missed = True
-                                        potential_profit_pct = (tp_price - entry_price) / entry_price * 100
-                                else:
-                                    is_truly_missed = True
-                                    potential_profit_pct = (tp_price - entry_price) / entry_price * 100
-                        
-                        elif direction == 'short':
-                            # 空单：检查low是否触及TP
-                            hit_tp = (coin_klines['low'] <= tp_price).any()
-                            hit_sl = (coin_klines['high'] >= sl_price).any() if sl_price > 0 else False
-                            
-                            if hit_tp:
-                                # 检查TP是否在SL之前触发
-                                if hit_sl:
-                                    tp_time = coin_klines[coin_klines['low'] <= tp_price]['full_datetime'].min()
-                                    sl_time = coin_klines[coin_klines['high'] >= sl_price]['full_datetime'].min()
-                                    if tp_time < sl_time:
-                                        is_truly_missed = True
-                                        potential_profit_pct = (entry_price - tp_price) / entry_price * 100
-                                else:
-                                    is_truly_missed = True
-                                    potential_profit_pct = (entry_price - tp_price) / entry_price * 100
-                
-                if is_truly_missed:
-                    # 确认是错过的机会（后续K线确实触及TP）
                     missed_opportunities.append({
                         'coin': coin,
-                        'time': str(snapshot_time),
+                        'time': timestamp_str,
                         'signal_score': signal_score,
                         'consensus': consensus,
-                        'potential_profit': potential_profit_pct,
-                        'reason': f'K线回测确认：{direction}单 后续触及TP（+{potential_profit_pct:.1f}%）'
+                        'potential_profit': objective_profit,
+                        'reason': f'回测确认盈利{objective_profit:.1f}%，AI决策：{ai_reason[:100]}'
                     })
                     entry_stats['missed_profitable'] += 1
                 else:
-                    # 正确过滤（后续没有触及TP，或先触及SL）
-                    entry_stats['correctly_filtered'] += 1
-            else:
-                # 情况2: AI开仓了
-                matched_trades_count += len(matching_trades)  # 🔧 V8.3.25.12: 统计匹配数
-                trade = matching_trades.iloc[0]
-                # 🔧 V8.3.25.12: 兼容多种字段名（盈亏(U)/盈亏/PnL/实际盈亏）+ 处理None
-                pnl_raw = trade.get('盈亏(U)', trade.get('盈亏', trade.get('PnL', trade.get('实际盈亏'))))
-                # 🔧 V8.3.25.12: 处理None/NaN/空值，默认为0
-                if pnl_raw is None or pd.isna(pnl_raw):
-                    pnl = 0
-                else:
-                    try:
-                        pnl = float(pnl_raw)
-                    except (ValueError, TypeError):
+                    # AI开仓了 → 分析质量（复用原有逻辑）
+                    matched_trades_count += len(matching_trades)
+                    trade = matching_trades.iloc[0]
+                    
+                    # （复用原有的交易质量判断代码，这里暂时简化）
+                    pnl_raw = trade.get('盈亏(U)', trade.get('盈亏', trade.get('PnL')))
+                    if pnl_raw is None or pd.isna(pnl_raw):
                         pnl = 0
-                
-                exit_reason = trade.get('平仓原因', trade.get('平仓类型', ''))
-                
-                # 🔧 V8.3.25.12: 增强is_closed判断，处理空字符串和NaN
-                exit_time_value = trade.get('平仓时间')
-                exit_price_value = trade.get('平仓价格', 0)
-                is_closed = (
-                    not pd.isna(exit_time_value) and
-                    exit_time_value != '' and
-                    exit_time_value != 'N/A' and
-                    str(exit_time_value).strip() != '' and
-                    exit_price_value > 0 and  # 额外检查：平仓价格必须>0
-                    pnl != 0  # 🔧 V8.3.25.12: 如果pnl为0且有平仓时间，可能是数据未同步
-                )
-                
-                # 🔧 V8.3.25.12: 调试输出（仅前3笔）+ 添加AI决策理由
-                if entry_stats['ai_opened'] <= 3:
-                    open_reason = trade.get('开仓理由', 'N/A')
-                    close_reason = trade.get('平仓理由', 'N/A')
-                    print(f"     🔍 [{coin}] is_closed判断:")
-                    print(f"        平仓时间: '{exit_time_value}' (isna: {pd.isna(exit_time_value)})")
-                    print(f"        平仓价格: {exit_price_value}")
-                    print(f"        盈亏: {pnl}")
-                    print(f"        结果: is_closed={is_closed}")
-                    print(f"        📝 开仓理由: {open_reason[:100]}...")  # 显示前100字符
-                    print(f"        🔒 平仓理由: {close_reason[:100] if close_reason != 'N/A' else 'N/A'}...")
-                
-                # 🔧 V8.3.25.12: 如果交易还未平仓，标记为"进行中"
-                if not is_closed:
-                    # 未平仓交易，暂时标记为"进行中"
-                    timing_issues.append({
-                        'coin': coin,
-                        'time': str(snapshot_time),
-                        'signal_score': signal_score,
-                        'consensus': consensus,
-                        'pnl': 0,
-                        'reason': '交易进行中（未平仓）'
-                    })
-                    entry_stats['timing_issues'] += 1
+                    else:
+                        try:
+                            pnl = float(pnl_raw)
+                        except:
+                            pnl = 0
                     
-                    # 添加到表格数据
-                    entry_table_data.append({
-                        'coin': coin,
-                        'time': str(snapshot_time),
-                        'signal_score': signal_score,
-                        'consensus': consensus,
-                        'ai_action': '✅ 开仓',
-                        'result': '进行中',
-                        'evaluation': '⏳ 进行中'
-                    })
-                else:
-                    # 已平仓交易，判断开仓质量
-                    # 🔧 V8.3.25.12: 提取开仓/平仓理由，传递给AI深度分析
-                    open_reason_full = trade.get('开仓理由', 'N/A')
-                    close_reason_full = trade.get('平仓理由', 'N/A')
-                    
-                    if pnl < -0.5 and ('止损' in exit_reason or 'SL' in exit_reason.upper()):
-                        # 虚假信号：开仓后快速止损
-                        false_entries.append({
-                            'coin': coin,
-                            'time': str(snapshot_time),
-                            'signal_score': signal_score,
-                            'consensus': consensus,
-                            'pnl': pnl,
-                            'reason': '虚假信号：开仓后快速止损',
-                            'ai_open_reason': open_reason_full,  # 🆕 AI开仓理由
-                            'ai_close_reason': close_reason_full  # 🆕 AI平仓理由
-                        })
-                        entry_stats['false_entries'] += 1
-                    elif pnl > 0.1:  # 🔧 V8.3.25.11: 至少盈利0.1U才算正确
-                        # 正确开仓
+                    if pnl > 0.1:
                         correct_entries.append({
                             'coin': coin,
-                            'time': str(snapshot_time),
+                            'time': timestamp_str,
                             'signal_score': signal_score,
                             'consensus': consensus,
                             'pnl': pnl,
                             'reason': f'正确开仓：盈利{pnl:.2f}U',
-                            'ai_open_reason': open_reason_full,  # 🆕 AI开仓理由
-                            'ai_close_reason': close_reason_full  # 🆕 AI平仓理由
+                            'ai_open_reason': trade.get('开仓理由', 'N/A'),
+                            'ai_close_reason': trade.get('平仓理由', 'N/A')
                         })
                         entry_stats['correct_entries'] += 1
+                    elif pnl < -0.5:
+                        false_entries.append({
+                            'coin': coin,
+                            'time': timestamp_str,
+                            'signal_score': signal_score,
+                            'consensus': consensus,
+                            'pnl': pnl,
+                            'reason': '虚假信号：快速止损',
+                            'ai_open_reason': trade.get('开仓理由', 'N/A'),
+                            'ai_close_reason': trade.get('平仓理由', 'N/A')
+                        })
+                        entry_stats['false_entries'] += 1
                     else:
-                        # 中性/小亏（可能是时机问题）
+                        timing_issues.append({
+                            'coin': coin,
+                            'time': timestamp_str,
+                            'signal_score': signal_score,
+                            'consensus': consensus,
+                            'pnl': pnl,
+                            'reason': f'时机问题：盈亏接近0（{pnl:+.2f}U）',
+                            'ai_open_reason': trade.get('开仓理由', 'N/A'),
+                            'ai_close_reason': trade.get('平仓理由', 'N/A')
+                        })
+                        entry_stats['timing_issues'] += 1
+        else:
+            # 【原逻辑】使用yesterday_snapshots
+            for idx, snapshot in yesterday_snapshots.iterrows():
+                coin = snapshot.get('coin', '')
+                snapshot_time = snapshot.get('time')  # HH:MM格式
+                signal_score = snapshot.get('signal_score', 0)
+                consensus = snapshot.get('consensus', 0)
+                
+                # 查找是否有对应的开仓记录（±5分钟窗口）
+                # 🔧 V8.3.25.8: 使用full_datetime列（包含日期和时间）
+                if 'full_datetime' in snapshot and pd.notna(snapshot['full_datetime']):
+                    snapshot_time_dt = snapshot['full_datetime']
+                else:
+                    # Fallback：尝试从snapshot_date和time构建时间戳
+                    try:
+                        snapshot_time_dt = pd.to_datetime(f"{snapshot['snapshot_date']} {snapshot_time}", format='%Y%m%d %H:%M')
+                    except:
+                        continue  # 无法解析时间，跳过此快照
+                
+                # 🔧 V8.3.25.12: 调试第一个snapshot
+                if debug_first_snapshot:
+                    print(f"  🔍 【调试】第一个snapshot:")
+                    print(f"      币种: {coin}")
+                    print(f"      snapshot_time_dt: {snapshot_time_dt} (type: {type(snapshot_time_dt)})")
+                    print(f"      匹配窗口: {snapshot_time_dt - timedelta(minutes=5)} ~ {snapshot_time_dt + timedelta(minutes=5)}")
+                    if len(yesterday_trades_df) > 0:
+                        first_trade_open_time = pd.to_datetime(yesterday_trades_df.iloc[0]['开仓时间'])
+                        print(f"      第一笔交易开仓时间: {first_trade_open_time}")
+                    debug_first_snapshot = False
+                
+                matching_trades = yesterday_trades_df[
+                    (yesterday_trades_df['币种'] == coin) &
+                    (pd.to_datetime(yesterday_trades_df['开仓时间']) >= snapshot_time_dt - timedelta(minutes=5)) &
+                    (pd.to_datetime(yesterday_trades_df['开仓时间']) <= snapshot_time_dt + timedelta(minutes=5))
+                ]
+                
+                if matching_trades.empty:
+                    # 情况1: AI没开仓（错过机会 or 正确过滤）
+                    # 🔧 V8.3.25.14: 使用K线回测确认是否真的错过盈利机会
+                    
+                    # 获取这个snapshot的后续K线数据（后续4小时）
+                    coin_klines = market_snapshots_df[
+                        (market_snapshots_df['coin'] == coin) &
+                        (market_snapshots_df['full_datetime'] > snapshot_time_dt) &
+                        (market_snapshots_df['full_datetime'] <= snapshot_time_dt + timedelta(hours=4))
+                    ].copy()
+                    
+                    is_truly_missed = False
+                    potential_profit_pct = 0
+                    
+                    if not coin_klines.empty:
+                        # 从snapshot中获取方向和TP/SL信息
+                        direction = snapshot.get('direction', 'N/A')  # 'long' or 'short'
+                        entry_price = snapshot.get('close', 0)  # 使用snapshot的close价格作为入场价
+                        tp_price = snapshot.get('tp', 0)
+                        sl_price = snapshot.get('sl', 0)
+                        
+                        if entry_price > 0 and tp_price > 0:
+                            # 检查后续K线是否触及TP
+                            if direction == 'long':
+                                # 多单：检查high是否触及TP
+                                hit_tp = (coin_klines['high'] >= tp_price).any()
+                                hit_sl = (coin_klines['low'] <= sl_price).any() if sl_price > 0 else False
+                                
+                                if hit_tp:
+                                    # 检查TP是否在SL之前触发
+                                    if hit_sl:
+                                        # 找到第一个触及TP和SL的时间
+                                        tp_time = coin_klines[coin_klines['high'] >= tp_price]['full_datetime'].min()
+                                        sl_time = coin_klines[coin_klines['low'] <= sl_price]['full_datetime'].min()
+                                        if tp_time < sl_time:
+                                            is_truly_missed = True
+                                            potential_profit_pct = (tp_price - entry_price) / entry_price * 100
+                                    else:
+                                        is_truly_missed = True
+                                        potential_profit_pct = (tp_price - entry_price) / entry_price * 100
+                            
+                            elif direction == 'short':
+                                # 空单：检查low是否触及TP
+                                hit_tp = (coin_klines['low'] <= tp_price).any()
+                                hit_sl = (coin_klines['high'] >= sl_price).any() if sl_price > 0 else False
+                                
+                                if hit_tp:
+                                    # 检查TP是否在SL之前触发
+                                    if hit_sl:
+                                        tp_time = coin_klines[coin_klines['low'] <= tp_price]['full_datetime'].min()
+                                        sl_time = coin_klines[coin_klines['high'] >= sl_price]['full_datetime'].min()
+                                        if tp_time < sl_time:
+                                            is_truly_missed = True
+                                            potential_profit_pct = (entry_price - tp_price) / entry_price * 100
+                                    else:
+                                        is_truly_missed = True
+                                        potential_profit_pct = (entry_price - tp_price) / entry_price * 100
+                    
+                    if is_truly_missed:
+                        # 确认是错过的机会（后续K线确实触及TP）
+                        missed_opportunities.append({
+                            'coin': coin,
+                            'time': str(snapshot_time),
+                            'signal_score': signal_score,
+                            'consensus': consensus,
+                            'potential_profit': potential_profit_pct,
+                            'reason': f'K线回测确认：{direction}单 后续触及TP（+{potential_profit_pct:.1f}%）'
+                        })
+                        entry_stats['missed_profitable'] += 1
+                    else:
+                        # 正确过滤（后续没有触及TP，或先触及SL）
+                        entry_stats['correctly_filtered'] += 1
+                else:
+                    # 情况2: AI开仓了
+                    matched_trades_count += len(matching_trades)  # 🔧 V8.3.25.12: 统计匹配数
+                    trade = matching_trades.iloc[0]
+                    # 🔧 V8.3.25.12: 兼容多种字段名（盈亏(U)/盈亏/PnL/实际盈亏）+ 处理None
+                    pnl_raw = trade.get('盈亏(U)', trade.get('盈亏', trade.get('PnL', trade.get('实际盈亏'))))
+                    # 🔧 V8.3.25.12: 处理None/NaN/空值，默认为0
+                    if pnl_raw is None or pd.isna(pnl_raw):
+                        pnl = 0
+                    else:
+                        try:
+                            pnl = float(pnl_raw)
+                        except (ValueError, TypeError):
+                            pnl = 0
+                    
+                    exit_reason = trade.get('平仓原因', trade.get('平仓类型', ''))
+                    
+                    # 🔧 V8.3.25.12: 增强is_closed判断，处理空字符串和NaN
+                    exit_time_value = trade.get('平仓时间')
+                    exit_price_value = trade.get('平仓价格', 0)
+                    is_closed = (
+                        not pd.isna(exit_time_value) and
+                        exit_time_value != '' and
+                        exit_time_value != 'N/A' and
+                        str(exit_time_value).strip() != '' and
+                        exit_price_value > 0 and  # 额外检查：平仓价格必须>0
+                        pnl != 0  # 🔧 V8.3.25.12: 如果pnl为0且有平仓时间，可能是数据未同步
+                    )
+                    
+                    # 🔧 V8.3.25.12: 调试输出（仅前3笔）+ 添加AI决策理由
+                    if entry_stats['ai_opened'] <= 3:
+                        open_reason = trade.get('开仓理由', 'N/A')
+                        close_reason = trade.get('平仓理由', 'N/A')
+                        print(f"     🔍 [{coin}] is_closed判断:")
+                        print(f"        平仓时间: '{exit_time_value}' (isna: {pd.isna(exit_time_value)})")
+                        print(f"        平仓价格: {exit_price_value}")
+                        print(f"        盈亏: {pnl}")
+                        print(f"        结果: is_closed={is_closed}")
+                        print(f"        📝 开仓理由: {open_reason[:100]}...")  # 显示前100字符
+                        print(f"        🔒 平仓理由: {close_reason[:100] if close_reason != 'N/A' else 'N/A'}...")
+                    
+                    # 🔧 V8.3.25.12: 如果交易还未平仓，标记为"进行中"
+                    if not is_closed:
+                        # 未平仓交易，暂时标记为"进行中"
                         timing_issues.append({
                             'coin': coin,
                             'time': str(snapshot_time),
                             'signal_score': signal_score,
                             'consensus': consensus,
-                            'pnl': pnl,
-                            'reason': f'时机问题：盈亏接近0（{pnl:+.2f}U）',
-                            'ai_open_reason': open_reason_full,  # 🆕 AI开仓理由
-                            'ai_close_reason': close_reason_full  # 🆕 AI平仓理由
+                            'pnl': 0,
+                            'reason': '交易进行中（未平仓）'
                         })
                         entry_stats['timing_issues'] += 1
-                    
-                    # 添加到表格数据
-                    entry_table_data.append({
-                        'coin': coin,
-                        'time': str(snapshot_time),
-                        'signal_score': signal_score,
-                        'consensus': consensus,
-                        'ai_action': '✅ 开仓',
-                        'result': f'{pnl:+.2f}U',
-                        'evaluation': '✅ 正确' if pnl > 0.1 else '❌ 虚假信号' if pnl < -0.5 else '⚠️ 时机问题'
-                    })
+                        
+                        # 添加到表格数据
+                        entry_table_data.append({
+                            'coin': coin,
+                            'time': str(snapshot_time),
+                            'signal_score': signal_score,
+                            'consensus': consensus,
+                            'ai_action': '✅ 开仓',
+                            'result': '进行中',
+                            'evaluation': '⏳ 进行中'
+                        })
+                    else:
+                        # 已平仓交易，判断开仓质量
+                        # 🔧 V8.3.25.12: 提取开仓/平仓理由，传递给AI深度分析
+                        open_reason_full = trade.get('开仓理由', 'N/A')
+                        close_reason_full = trade.get('平仓理由', 'N/A')
+                        
+                        if pnl < -0.5 and ('止损' in exit_reason or 'SL' in exit_reason.upper()):
+                            # 虚假信号：开仓后快速止损
+                            false_entries.append({
+                                'coin': coin,
+                                'time': str(snapshot_time),
+                                'signal_score': signal_score,
+                                'consensus': consensus,
+                                'pnl': pnl,
+                                'reason': '虚假信号：开仓后快速止损',
+                                'ai_open_reason': open_reason_full,  # 🆕 AI开仓理由
+                                'ai_close_reason': close_reason_full  # 🆕 AI平仓理由
+                            })
+                            entry_stats['false_entries'] += 1
+                        elif pnl > 0.1:  # 🔧 V8.3.25.11: 至少盈利0.1U才算正确
+                            # 正确开仓
+                            correct_entries.append({
+                                'coin': coin,
+                                'time': str(snapshot_time),
+                                'signal_score': signal_score,
+                                'consensus': consensus,
+                                'pnl': pnl,
+                                'reason': f'正确开仓：盈利{pnl:.2f}U',
+                                'ai_open_reason': open_reason_full,  # 🆕 AI开仓理由
+                                'ai_close_reason': close_reason_full  # 🆕 AI平仓理由
+                            })
+                            entry_stats['correct_entries'] += 1
+                        else:
+                            # 中性/小亏（可能是时机问题）
+                            timing_issues.append({
+                                'coin': coin,
+                                'time': str(snapshot_time),
+                                'signal_score': signal_score,
+                                'consensus': consensus,
+                                'pnl': pnl,
+                                'reason': f'时机问题：盈亏接近0（{pnl:+.2f}U）',
+                                'ai_open_reason': open_reason_full,  # 🆕 AI开仓理由
+                                'ai_close_reason': close_reason_full  # 🆕 AI平仓理由
+                            })
+                            entry_stats['timing_issues'] += 1
+                        
+                        # 添加到表格数据
+                        entry_table_data.append({
+                            'coin': coin,
+                            'time': str(snapshot_time),
+                            'signal_score': signal_score,
+                            'consensus': consensus,
+                            'ai_action': '✅ 开仓',
+                            'result': f'{pnl:+.2f}U',
+                            'evaluation': '✅ 正确' if pnl > 0.1 else '❌ 虚假信号' if pnl < -0.5 else '⚠️ 时机问题'
+                        })
         
         # 🔧 V8.3.25.12: 打印错过机会的详细信息（包括AI决策）
         if missed_opportunities:
@@ -588,7 +716,8 @@ def analyze_exit_timing_v2(
         if kline_snapshots_df is not None and not kline_snapshots_df.empty:
             coin_klines = kline_snapshots_df[kline_snapshots_df['coin'] == coin].copy()
             if not coin_klines.empty:
-                coin_klines['time'] = pd.to_datetime(coin_klines['time'])
+                # 🔧 V8.3.25.15: 指定format避免warning
+                coin_klines['time'] = pd.to_datetime(coin_klines['time'], format='mixed', errors='coerce')
                 coin_klines = coin_klines.sort_values('time')
                 
                 future_klines = coin_klines[
