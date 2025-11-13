@@ -5866,11 +5866,36 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             confirmed_opportunities['scalping']['opportunities'] + 
             confirmed_opportunities['swing']['opportunities']
         )
-        print(f"     总机会数: {len(all_opportunities)}（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
+        
+        # 🔧 V8.3.25.25: 同时加载全量market_snapshots用于计算预测胜率
+        all_market_snapshots = None
+        try:
+            model_dir = os.getenv("MODEL_NAME", "qwen")
+            snapshot_dir = f"trading_data/{model_dir}/market_snapshots"
+            end_date = datetime.now()
+            all_snapshots_list = []
+            
+            for i in range(days):
+                target_date = (end_date - timedelta(days=i)).strftime('%Y%m%d')
+                snapshot_file = f"{snapshot_dir}/{target_date}.csv"
+                try:
+                    df = pd.read_csv(snapshot_file)
+                    all_snapshots_list.append(df)
+                except FileNotFoundError:
+                    continue
+            
+            if all_snapshots_list:
+                all_market_snapshots = pd.concat(all_snapshots_list, ignore_index=True)
+                print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
+                print(f"     ✓ 全量信号点: {len(all_market_snapshots)}个（用于计算预测胜率）")
+        except Exception as e:
+            print(f"     ⚠️  加载market_snapshots失败: {e}，将只统计捕获率")
+            all_market_snapshots = None
     else:
         print(f"  ⚠️  未提供confirmed_opportunities，降级使用market_snapshots")
         print(f"  ⏱️  预计：约3分钟")
         all_opportunities = None
+        all_market_snapshots = None
     
     print(f"\n  🔍 测试7组战略采样...")
     
@@ -5893,23 +5918,44 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 # 🔧 注意：不过滤risk_reward，因为那是回测时的实际R:R，不是信号时的预测R:R
             ]
             
+            # 🔧 V8.3.25.25: 计算在全量market_snapshots上的开仓数（预测实际开仓数）
+            predicted_total_signals = None
+            if all_market_snapshots is not None:
+                # 统计全量信号中有多少满足参数
+                matching_signals = all_market_snapshots[
+                    (all_market_snapshots['signal_score'] >= config_variant.get('min_signal_score', 50)) &
+                    (all_market_snapshots['indicator_consensus'] >= config_variant.get('min_indicator_consensus', 2))
+                ]
+                predicted_total_signals = len(matching_signals)
+            
             if captured_opps:
                 avg_profit = sum(opp.get('objective_profit', 0) for opp in captured_opps) / len(captured_opps)
-                total_profit = avg_profit * len(captured_opps)  # 累计利润
-                win_rate = 100  # confirmed_opportunities都是盈利的
                 capture_rate = len(captured_opps) / len(all_opportunities)
+                
+                # 🔧 V8.3.25.25: 计算预测胜率（关键！）
+                if predicted_total_signals and predicted_total_signals > 0:
+                    predicted_win_rate = (len(captured_opps) / predicted_total_signals) * 100
+                    # 综合得分 = 预测胜率 × 捕获的盈利机会数
+                    total_profit = predicted_win_rate * len(captured_opps)
+                    win_rate = predicted_win_rate
+                else:
+                    # 降级：只统计捕获率
+                    total_profit = avg_profit * len(captured_opps)
+                    win_rate = 100
             else:
                 avg_profit = 0
                 total_profit = 0
                 win_rate = 0
                 capture_rate = 0
+                predicted_total_signals = 0
             
             result = {
                 'total_trades': len(captured_opps),
                 'win_rate': win_rate,
-                'profit_ratio': 1.0,  # confirmed_opportunities都是盈利的
+                'profit_ratio': 1.0,
                 'total_profit': total_profit,
-                'capture_rate': capture_rate
+                'capture_rate': capture_rate,
+                'predicted_total_signals': predicted_total_signals  # 新增：预测实际开仓数
             }
         else:
             # 降级：使用market_snapshots
@@ -5920,7 +5966,12 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             best_params = test_params.copy()
             if result['total_profit'] > 0:
                 found_profitable = True
-                print(f"     ✅ 找到盈利配置: R:R={test_params['min_risk_reward']}, 共识={test_params['min_indicator_consensus']}, ATR={test_params['atr_stop_multiplier']:.2f} | 盈利{result['total_profit']:.1f}%")
+                # 🔧 V8.3.25.25: 显示预测胜率和捕获数
+                if use_confirmed_opps and result.get('predicted_total_signals'):
+                    print(f"     ✅ 找到优质配置: R:R={test_params['min_risk_reward']:.1f}, 共识={test_params['min_indicator_consensus']}, ATR={test_params['atr_stop_multiplier']:.2f}")
+                    print(f"        → 捕获盈利机会: {result['total_trades']}个 | 预测总开仓: {result['predicted_total_signals']}笔 | 预测胜率: {result['win_rate']:.1f}% | 综合得分: {result['total_profit']:.0f}")
+                else:
+                    print(f"     ✅ 找到盈利配置: R:R={test_params['min_risk_reward']:.1f}, 共识={test_params['min_indicator_consensus']}, ATR={test_params['atr_stop_multiplier']:.2f} | 得分{result['total_profit']:.1f}")
     
     if not best_params:
         # 使用当前配置作为默认值
