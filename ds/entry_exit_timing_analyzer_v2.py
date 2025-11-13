@@ -192,9 +192,10 @@ def analyze_entry_timing_v2(
                 # 🔧 V8.3.25.11: 兼容多种字段名（盈亏/PnL/实际盈亏）
                 pnl = trade.get('盈亏', trade.get('PnL', trade.get('实际盈亏', 0)))
                 exit_reason = trade.get('平仓原因', trade.get('平仓类型', ''))
+                is_closed = not pd.isna(trade.get('平仓时间'))
                 
-                # 🔧 V8.3.25.11: 如果交易还未平仓，尝试从当前价格计算浮动盈亏
-                if pnl == 0 and pd.isna(trade.get('平仓时间')):
+                # 🔧 V8.3.25.12: 如果交易还未平仓，标记为"进行中"
+                if not is_closed:
                     # 未平仓交易，暂时标记为"进行中"
                     timing_issues.append({
                         'coin': coin,
@@ -216,53 +217,52 @@ def analyze_entry_timing_v2(
                         'result': '进行中',
                         'evaluation': '⏳ 进行中'
                     })
-                    continue
-                
-                # 判断开仓质量（已平仓的交易）
-                if pnl < -0.5 and ('止损' in exit_reason or 'SL' in exit_reason.upper()):
-                    # 虚假信号：开仓后快速止损
-                    false_entries.append({
-                        'coin': coin,
-                        'time': str(snapshot_time),
-                        'signal_score': signal_score,
-                        'consensus': consensus,
-                        'pnl': pnl,
-                        'reason': '虚假信号：开仓后快速止损'
-                    })
-                    entry_stats['false_entries'] += 1
-                elif pnl > 0.1:  # 🔧 V8.3.25.11: 至少盈利0.1U才算正确
-                    # 正确开仓
-                    correct_entries.append({
-                        'coin': coin,
-                        'time': str(snapshot_time),
-                        'signal_score': signal_score,
-                        'consensus': consensus,
-                        'pnl': pnl,
-                        'reason': f'正确开仓：盈利{pnl:.2f}U'
-                    })
-                    entry_stats['correct_entries'] += 1
                 else:
-                    # 中性/小亏（可能是时机问题）
-                    timing_issues.append({
+                    # 已平仓交易，判断开仓质量
+                    if pnl < -0.5 and ('止损' in exit_reason or 'SL' in exit_reason.upper()):
+                        # 虚假信号：开仓后快速止损
+                        false_entries.append({
+                            'coin': coin,
+                            'time': str(snapshot_time),
+                            'signal_score': signal_score,
+                            'consensus': consensus,
+                            'pnl': pnl,
+                            'reason': '虚假信号：开仓后快速止损'
+                        })
+                        entry_stats['false_entries'] += 1
+                    elif pnl > 0.1:  # 🔧 V8.3.25.11: 至少盈利0.1U才算正确
+                        # 正确开仓
+                        correct_entries.append({
+                            'coin': coin,
+                            'time': str(snapshot_time),
+                            'signal_score': signal_score,
+                            'consensus': consensus,
+                            'pnl': pnl,
+                            'reason': f'正确开仓：盈利{pnl:.2f}U'
+                        })
+                        entry_stats['correct_entries'] += 1
+                    else:
+                        # 中性/小亏（可能是时机问题）
+                        timing_issues.append({
+                            'coin': coin,
+                            'time': str(snapshot_time),
+                            'signal_score': signal_score,
+                            'consensus': consensus,
+                            'pnl': pnl,
+                            'reason': f'时机问题：盈亏接近0（{pnl:+.2f}U）'
+                        })
+                        entry_stats['timing_issues'] += 1
+                    
+                    # 添加到表格数据
+                    entry_table_data.append({
                         'coin': coin,
                         'time': str(snapshot_time),
                         'signal_score': signal_score,
                         'consensus': consensus,
-                        'pnl': pnl,
-                        'reason': f'时机问题：盈亏接近0（{pnl:+.2f}U）'
+                        'ai_action': '✅ 开仓',
+                        'result': f'{pnl:+.2f}U',
+                        'evaluation': '✅ 正确' if pnl > 0.1 else '❌ 虚假信号' if pnl < -0.5 else '⚠️ 时机问题'
                     })
-                    entry_stats['timing_issues'] += 1
-                
-                # 添加到表格数据
-                entry_table_data.append({
-                    'coin': coin,
-                    'time': str(snapshot_time),
-                    'signal_score': signal_score,
-                    'consensus': consensus,
-                    'ai_action': '✅ 开仓',
-                    'result': f'{pnl:+.2f}U',
-                    'evaluation': '✅ 正确' if pnl > 0 else '❌ 虚假信号' if pnl < -0.5 else '⚠️ 时机问题'
-                })
         
         # 添加错过的机会到表格
         for opp in missed_opportunities[:10]:  # TOP10

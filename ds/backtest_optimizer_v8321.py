@@ -96,11 +96,20 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
     if ai_suggested_params:
         print(f"   🤖 发现AI建议参数，加入测试候选集...")
         ai_config = {}
+        # 🔧 V8.3.25.12: 只保留搜索空间中存在的参数
+        valid_param_names = set(param_grid.keys())
         for key, value in ai_suggested_params.items():
-            ai_config[key] = value
-        # 确保AI建议的参数在候选集的前列（优先测试）
-        sampled_params.insert(0, ai_config)
-        print(f"      ✅ AI建议参数已加入（优先测试）: {ai_config}")
+            if key in valid_param_names:
+                ai_config[key] = value
+            else:
+                print(f"      ⚠️  跳过不在搜索空间中的参数: {key}={value}")
+        
+        if ai_config:
+            # 确保AI建议的参数在候选集的前列（优先测试）
+            sampled_params.insert(0, ai_config)
+            print(f"      ✅ AI建议参数已加入（优先测试）: {ai_config}")
+        else:
+            print(f"      ℹ️  AI建议的参数都不在搜索空间中，跳过")
     
     all_results = []
     
