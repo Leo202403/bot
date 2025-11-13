@@ -727,6 +727,8 @@ Perform deep self-critical analysis:
    - Decision logic corrections (e.g., "Don't trust MACD golden cross when RSI>70")
    - Expected impact (quantified if possible)
    - Implementation priority (High/Medium/Low)
+   - **CRITICAL**: For threshold field, use EXACT format: "parameter_name >= value" or "parameter_name: value"
+     Examples: "min_risk_reward >= 3.0", "min_signal_score >= 70", "atr_stop_multiplier: 1.8"
 4. **Learning Insights**: Generate 3-5 key learnings that critique and correct AI's reasoning patterns
 
 # Output Format (JSON)
@@ -740,7 +742,7 @@ Perform deep self-critical analysis:
     {{
       "issue": "What problem this addresses",
       "action": "Specific action to take",
-      "threshold": "e.g., signal_score >= 70 (from 65)",
+      "threshold": "min_risk_reward >= 3.0",
       "expected_impact": "e.g., Reduce false signal rate by 10-15%",
       "priority": "High/Medium/Low"
     }}
@@ -754,6 +756,7 @@ Perform deep self-critical analysis:
 # Important
 - Focus on patterns, not individual cases
 - Provide specific numbers for thresholds
+- **threshold field MUST use format: "parameter_name >= value" or "parameter_name: value"**
 - Ensure insights are actionable for AI
 - Output must be valid JSON
 """
@@ -948,6 +951,8 @@ Perform deep analysis and generate insights that can be used by the AI trading s
    - Stop-loss adjustment
    - Trailing stop implementation
    - Risk-reward ratio refinement
+   - **CRITICAL**: For threshold field, use EXACT format: "parameter_name >= value" or "parameter_name: value"
+     Examples: "atr_tp_multiplier: 3.5", "min_risk_reward >= 2.5", "trailing_stop_pct: 0.8"
 4. **Learning Insights**: Generate 3-5 key learnings for real-time AI reference
 
 # Output Format (JSON)
@@ -958,7 +963,7 @@ Perform deep analysis and generate insights that can be used by the AI trading s
     {{
       "issue": "Problem",
       "action": "Solution",
-      "threshold": "Specific parameter adjustment",
+      "threshold": "atr_tp_multiplier: 3.5",
       "expected_impact": "Quantified improvement",
       "priority": "High/Medium/Low"
     }}
@@ -971,6 +976,7 @@ Perform deep analysis and generate insights that can be used by the AI trading s
 
 # Important
 - Focus on systematic patterns
+- **threshold field MUST use format: "parameter_name >= value" or "parameter_name: value"**
 - Provide specific threshold adjustments
 - Ensure insights are immediately actionable
 - Output valid JSON only

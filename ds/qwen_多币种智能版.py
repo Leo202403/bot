@@ -7783,6 +7783,7 @@ def analyze_and_adjust_params():
                 ai_suggested_params = {}
                 
                 # 解析threshold字段（如"signal_score >= 70"，"min_risk_reward >= 3.0"）
+                import re
                 for analysis_name, analysis in [('entry', ai_entry_analysis), ('exit', ai_exit_analysis)]:
                     recommendations = analysis.get('key_recommendations', [])
                     for rec in recommendations:
@@ -7790,15 +7791,37 @@ def analyze_and_adjust_params():
                         if not threshold_str:
                             continue
                         
-                        # 解析threshold（支持多种格式）
-                        import re
-                        # 匹配 "param_name >= value" 或 "param_name: value" 等格式
-                        match = re.search(r'(min_risk_reward|min_indicator_consensus|min_signal_score|atr_stop_multiplier|atr_tp_multiplier)\s*[:>=<]+\s*([\d.]+)', threshold_str, re.IGNORECASE)
+                        # 🔧 V8.3.25.11: 增强正则表达式，支持更多格式
+                        # 支持格式：
+                        # 1. "min_risk_reward >= 3.0"
+                        # 2. "atr_tp_multiplier: 3.5"
+                        # 3. "Set TP at 1.3x ATR" -> atr_tp_multiplier: 1.3
+                        # 4. "Dynamic R:R: 2.5-4.9" -> min_risk_reward: 2.5 (取下限)
+                        
+                        # 尝试匹配标准格式
+                        match = re.search(r'(min_risk_reward|min_indicator_consensus|min_signal_score|atr_stop_multiplier|atr_tp_multiplier|trailing_stop_pct)\s*[:>=<]+\s*([\d.]+)', threshold_str, re.IGNORECASE)
                         if match:
                             param_name = match.group(1).lower()
                             param_value = float(match.group(2))
                             ai_suggested_params[param_name] = param_value
                             print(f"     • {analysis_name}: {param_name} = {param_value}")
+                            continue
+                        
+                        # 尝试匹配"Set TP at X.Xx ATR"格式
+                        match = re.search(r'TP\s+at\s+([\d.]+)\s*x?\s*ATR', threshold_str, re.IGNORECASE)
+                        if match:
+                            param_value = float(match.group(1))
+                            ai_suggested_params['atr_tp_multiplier'] = param_value
+                            print(f"     • {analysis_name}: atr_tp_multiplier = {param_value} (from TP)")
+                            continue
+                        
+                        # 尝试匹配"Dynamic R:R: X.X-Y.Y"格式（取下限）
+                        match = re.search(r'R:R[:\s]+([\d.]+)\s*-\s*([\d.]+)', threshold_str, re.IGNORECASE)
+                        if match:
+                            param_value = float(match.group(1))  # 取下限
+                            ai_suggested_params['min_risk_reward'] = param_value
+                            print(f"     • {analysis_name}: min_risk_reward = {param_value} (from dynamic R:R range)")
+                            continue
                 
                 if ai_suggested_params:
                     print(f"  ✅ 提取了{len(ai_suggested_params)}个AI建议参数")
