@@ -1673,9 +1673,9 @@ def save_ai_decision(decision_data):
         # 添加新记录
         history.append(decision_record)
         
-        # 只保留最近100条
-        if len(history) > 100:
-            history = history[-100:]
+        # 🔧 V8.3.32.9: 保留最近200条（覆盖约2天，每天96条）
+        if len(history) > 200:
+            history = history[-200:]
         
         # 保存
         with open(AI_DECISIONS_FILE, "w", encoding="utf-8") as f:
