@@ -8525,13 +8525,22 @@ def analyze_and_adjust_params():
             bark_content_lines = []
             
             # 🔍 V8.3.32.10: 调试v8321_insights结构
+            print(f"\n[Bark调试] ========== 开始调试 ==========")
+            print(f"[Bark调试] compressed_insights存在: {bool(config.get('compressed_insights'))}")
+            if config.get('compressed_insights'):
+                print(f"[Bark调试] compressed_insights的键: {list(config['compressed_insights'].keys())}")
             print(f"[Bark调试] v8321_insights存在: {bool(v8321_insights)}")
             if v8321_insights:
                 print(f"[Bark调试] v8321_insights的键: {list(v8321_insights.keys())}")
                 if 'scalping' in v8321_insights:
-                    print(f"[Bark调试] scalping数据: {v8321_insights['scalping'].get('performance', {})}")
+                    scalp_perf_debug = v8321_insights['scalping'].get('performance', {})
+                    print(f"[Bark调试] scalping.performance: {scalp_perf_debug}")
+                    print(f"[Bark调试] scalping.performance是否为空: {not scalp_perf_debug}")
                 if 'swing' in v8321_insights:
-                    print(f"[Bark调试] swing数据: {v8321_insights['swing'].get('performance', {})}")
+                    swing_perf_debug = v8321_insights['swing'].get('performance', {})
+                    print(f"[Bark调试] swing.performance: {swing_perf_debug}")
+                    print(f"[Bark调试] swing.performance是否为空: {not swing_perf_debug}")
+            print(f"[Bark调试] ========== 调试结束 ==========\n")
             
             if v8321_insights and ('scalping' in v8321_insights or 'swing' in v8321_insights):
                 # 使用V8.3.21的优化后预期数据
