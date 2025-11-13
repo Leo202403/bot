@@ -5828,6 +5828,11 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     optimization_cache = {}
     cache_file = f"trading_data/{os.getenv('MODEL_NAME', 'deepseek')}/optimization_cache.json"
     
+    # 🔧 V8.3.31.7: 先判断是否使用confirmed_opportunities
+    use_confirmed_opps = confirmed_opportunities is not None and \
+                         confirmed_opportunities.get('scalping', {}).get('opportunities') and \
+                         confirmed_opportunities.get('swing', {}).get('opportunities')
+    
     # 尝试加载缓存
     use_cache = False
     if os.path.exists(cache_file):
@@ -6044,10 +6049,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         {'min_risk_reward': rr_max, 'min_indicator_consensus': 2, 'atr_stop_multiplier': atr_min, 'min_signal_score': 75, 'name': '高R:R低共振'},  # 测试：是否R:R能补偿共振
     ]
     
-    # 🔧 V8.3.25.23: 使用confirmed_opportunities或降级到market_snapshots
-    use_confirmed_opps = confirmed_opportunities is not None and \
-                         confirmed_opportunities.get('scalping', {}).get('opportunities') and \
-                         confirmed_opportunities.get('swing', {}).get('opportunities')
+    # 🔧 V8.3.31.7: use_confirmed_opps 已在函数开始处定义（避免UnboundLocalError）
     
     if use_confirmed_opps:
         print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
