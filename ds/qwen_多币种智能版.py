@@ -5824,34 +5824,179 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         except Exception as e:
             print(f"  ⚠️  读取历史范围失败: {e}")
     
-    # 🔧 V8.3.30: 动态分析confirmed_opportunities的实际R:R分布
-    dynamic_rr_range = None
-    if confirmed_opportunities and use_confirmed_opps:
+    # 🔧 V8.3.31: 全面预分析 - 动态生成所有优化参数
+    optimization_cache = {}
+    cache_file = f"trading_data/{os.getenv('MODEL_NAME', 'qwen')}/optimization_cache.json"
+    
+    # 尝试加载缓存
+    use_cache = False
+    if os.path.exists(cache_file):
         try:
-            print(f"\n  📊 【预分析】统计真实盈利机会的R:R分布...")
+            with open(cache_file, 'r') as f:
+                cached_data = json.load(f)
+                # 检查缓存是否是今天的
+                if cached_data.get('date') == datetime.now().strftime('%Y-%m-%d'):
+                    optimization_cache = cached_data
+                    use_cache = True
+                    print(f"\n  💾 【加载缓存】使用今日预分析结果（{cached_data.get('opportunities_analyzed', 0)}个机会）")
+        except Exception as e:
+            print(f"  ⚠️  缓存加载失败: {e}")
+    
+    if not use_cache and confirmed_opportunities and use_confirmed_opps:
+        try:
+            print(f"\n  📊 【V8.3.31 全面预分析】统计真实盈利机会的参数分布...")
             all_opps = (
                 confirmed_opportunities['scalping']['opportunities'] + 
                 confirmed_opportunities['swing']['opportunities']
             )
             
-            # 提取所有机会的risk_reward
-            rr_values = [opp.get('risk_reward', 0) for opp in all_opps if opp.get('risk_reward', 0) > 0]
+            import numpy as np
             
+            # ============================================================
+            # 1. R:R分布分析（已有）
+            # ============================================================
+            rr_values = [opp.get('risk_reward', 0) for opp in all_opps if opp.get('risk_reward', 0) > 0]
             if rr_values:
-                import numpy as np
-                rr_p25 = np.percentile(rr_values, 25)  # 25分位
-                rr_p75 = np.percentile(rr_values, 75)  # 75分位
-                rr_median = np.percentile(rr_values, 50)  # 中位数
-                rr_max = np.percentile(rr_values, 95)  # 95分位（排除极端值）
+                rr_p25 = np.percentile(rr_values, 25)
+                rr_p75 = np.percentile(rr_values, 75)
+                rr_median = np.percentile(rr_values, 50)
+                rr_max = np.percentile(rr_values, 95)
+                dynamic_rr_range = [max(1.2, rr_p25), min(6.0, rr_max)]
                 
-                # 动态范围：从25分位到95分位
-                dynamic_rr_range = [max(1.2, rr_p25), min(6.0, rr_max)]  # 限制在[1.2, 6.0]内
+                optimization_cache['rr_distribution'] = {
+                    'range': dynamic_rr_range,
+                    'p25': float(rr_p25),
+                    'median': float(rr_median),
+                    'p75': float(rr_p75),
+                    'p95': float(rr_max)
+                }
+                print(f"  1️⃣ R:R分布: 25%={rr_p25:.2f}, 中位={rr_median:.2f}, 75%={rr_p75:.2f}, 95%={rr_max:.2f}")
+                print(f"     → 动态范围: [{dynamic_rr_range[0]:.2f}, {dynamic_rr_range[1]:.2f}]")
+            
+            # ============================================================
+            # 2. 精准率公式分析（新增）
+            # ============================================================
+            # 按signal_score、consensus分组统计实际精准率
+            # 注意：这里我们用captured_opps占all_opps的比例作为"理论精准率"
+            # 因为confirmed_opportunities本身就是"真实盈利机会"
+            
+            precision_data = {'by_score': {}, 'by_consensus': {}, 'by_rr': {}}
+            
+            # 按signal_score分组
+            for score_threshold in [50, 60, 70, 80]:
+                matching = [o for o in all_opps if o.get('signal_score', 0) >= score_threshold]
+                precision_data['by_score'][score_threshold] = len(matching) / len(all_opps) if all_opps else 0
+            
+            # 按consensus分组
+            for consensus_threshold in [2, 3, 4, 5]:
+                matching = [o for o in all_opps if o.get('consensus', 0) >= consensus_threshold]
+                precision_data['by_consensus'][consensus_threshold] = len(matching) / len(all_opps) if all_opps else 0
+            
+            # 按R:R分组
+            for rr_threshold in [1.5, 2.0, 2.5, 3.0]:
+                matching = [o for o in all_opps if o.get('risk_reward', 0) >= rr_threshold]
+                precision_data['by_rr'][rr_threshold] = len(matching) / len(all_opps) if all_opps else 0
+            
+            optimization_cache['precision_formula'] = precision_data
+            print(f"  2️⃣ 精准率公式:")
+            print(f"     → 分数≥50: {precision_data['by_score'][50]:.1%}, ≥60: {precision_data['by_score'][60]:.1%}, ≥70: {precision_data['by_score'][70]:.1%}, ≥80: {precision_data['by_score'][80]:.1%}")
+            print(f"     → 共振≥2: {precision_data['by_consensus'][2]:.1%}, ≥3: {precision_data['by_consensus'][3]:.1%}, ≥4: {precision_data['by_consensus'][4]:.1%}, ≥5: {precision_data['by_consensus'][5]:.1%}")
+            
+            # ============================================================
+            # 3. ATR倍数分布分析（新增）
+            # ============================================================
+            # 计算实际TP/SL倍数（如果有future_data）
+            atr_multipliers = {'tp': [], 'sl': []}
+            
+            for opp in all_opps:
+                atr = opp.get('atr', 0)
+                if atr > 0:
+                    # TP倍数 = 盈利幅度 / ATR
+                    profit_pct = opp.get('objective_profit', 0)
+                    entry_price = opp.get('entry_price', 0)
+                    if entry_price > 0:
+                        profit_amount = entry_price * profit_pct / 100
+                        tp_multiplier = abs(profit_amount / atr)
+                        if 0.5 < tp_multiplier < 10:  # 合理范围
+                            atr_multipliers['tp'].append(tp_multiplier)
+            
+            if atr_multipliers['tp']:
+                tp_p25 = np.percentile(atr_multipliers['tp'], 25)
+                tp_median = np.percentile(atr_multipliers['tp'], 50)
+                tp_p75 = np.percentile(atr_multipliers['tp'], 75)
+                tp_p95 = np.percentile(atr_multipliers['tp'], 95)
                 
-                print(f"     ✓ 分析了{len(rr_values)}个机会的R:R")
-                print(f"     ✓ R:R分布: 25%={rr_p25:.2f}, 中位={rr_median:.2f}, 75%={rr_p75:.2f}, 95%={rr_max:.2f}")
-                print(f"     ✓ 动态优化范围: [{dynamic_rr_range[0]:.2f}, {dynamic_rr_range[1]:.2f}]")
+                optimization_cache['atr_multipliers'] = {
+                    'tp_range': [max(1.5, tp_p25), min(6.0, tp_p95)],
+                    'tp_p25': float(tp_p25),
+                    'tp_median': float(tp_median),
+                    'tp_p75': float(tp_p75),
+                    'tp_p95': float(tp_p95),
+                    'sl_range': [1.2, 2.5]  # SL保守，暂用固定值
+                }
+                print(f"  3️⃣ ATR倍数分布:")
+                print(f"     → TP倍数: 25%={tp_p25:.2f}, 中位={tp_median:.2f}, 75%={tp_p75:.2f}, 95%={tp_p95:.2f}")
+                print(f"     → 动态TP范围: [{max(1.5, tp_p25):.2f}, {min(6.0, tp_p95):.2f}]")
+            
+            # ============================================================
+            # 4. 持仓时间分析（新增）
+            # ============================================================
+            holding_times = {'scalping': {}, 'swing': {}}
+            
+            # 分策略统计
+            for strategy in ['scalping', 'swing']:
+                strategy_opps = confirmed_opportunities[strategy]['opportunities']
+                
+                # 按币种统计
+                for coin in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'LTC']:
+                    coin_opps = [o for o in strategy_opps if o.get('coin') == coin]
+                    if coin_opps:
+                        # 从future_data推测持续时间（简化：用15分钟K线数估算）
+                        durations = []
+                        for opp in coin_opps:
+                            future_data = opp.get('future_data', {})
+                            kline_count = future_data.get('kline_count', 0)
+                            if kline_count > 0:
+                                duration_hours = kline_count * 0.25  # 15分钟 = 0.25小时
+                                durations.append(duration_hours)
+                        
+                        if durations:
+                            median_duration = np.percentile(durations, 50)
+                            p75_duration = np.percentile(durations, 75)
+                            holding_times[strategy][coin] = {
+                                'median': float(median_duration),
+                                'p75': float(p75_duration)
+                            }
+            
+            optimization_cache['holding_times'] = holding_times
+            if holding_times['scalping'] or holding_times['swing']:
+                print(f"  4️⃣ 持仓时间（中位数）:")
+                for coin, times in list(holding_times['scalping'].items())[:3]:
+                    print(f"     → {coin}超短线: {times['median']:.1f}小时")
+            
+            # ============================================================
+            # 5. 元数据
+            # ============================================================
+            optimization_cache['date'] = datetime.now().strftime('%Y-%m-%d')
+            optimization_cache['opportunities_analyzed'] = len(all_opps)
+            optimization_cache['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            # 保存缓存
+            try:
+                os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+                with open(cache_file, 'w') as f:
+                    json.dump(optimization_cache, f, indent=2)
+                print(f"  💾 预分析结果已保存到缓存")
+            except Exception as e:
+                print(f"  ⚠️  缓存保存失败: {e}")
+                
         except Exception as e:
-            print(f"     ⚠️  R:R分析失败: {e}，使用默认范围")
+            print(f"     ⚠️  预分析失败: {e}，使用默认范围")
+    
+    # 从缓存或分析结果中提取动态范围
+    dynamic_rr_range = None
+    if optimization_cache.get('rr_distribution'):
+        dynamic_rr_range = optimization_cache['rr_distribution']['range']
     
     # 定义默认采样范围
     if historical_sampling_range:
@@ -5943,21 +6088,60 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 avg_profit = sum(opp.get('objective_profit', 0) for opp in captured_opps) / len(captured_opps)
                 capture_rate = len(captured_opps) / len(all_opportunities)
                 
-                # 🔧 V8.3.27: 使用经验性预测胜率公式
-                # 根据参数严格程度估算精准率（真实盈利机会 / 触发信号数）
+                # 🔧 V8.3.31: 使用缓存数据计算精准率
                 min_score = config_variant.get('min_signal_score', 50)
                 min_consensus = config_variant.get('min_indicator_consensus', 2)
                 min_rr = config_variant.get('min_risk_reward', 1.5)
                 
-                # 经验公式：信号分越高、共振越多、R:R越高 → 精准率越高
-                # 基准精准率40%（score=50, consensus=2, rr=1.5）
-                precision_score = 0.40
-                if min_score >= 70: precision_score += 0.15
-                elif min_score >= 60: precision_score += 0.08
-                if min_consensus >= 4: precision_score += 0.12
-                elif min_consensus >= 3: precision_score += 0.06
-                if min_rr >= 3.0: precision_score += 0.10
-                elif min_rr >= 2.0: precision_score += 0.05
+                # 使用缓存中的真实分布数据
+                if optimization_cache.get('precision_formula'):
+                    precision_data = optimization_cache['precision_formula']
+                    
+                    # 基于真实数据计算精准率
+                    # score维度：找最接近的阈值
+                    score_precision = precision_data['by_score'].get(min_score, 0)
+                    if score_precision == 0:
+                        # 插值估算
+                        available_scores = sorted([k for k in precision_data['by_score'].keys() if k <= min_score])
+                        if available_scores:
+                            score_precision = precision_data['by_score'][available_scores[-1]]
+                        else:
+                            score_precision = 1.0
+                    
+                    # consensus维度
+                    consensus_precision = precision_data['by_consensus'].get(min_consensus, 0)
+                    if consensus_precision == 0:
+                        available_consensus = sorted([k for k in precision_data['by_consensus'].keys() if k <= min_consensus])
+                        if available_consensus:
+                            consensus_precision = precision_data['by_consensus'][available_consensus[-1]]
+                        else:
+                            consensus_precision = 1.0
+                    
+                    # R:R维度
+                    rr_precision = precision_data['by_rr'].get(min_rr, 0)
+                    if rr_precision == 0:
+                        available_rrs = sorted([k for k in precision_data['by_rr'].keys() if k <= min_rr])
+                        if available_rrs:
+                            rr_precision = precision_data['by_rr'][available_rrs[-1]]
+                        else:
+                            rr_precision = 1.0
+                    
+                    # 联合精准率（取平均或几何平均）
+                    # 使用几何平均更保守：如果任何一个维度过滤严格，整体精准率就高
+                    import math
+                    precision_score = math.pow(score_precision * consensus_precision * rr_precision, 1/3)
+                    
+                    # 下限保护
+                    precision_score = max(0.10, min(0.95, precision_score))
+                else:
+                    # 降级：使用经验公式
+                    precision_score = 0.40
+                    if min_score >= 70: precision_score += 0.15
+                    elif min_score >= 60: precision_score += 0.08
+                    if min_consensus >= 4: precision_score += 0.12
+                    elif min_consensus >= 3: precision_score += 0.06
+                    if min_rr >= 3.0: precision_score += 0.10
+                    elif min_rr >= 2.0: precision_score += 0.05
                 
                 # 预测总开仓数 = 捕获的盈利机会数 / 精准率
                 predicted_total_signals = int(len(captured_opps) / precision_score) if precision_score > 0 else len(captured_opps) * 3
