@@ -5880,7 +5880,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             'min_risk_reward': test_params['min_risk_reward'],
             'min_indicator_consensus': test_params['min_indicator_consensus'],
             'atr_stop_multiplier': test_params['atr_stop_multiplier'],
-            'min_signal_score': current_config.get('global', {}).get('min_signal_score', 55)
+            'min_signal_score': 50  # 🔧 V8.3.28: 快速探索使用基准分数50，避免过滤掉机会
         }
         
         # 🔧 V8.3.25.23: 优先使用confirmed_opportunities回测
