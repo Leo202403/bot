@@ -7514,10 +7514,22 @@ def analyze_and_adjust_params():
                     if confirmed_opps and 'swing' in confirmed_opps:
                         all_opps.extend(confirmed_opps['swing'].get('opportunities', []))
                     
+                    # 🔍 调试：查看总机会数和timestamp格式
+                    print(f"  🔍 【调试】analyze_separated_opportunities返回: scalping={len(confirmed_opps.get('scalping', {}).get('opportunities', []))}, swing={len(confirmed_opps.get('swing', {}).get('opportunities', []))}")
+                    print(f"  🔍 【调试】合并后all_opps总数: {len(all_opps)}")
+                    if all_opps:
+                        first_opp = all_opps[0]
+                        print(f"  🔍 【调试】第一个机会样例:")
+                        print(f"      币种: {first_opp.get('coin', 'N/A')}")
+                        print(f"      timestamp: {first_opp.get('timestamp', 'N/A')} (type: {type(first_opp.get('timestamp'))})")
+                        print(f"      objective_profit: {first_opp.get('objective_profit', 0)}")
+                    
                     # 筛选昨日的机会（timestamp匹配yesterday）
                     # 🔧 V8.3.25.16: 兼容多种timestamp格式，使用pd.to_datetime解析
                     yesterday_date_obj = datetime.strptime(yesterday, '%Y%m%d').date()
+                    print(f"  🔍 【调试】yesterday: {yesterday}, yesterday_date_obj: {yesterday_date_obj}")
                     confirmed_opportunities = []
+                    parse_errors = 0
                     for opp in all_opps:
                         ts = opp.get('timestamp')
                         if not ts:
@@ -7528,12 +7540,18 @@ def analyze_and_adjust_params():
                                 ts_dt = pd.to_datetime(ts)
                                 if ts_dt.date() == yesterday_date_obj:
                                     confirmed_opportunities.append(opp)
-                        except:
-                            continue
+                        except Exception as parse_e:
+                            parse_errors += 1
+                            if parse_errors <= 3:
+                                print(f"  🔍 【调试】timestamp解析失败: {ts}, 错误: {parse_e}")
                     
                     print(f"  ✓ 提取了{len(confirmed_opportunities)}个确认盈利的机会（昨日）")
+                    if parse_errors > 0:
+                        print(f"  ⚠️ timestamp解析失败数: {parse_errors}")
                 except Exception as e:
                     print(f"  ⚠️ 提取确认机会失败: {e}")
+                    import traceback
+                    traceback.print_exc()
                     confirmed_opportunities = None
             
             # V2需要：昨日开仓交易、市场快照、AI决策记录、昨日日期、确认的机会
