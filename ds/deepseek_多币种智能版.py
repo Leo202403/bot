@@ -8523,6 +8523,15 @@ def analyze_and_adjust_params():
             # 🔄 V8.3.21.8: 构建Bark通知内容（优先显示优化后预期收益）
             bark_content_lines = []
             
+            # 🔍 V8.3.32.10: 调试v8321_insights结构
+            print(f"[Bark调试] v8321_insights存在: {bool(v8321_insights)}")
+            if v8321_insights:
+                print(f"[Bark调试] v8321_insights的键: {list(v8321_insights.keys())}")
+                if 'scalping' in v8321_insights:
+                    print(f"[Bark调试] scalping数据: {v8321_insights['scalping'].get('performance', {})}")
+                if 'swing' in v8321_insights:
+                    print(f"[Bark调试] swing数据: {v8321_insights['swing'].get('performance', {})}")
+            
             if v8321_insights and ('scalping' in v8321_insights or 'swing' in v8321_insights):
                 # 使用V8.3.21的优化后预期数据
                 scalp_perf = v8321_insights.get('scalping', {}).get('performance', {})
@@ -19265,8 +19274,12 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     snapshot_date = str(current.get('snapshot_date', ''))
                     time_str = str(current.get('time', ''))
                     if snapshot_date and time_str:
-                        # 组合为 "YYYYMMDD HH:MM:SS" 格式
-                        timestamp = f"{snapshot_date} {time_str}"
+                        # 🔧 V8.3.32.10: 组合为标准datetime格式 "YYYY-MM-DD HH:MM:SS"
+                        try:
+                            date_obj = datetime.strptime(str(snapshot_date), '%Y%m%d')
+                            timestamp = f"{date_obj.strftime('%Y-%m-%d')} {time_str}:00"
+                        except:
+                            timestamp = f"{snapshot_date} {time_str}"  # 降级处理
                     else:
                         timestamp = time_str  # 降级处理
                     
