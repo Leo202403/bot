@@ -26,7 +26,7 @@ def analyze_entry_timing_v2(
     yesterday_date_str
 ):
     """
-    【V8.3.25.8】完整的开仓时机分析
+    【V8.3.25.14】完整的开仓时机分析（增强：K线回测错过机会）
     
     核心逻辑：
     1. 获取昨日所有市场快照（AI识别的所有机会点）
@@ -34,12 +34,12 @@ def analyze_entry_timing_v2(
     3. 分类分析：
        - 正确开仓：AI开了，市场走势验证是对的
        - 错误开仓：AI开了，但快速止损（虚假信号）
-       - 错过机会：市场有机会，AI没开（分析为什么）
+       - 错过机会：市场有机会，AI没开，且K线回测确认后续能盈利（NEW！）
        - 时机问题：开了但太早/太晚
     
     Args:
         yesterday_trades_df: DataFrame, 昨日开仓的交易
-        market_snapshots_df: DataFrame, 昨日市场快照（所有识别的机会点）
+        market_snapshots_df: DataFrame, 昨日市场快照（包含K线数据+识别的机会点）
         ai_decisions_list: list, AI历史决策记录
         yesterday_date_str: str, 昨日日期（YYYY-MM-DD格式）
     
@@ -48,7 +48,7 @@ def analyze_entry_timing_v2(
             'entry_stats': {...},  # 统计数据
             'correct_entries': [...],  # 正确开仓案例
             'false_entries': [...],  # 虚假信号开仓
-            'missed_opportunities': [...],  # 错过的机会（AI没开）
+            'missed_opportunities': [...],  # 错过的机会（AI没开，且K线回测确认能盈利）
             'timing_issues': [...],  # 时机问题（太早/太晚）
             'entry_table_data': [...],  # 邮件表格数据
             'entry_lessons': [...]  # 改进建议
@@ -221,25 +221,75 @@ def analyze_entry_timing_v2(
             
             if matching_trades.empty:
                 # 情况1: AI没开仓（错过机会 or 正确过滤）
-                # 🔧 V8.3.25.8: 简化逻辑 - 高信号分视为错过机会，低信号分视为正确过滤
-                # 注：完整评估需要后续K线数据，暂时用信号质量近似判断
+                # 🔧 V8.3.25.14: 使用K线回测确认是否真的错过盈利机会
                 
-                # 使用信号质量作为判断标准
-                is_high_quality = (signal_score >= 75 and consensus >= 3) or signal_score >= 85
+                # 获取这个snapshot的后续K线数据（后续4小时）
+                coin_klines = market_snapshots_df[
+                    (market_snapshots_df['coin'] == coin) &
+                    (market_snapshots_df['full_datetime'] > snapshot_time_dt) &
+                    (market_snapshots_df['full_datetime'] <= snapshot_time_dt + timedelta(hours=4))
+                ].copy()
                 
-                if is_high_quality:
-                    # 高质量信号但未开仓 → 可能是错过的机会
+                is_truly_missed = False
+                potential_profit_pct = 0
+                
+                if not coin_klines.empty:
+                    # 从snapshot中获取方向和TP/SL信息
+                    direction = snapshot.get('direction', 'N/A')  # 'long' or 'short'
+                    entry_price = snapshot.get('close', 0)  # 使用snapshot的close价格作为入场价
+                    tp_price = snapshot.get('tp', 0)
+                    sl_price = snapshot.get('sl', 0)
+                    
+                    if entry_price > 0 and tp_price > 0:
+                        # 检查后续K线是否触及TP
+                        if direction == 'long':
+                            # 多单：检查high是否触及TP
+                            hit_tp = (coin_klines['high'] >= tp_price).any()
+                            hit_sl = (coin_klines['low'] <= sl_price).any() if sl_price > 0 else False
+                            
+                            if hit_tp:
+                                # 检查TP是否在SL之前触发
+                                if hit_sl:
+                                    # 找到第一个触及TP和SL的时间
+                                    tp_time = coin_klines[coin_klines['high'] >= tp_price]['full_datetime'].min()
+                                    sl_time = coin_klines[coin_klines['low'] <= sl_price]['full_datetime'].min()
+                                    if tp_time < sl_time:
+                                        is_truly_missed = True
+                                        potential_profit_pct = (tp_price - entry_price) / entry_price * 100
+                                else:
+                                    is_truly_missed = True
+                                    potential_profit_pct = (tp_price - entry_price) / entry_price * 100
+                        
+                        elif direction == 'short':
+                            # 空单：检查low是否触及TP
+                            hit_tp = (coin_klines['low'] <= tp_price).any()
+                            hit_sl = (coin_klines['high'] >= sl_price).any() if sl_price > 0 else False
+                            
+                            if hit_tp:
+                                # 检查TP是否在SL之前触发
+                                if hit_sl:
+                                    tp_time = coin_klines[coin_klines['low'] <= tp_price]['full_datetime'].min()
+                                    sl_time = coin_klines[coin_klines['high'] >= sl_price]['full_datetime'].min()
+                                    if tp_time < sl_time:
+                                        is_truly_missed = True
+                                        potential_profit_pct = (entry_price - tp_price) / entry_price * 100
+                                else:
+                                    is_truly_missed = True
+                                    potential_profit_pct = (entry_price - tp_price) / entry_price * 100
+                
+                if is_truly_missed:
+                    # 确认是错过的机会（后续K线确实触及TP）
                     missed_opportunities.append({
                         'coin': coin,
                         'time': str(snapshot_time),
                         'signal_score': signal_score,
                         'consensus': consensus,
-                        'potential_profit': 0,  # 需要后续K线数据才能计算，暂时0
-                        'reason': f'高质量信号（{signal_score}分/{consensus}共振）但参数过滤'
+                        'potential_profit': potential_profit_pct,
+                        'reason': f'K线回测确认：{direction}单 后续触及TP（+{potential_profit_pct:.1f}%）'
                     })
                     entry_stats['missed_profitable'] += 1
                 else:
-                    # 低质量信号未开仓 → 正确过滤
+                    # 正确过滤（后续没有触及TP，或先触及SL）
                     entry_stats['correctly_filtered'] += 1
             else:
                 # 情况2: AI开仓了

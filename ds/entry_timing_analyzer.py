@@ -788,7 +788,34 @@ Perform deep self-critical analysis:
         elif '```' in ai_content:
             ai_content = ai_content.split('```')[1].split('```')[0].strip()
         
-        ai_insights = json.loads(ai_content)
+        # 🔧 V8.3.25.14: 增强JSON解析 - 处理DeepSeek的格式问题
+        try:
+            ai_insights = json.loads(ai_content)
+        except json.JSONDecodeError as json_err:
+            print(f"[AI Entry Analysis] ⚠️ JSON解析失败: {json_err}")
+            print(f"[AI Entry Analysis] 🔧 尝试修复JSON格式...")
+            
+            # 尝试修复常见问题：未闭合的字符串
+            try:
+                # 移除可能的不完整JSON尾部
+                if ai_content.rstrip().endswith(','):
+                    ai_content = ai_content.rstrip()[:-1]
+                
+                # 尝试找到最后一个完整的对象
+                last_brace = ai_content.rfind('}')
+                if last_brace > 0:
+                    ai_content = ai_content[:last_brace+1]
+                
+                ai_insights = json.loads(ai_content)
+                print(f"[AI Entry Analysis] ✅ JSON修复成功")
+            except:
+                print(f"[AI Entry Analysis] ❌ JSON修复失败，返回空结果")
+                return {
+                    'diagnosis': 'JSON解析失败，无法提取AI洞察',
+                    'learning_insights': [],
+                    'key_recommendations': [],
+                    'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
         
         # 添加时间戳
         ai_insights['generated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -1009,7 +1036,34 @@ Perform deep analysis and generate insights that can be used by the AI trading s
         elif '```' in ai_content:
             ai_content = ai_content.split('```')[1].split('```')[0].strip()
         
-        ai_insights = json.loads(ai_content)
+        # 🔧 V8.3.25.14: 增强JSON解析 - 处理DeepSeek的格式问题
+        try:
+            ai_insights = json.loads(ai_content)
+        except json.JSONDecodeError as json_err:
+            print(f"[AI Exit Analysis] ⚠️ JSON解析失败: {json_err}")
+            print(f"[AI Exit Analysis] 🔧 尝试修复JSON格式...")
+            
+            # 尝试修复常见问题：未闭合的字符串
+            try:
+                # 移除可能的不完整JSON尾部
+                if ai_content.rstrip().endswith(','):
+                    ai_content = ai_content.rstrip()[:-1]
+                
+                # 尝试找到最后一个完整的对象
+                last_brace = ai_content.rfind('}')
+                if last_brace > 0:
+                    ai_content = ai_content[:last_brace+1]
+                
+                ai_insights = json.loads(ai_content)
+                print(f"[AI Exit Analysis] ✅ JSON修复成功")
+            except:
+                print(f"[AI Exit Analysis] ❌ JSON修复失败，返回空结果")
+                return {
+                    'diagnosis': 'JSON解析失败，无法提取AI洞察',
+                    'learning_insights': [],
+                    'key_recommendations': [],
+                    'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
         
         # 添加元数据
         ai_insights['generated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
