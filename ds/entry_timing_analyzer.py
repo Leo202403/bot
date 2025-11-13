@@ -452,10 +452,10 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
         for entry in entry_analysis.get('false_entries', [])[:3]:
             false_signals_summary.append({
                 'coin': entry['coin'],
-                'side': entry['side'],
+                'side': entry.get('side', 'N/A'),  # 🔧 V8.3.25.19: V2可能没有side字段
                 'signal_score': entry.get('signal_score', 0),
                 'consensus': entry.get('consensus', 0),
-                'issue': entry['issue']
+                'issue': entry.get('issue', entry.get('reason', 'N/A'))  # 🔧 V8.3.25.19: 兼容reason字段
             })
         
         delayed_entries_summary = []
@@ -833,12 +833,13 @@ Perform deep self-critical analysis:
         traceback.print_exc()
         
         # 降级返回空结构
+        from datetime import datetime as dt_fallback  # 🔧 V8.3.25.19: 避免UnboundLocalError
         return {
             'diagnosis': f"AI analysis failed: {str(e)}",
             'root_causes': [],
             'recommendations': [],
             'learning_insights': [],
-            'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'generated_at': dt_fallback.now().strftime('%Y-%m-%d %H:%M:%S'),
             'error': str(e)
         }
 
@@ -1080,12 +1081,13 @@ Perform deep analysis and generate insights that can be used by the AI trading s
         import traceback
         traceback.print_exc()
         
+        from datetime import datetime as dt_fallback  # 🔧 V8.3.25.19: 避免UnboundLocalError
         return {
             'diagnosis': f"AI analysis failed: {str(e)}",
             'root_causes': [],
             'recommendations': [],
             'learning_insights': [],
-            'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'generated_at': dt_fallback.now().strftime('%Y-%m-%d %H:%M:%S'),
             'error': str(e)
         }
 
