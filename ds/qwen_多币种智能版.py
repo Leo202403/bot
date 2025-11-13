@@ -1359,12 +1359,12 @@ def clear_symbol_orders(symbol, verbose=True):
             print(f"  ⚠️ 处理条件单异常: {str(e)[:50]}")
     
     # 汇总结果
-        if verbose and (success_count > 0 or fail_count > 0):
-            print(f"  清理完成: 成功{success_count}个, 失败{fail_count}个")
+    if verbose and (success_count > 0 or fail_count > 0):
+        print(f"  清理完成: 成功{success_count}个, 失败{fail_count}个")
     elif verbose and success_count == 0 and fail_count == 0:
         print(f"  无需要清理的订单")
-        
-        return success_count, fail_count
+    
+    return success_count, fail_count
         
 
 def set_tpsl_orders_via_papi(symbol: str, side: str, amount: float, stop_loss: float = None, take_profit: float = None, verbose: bool = True):
@@ -1432,8 +1432,8 @@ def set_tpsl_orders_via_papi(symbol: str, side: str, amount: float, stop_loss: f
             else:
                 if verbose:
                     print(f"  ❌ 止损单设置失败: HTTP {response.status_code} - {response.text[:100]}")
-    except Exception as e:
-        if verbose:
+        except Exception as e:
+            if verbose:
                 print(f"  ❌ 止损单设置异常: {str(e)[:80]}")
     
     # 2. 设置止盈订单（使用TAKE_PROFIT_MARKET）
@@ -1553,8 +1553,8 @@ def sync_csv_with_exchange_positions(current_positions):
                 
                 # 清理残留订单（使用统一的订单清理函数）
                 try:
-                print("  正在清理残留的止损止盈订单...")
-                success, fail = clear_symbol_orders(symbol, verbose=True)
+                    print("  正在清理残留的止损止盈订单...")
+                    success, fail = clear_symbol_orders(symbol, verbose=True)
                 except Exception as e:
                     print(f"  ⚠️ 清理订单失败: {e}")
                 
@@ -2687,7 +2687,7 @@ def save_market_snapshot_v7(market_data_list):
             if ma7 > 0 and ma24 > 0:
                 divergence = (ma7 - ma24) / ma24 * 100
                 if abs(divergence) >= 2.0:  # 至少2%的发散
-                indicator_consensus += 1
+                    indicator_consensus += 1
             
             # 2. MACD明确金叉/死叉（histogram显著>0或<0，至少0.01）
             macd_hist = macd_data.get("histogram", 0)
