@@ -151,11 +151,20 @@ def analyze_entry_timing_v2(
             first_decision = ai_decisions_list[0]
             print(f"      第一条决策时间: {first_decision.get('timestamp', 'N/A')}")
             
-            # 🔧 V8.3.32: 兼容新旧字段名
+            # 🔧 V8.3.32: 兼容新旧字段名 + 调试字段内容
             actions = first_decision.get('actions') or first_decision.get('operations', [])
             print(f"      包含操作数: {len(actions)}")
             
-            if actions:
+            # 🔧 V8.3.32: 如果actions为空，打印所有字段以便调试
+            if not actions:
+                print(f"      ⚠️  actions字段为空，显示所有可用字段:")
+                for key in first_decision.keys():
+                    value = first_decision[key]
+                    if isinstance(value, str):
+                        print(f"         {key}: {value[:100] if len(value) > 100 else value}")
+                    else:
+                        print(f"         {key}: {value}")
+            else:
                 first_action = actions[0]
                 coin_display = first_action.get('coin', first_action.get('symbol', 'N/A'))
                 operation_display = first_action.get('operation', first_action.get('action', 'N/A'))

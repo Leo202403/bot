@@ -18425,53 +18425,8 @@ def recalculate_signal_score_from_snapshot(snapshot_row, signal_type):
             return 0
     
     try:
-        # 🔧 V8.3.32: 优先从原始数据重新计算（而不是读取CSV中的维度分数）
-        # 构建market_data结构用于calculate_signal_score_components
-        if 'rsi_14' in snapshot_row or 'macd_histogram' in snapshot_row:
-            # 有原始指标数据，可以重新计算
-            market_data_for_calc = {
-                'price_action': {
-                    'momentum_slope': safe_score(snapshot_row.get('momentum_value', 0)),
-                    'consecutive': {'candles': int(safe_score(snapshot_row.get('scalp_consecutive_candles', 0)))} if signal_type == 'scalping' else None,
-                },
-                'moving_averages': {
-                    'ema20': safe_score(snapshot_row.get('ema20', 0)),
-                    'ema50': safe_score(snapshot_row.get('ema50', 0)),
-                },
-                # 可以继续添加更多字段映射
-            }
-            
-            try:
-                # 🔧 调用calculate_signal_score_components从原始数据计算
-                components = calculate_signal_score_components(market_data_for_calc, signal_type)
-                
-                # 累加各维度分数
-                total_score = 50  # 基础分
-                if signal_type == 'scalping':
-                    total_score += components.get('volume_surge_score', 0)
-                    total_score += components.get('breakout_score', 0)
-                    total_score += components.get('momentum_score', 0)
-                    total_score += components.get('consecutive_score', 0)
-                    total_score += components.get('pin_bar_score', 0)
-                    total_score += components.get('engulfing_score', 0)
-                    total_score += components.get('trend_alignment_score', 0)
-                elif signal_type == 'swing':
-                    total_score += components.get('trend_initiation_score', 0)
-                    total_score += components.get('trend_alignment_score', 0)
-                    total_score += components.get('trend_4h_strength_score', 0)
-                    total_score += components.get('ema_divergence_score', 0)
-                    total_score += components.get('swing_pullback_score', 0)
-                    total_score += components.get('swing_consecutive_score', 0)
-                    total_score += components.get('volume_confirmed_score', 0)
-                
-                return min(100, max(0, int(total_score)))
-            except Exception as calc_err:
-                # 重新计算失败，降级到方案B
-                if False:  # 调试模式
-                    print(f"⚠️ 【V8.3.32】从原始数据计算失败，降级读取CSV维度分数: {calc_err}")
-                pass  # 继续执行下面的降级逻辑
-        
-        # 【方案B降级】如果没有原始数据或计算失败，尝试读取CSV中的维度分数
+        # 🔧 V8.3.32: 直接从CSV维度分数重新计算（export_historical_data已经计算好了）
+        # CSV中包含：volume_surge_score, breakout_score等所有维度分数
         total_score = 50
         
         if 'volume_surge_score' in snapshot_row:
