@@ -6103,8 +6103,8 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     # score维度：找最接近的阈值
                     score_precision = precision_data['by_score'].get(min_score, 0)
                     if score_precision == 0:
-                        # 插值估算
-                        available_scores = sorted([k for k in precision_data['by_score'].keys() if k <= min_score])
+                        # 插值估算（确保键类型转换为int）
+                        available_scores = sorted([int(k) for k in precision_data['by_score'].keys() if int(k) <= min_score])
                         if available_scores:
                             score_precision = precision_data['by_score'][available_scores[-1]]
                         else:
@@ -6113,7 +6113,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     # consensus维度
                     consensus_precision = precision_data['by_consensus'].get(min_consensus, 0)
                     if consensus_precision == 0:
-                        available_consensus = sorted([k for k in precision_data['by_consensus'].keys() if k <= min_consensus])
+                        available_consensus = sorted([int(k) for k in precision_data['by_consensus'].keys() if int(k) <= min_consensus])
                         if available_consensus:
                             consensus_precision = precision_data['by_consensus'][available_consensus[-1]]
                         else:
