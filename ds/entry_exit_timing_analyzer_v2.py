@@ -122,6 +122,15 @@ def analyze_entry_timing_v2(
     entry_stats['total_opportunities'] = len(yesterday_snapshots)
     print(f"  ✓ 昨日识别到 {entry_stats['total_opportunities']} 个机会点")
     
+    # 🔧 V8.3.25.12: 调试快照数据
+    if len(yesterday_snapshots) > 0:
+        first_snapshot = yesterday_snapshots.iloc[0]
+        print(f"  🔍 【调试】第一个快照数据:")
+        print(f"      币种: {first_snapshot.get('coin')}")
+        print(f"      time: {first_snapshot.get('time')}")
+        print(f"      snapshot_date: {first_snapshot.get('snapshot_date')}")
+        print(f"      full_datetime: {first_snapshot.get('full_datetime') if 'full_datetime' in first_snapshot else 'N/A'}")
+    
     # ===== Step 2: 获取昨日AI实际开仓记录 =====
     if yesterday_trades_df.empty:
         print(f"  ℹ️  昨日无实际开仓")
