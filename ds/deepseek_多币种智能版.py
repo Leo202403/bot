@@ -7515,10 +7515,22 @@ def analyze_and_adjust_params():
                         all_opps.extend(confirmed_opps['swing'].get('opportunities', []))
                     
                     # 筛选昨日的机会（timestamp匹配yesterday）
-                    confirmed_opportunities = [
-                        opp for opp in all_opps
-                        if isinstance(opp.get('timestamp'), str) and opp['timestamp'].startswith(yesterday)
-                    ]
+                    # 🔧 V8.3.25.16: 兼容多种timestamp格式，使用pd.to_datetime解析
+                    yesterday_date_obj = datetime.strptime(yesterday, '%Y%m%d').date()
+                    confirmed_opportunities = []
+                    for opp in all_opps:
+                        ts = opp.get('timestamp')
+                        if not ts:
+                            continue
+                        try:
+                            # 尝试解析timestamp（可能是"YYYYMMDD HH:MM:SS"或其他格式）
+                            if isinstance(ts, str):
+                                ts_dt = pd.to_datetime(ts)
+                                if ts_dt.date() == yesterday_date_obj:
+                                    confirmed_opportunities.append(opp)
+                        except:
+                            continue
+                    
                     print(f"  ✓ 提取了{len(confirmed_opportunities)}个确认盈利的机会（昨日）")
                 except Exception as e:
                     print(f"  ⚠️ 提取确认机会失败: {e}")
