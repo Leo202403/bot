@@ -5830,8 +5830,9 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     else:
         sampling_range = {
             'min_risk_reward': [1.4, 3.5],
-            'min_indicator_consensus': [2, 3],
-            'atr_stop_multiplier': [1.4, 1.9]
+            'min_indicator_consensus': [1, 3],  # 🔧 V8.3.29: 扩大到[1,3]，捕获高分低共振的机会
+            'atr_stop_multiplier': [1.4, 1.9],
+            'min_signal_score': [50, 80]  # 🔧 V8.3.29: 新增signal_score优化范围
         }
     
     # 7组战略采样
@@ -5839,19 +5840,31 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     best_profit = -float('inf')
     found_profitable = False
     
-    # 生成7个战略采样点（直接实现，不调用外部函数）
+    # 🔧 V8.3.29: 生成9个战略采样点（增加signal_score维度）
     rr_min, rr_max = sampling_range['min_risk_reward']
     consensus_min, consensus_max = sampling_range['min_indicator_consensus']
     atr_min, atr_max = sampling_range['atr_stop_multiplier']
+    score_min, score_max = sampling_range.get('min_signal_score', [50, 80])
     
     test_points = [
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': atr_min, 'name': '极宽松'},
-        {'min_risk_reward': (rr_min + rr_max * 2) / 3, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'name': '偏宽松'},
-        {'min_risk_reward': (rr_min + rr_max) / 2, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'name': '标准'},
-        {'min_risk_reward': (rr_min * 2 + rr_max) / 3, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'name': '偏严格'},
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'name': '严格'},
-        {'min_risk_reward': rr_max * 1.2, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'name': '超严格'},
-        {'min_risk_reward': rr_max * 1.4, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'name': '极严格'},
+        # 宽松组合（高召回）
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': atr_min, 'min_signal_score': score_min, 'name': '极宽松'},
+        {'min_risk_reward': (rr_min + rr_max) / 3, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': score_min, 'name': '偏宽松'},
+        
+        # 平衡组合（Precision vs Recall）
+        {'min_risk_reward': (rr_min + rr_max) / 2, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': (score_min + score_max) / 2, 'name': '标准平衡'},
+        {'min_risk_reward': (rr_min + rr_max) / 2, 'min_indicator_consensus': consensus_min, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': score_max, 'name': '高分低共振'},  # 关键！捕获高分单指标
+        
+        # 严格组合（高精准）
+        {'min_risk_reward': (rr_min * 2 + rr_max) / 3, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'min_signal_score': (score_min + score_max) / 2, 'name': '偏严格'},
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'min_signal_score': score_max, 'name': '严格'},
+        
+        # 极端组合（测试边界）
+        {'min_risk_reward': rr_max * 1.2, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'min_signal_score': score_max, 'name': '超严格'},
+        {'min_risk_reward': rr_max * 1.4, 'min_indicator_consensus': consensus_max, 'atr_stop_multiplier': atr_max, 'min_signal_score': 85, 'name': '极严格'},
+        
+        # 特殊组合（针对日志中的高分低共振机会）
+        {'min_risk_reward': rr_min * 1.5, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 85, 'name': '捕获高分单指标'},  # 🎯 专门针对BNB 85分/共振1
     ]
     
     # 🔧 V8.3.25.23: 使用confirmed_opportunities或降级到market_snapshots
@@ -5873,14 +5886,14 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         all_opportunities = None
         all_market_snapshots = None
     
-    print(f"\n  🔍 测试7组战略采样...")
+    print(f"\n  🔍 测试{len(test_points)}组战略采样（含signal_score优化）...")
     
     for i, test_params in enumerate(test_points):
         config_variant = {
             'min_risk_reward': test_params['min_risk_reward'],
             'min_indicator_consensus': test_params['min_indicator_consensus'],
             'atr_stop_multiplier': test_params['atr_stop_multiplier'],
-            'min_signal_score': 50  # 🔧 V8.3.28: 快速探索使用基准分数50，避免过滤掉机会
+            'min_signal_score': test_params.get('min_signal_score', 50)  # 🔧 V8.3.29: 使用test_params中的动态signal_score
         }
         
         # 🔧 V8.3.25.23: 优先使用confirmed_opportunities回测
@@ -5947,10 +5960,10 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 found_profitable = True
                 # 🔧 V8.3.25.25: 显示预测胜率和捕获数
                 if use_confirmed_opps and result.get('predicted_total_signals'):
-                    print(f"     ✅ 找到优质配置: R:R={test_params['min_risk_reward']:.1f}, 共识={test_params['min_indicator_consensus']}, ATR={test_params['atr_stop_multiplier']:.2f}")
+                    print(f"     ✅ 找到优质配置: R:R={test_params['min_risk_reward']:.1f}, 共识={test_params['min_indicator_consensus']}, 分数≥{test_params.get('min_signal_score', 50)}, ATR={test_params['atr_stop_multiplier']:.2f}")
                     print(f"        → 捕获盈利机会: {result['total_trades']}个 | 预测总开仓: {result['predicted_total_signals']}笔 | 预测胜率: {result['win_rate']:.1f}% | 综合得分: {result['total_profit']:.0f}")
                 else:
-                    print(f"     ✅ 找到盈利配置: R:R={test_params['min_risk_reward']:.1f}, 共识={test_params['min_indicator_consensus']}, ATR={test_params['atr_stop_multiplier']:.2f} | 得分{result['total_profit']:.1f}")
+                    print(f"     ✅ 找到盈利配置: R:R={test_params['min_risk_reward']:.1f}, 共识={test_params['min_indicator_consensus']}, 分数≥{test_params.get('min_signal_score', 50)} | 得分{result['total_profit']:.1f}")
     
     if not best_params:
         # 使用当前配置作为默认值
