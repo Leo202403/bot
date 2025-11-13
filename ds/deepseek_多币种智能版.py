@@ -7446,12 +7446,15 @@ def analyze_and_adjust_params():
 
         # 🆕 V8.3.22: 开仓时机分析
         # 🔧 V8.3.25.8: 使用新的V2分析（对比市场机会vs AI决策）
+        # 🔧 V8.3.25.12: 使用yesterday_closed_trades而不是yesterday_opened_trades
+        #                因为只有平仓后才有盈亏数据，才能评估开仓质量
         print("\n【开仓时机分析】")
         entry_analysis = None
         try:
             # V2需要：昨日开仓交易、市场快照、AI决策记录、昨日日期
+            # 注意：这里使用yesterday_closed_trades（昨天平仓的），才有完整的盈亏数据
             entry_analysis = analyze_entry_timing_v2(
-                yesterday_opened_trades, 
+                yesterday_closed_trades,  # 🔧 V8.3.25.12: 改用yesterday_closed_trades
                 kline_snapshots,
                 [],  # ai_decisions_list暂时传空，后续补充
                 yesterday_date_formatted

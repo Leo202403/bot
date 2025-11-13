@@ -199,8 +199,17 @@ def analyze_entry_timing_v2(
             else:
                 # 情况2: AI开仓了
                 trade = matching_trades.iloc[0]
-                # 🔧 V8.3.25.11: 兼容多种字段名（盈亏/PnL/实际盈亏）
-                pnl = trade.get('盈亏', trade.get('PnL', trade.get('实际盈亏', 0)))
+                # 🔧 V8.3.25.12: 兼容多种字段名（盈亏/PnL/实际盈亏）+ 处理None
+                pnl_raw = trade.get('盈亏', trade.get('PnL', trade.get('实际盈亏')))
+                # 🔧 V8.3.25.12: 处理None/NaN/空值，默认为0
+                if pnl_raw is None or pd.isna(pnl_raw):
+                    pnl = 0
+                else:
+                    try:
+                        pnl = float(pnl_raw)
+                    except (ValueError, TypeError):
+                        pnl = 0
+                
                 exit_reason = trade.get('平仓原因', trade.get('平仓类型', ''))
                 
                 # 🔧 V8.3.25.12: 增强is_closed判断，处理空字符串和NaN
@@ -211,7 +220,8 @@ def analyze_entry_timing_v2(
                     exit_time_value != '' and
                     exit_time_value != 'N/A' and
                     str(exit_time_value).strip() != '' and
-                    exit_price_value > 0  # 额外检查：平仓价格必须>0
+                    exit_price_value > 0 and  # 额外检查：平仓价格必须>0
+                    pnl != 0  # 🔧 V8.3.25.12: 如果pnl为0且有平仓时间，可能是数据未同步
                 )
                 
                 # 🔧 V8.3.25.12: 调试输出（仅前3笔）
