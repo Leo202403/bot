@@ -354,9 +354,12 @@ def analyze_exit_timing_v2(
         side = trade.get('方向', '')
         entry_price = trade.get('开仓价格', 0)
         exit_price = trade.get('平仓价格', 0)
+        entry_time_str = trade.get('开仓时间', '')  # 🔧 V8.3.25.9: 添加开仓时间
         exit_time_str = trade.get('平仓时间', '')
         exit_reason = trade.get('平仓原因', '')
         pnl = trade.get('盈亏', 0)
+        signal_score = trade.get('信号评分', 0)  # 🔧 V8.3.25.9: 添加信号评分
+        consensus = trade.get('共振数', 0)  # 🔧 V8.3.25.9: 添加共振数
         
         if not exit_time_str or exit_price == 0:
             continue
@@ -446,13 +449,17 @@ def analyze_exit_timing_v2(
                         })
                     
                     # 添加到表格数据
+                    # 🔧 V8.3.25.9: 添加entry_time, signal_score, consensus字段
                     exit_table_data.append({
                         'coin': coin,
                         'side': side,
+                        'entry_time': entry_time_str,  # 🆕 开仓时间
                         'entry_price': entry_price,
                         'exit_price': exit_price,
                         'exit_type': exit_type,
                         'pnl': pnl,
+                        'signal_score': signal_score,  # 🆕 信号评分
+                        'consensus': consensus,  # 🆕 共振数
                         'max_potential_profit_pct': missed_profit_pct if not is_delayed else 0,
                         'evaluation': '⚠️ 早平' if is_premature else '⚠️ 延迟' if is_delayed else '✅ 最优',
                         'recommendation': premature_exits[-1]['recommendation'] if is_premature else 
@@ -469,13 +476,17 @@ def analyze_exit_timing_v2(
         else:
             exit_stats['premature_exits'] += 1
         
+        # 🔧 V8.3.25.9: 添加entry_time, signal_score, consensus字段
         exit_table_data.append({
             'coin': coin,
             'side': side,
+            'entry_time': entry_time_str,  # 🆕 开仓时间
             'entry_price': entry_price,
             'exit_price': exit_price,
             'exit_type': exit_type,
             'pnl': pnl,
+            'signal_score': signal_score,  # 🆕 信号评分
+            'consensus': consensus,  # 🆕 共振数
             'max_potential_profit_pct': 0,
             'evaluation': '✅ 最优' if pnl > 0 else '🚱 止损' if exit_type == '止损' else '⚠️ 早平',
             'recommendation': '继续保持' if pnl > 0 else '正常止损' if exit_type == '止损' else 'TP扩大1.2倍'

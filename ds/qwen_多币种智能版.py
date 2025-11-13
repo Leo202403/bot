@@ -9341,12 +9341,22 @@ def analyze_and_adjust_params():
                     combined_rows = []
                     
                     # 先添加所有平仓交易（这些是完整的交易）
+                    # 🔧 V8.3.25.9: 修复N/A问题 - 从exit_table_data正确读取字段
                     if has_exit and exit_analysis.get('exit_table_data'):
                         for exit_trade in exit_analysis['exit_table_data']:
+                            # 提取开仓时间（格式：YYYY-MM-DD HH:MM:SS）
+                            entry_time_full = exit_trade.get('entry_time', '')
+                            entry_time_display = entry_time_full[11:16] if len(entry_time_full) > 16 else entry_time_full  # 只显示HH:MM
+                            
+                            # 提取信号评分和共振数
+                            signal_score = exit_trade.get('signal_score', 0)
+                            consensus = exit_trade.get('consensus', 0)
+                            signal_info = f"{signal_score}/{consensus}" if signal_score > 0 else 'N/A'
+                            
                             combined_rows.append({
                                 'coin': exit_trade['coin'],
-                                'time': exit_trade.get('entry_time', 'N/A'),  # 如果有开仓时间更好
-                                'signal_info': 'N/A',  # 从exit数据无法获取
+                                'time': entry_time_display if entry_time_display else 'N/A',
+                                'signal_info': signal_info,
                                 'ai_action': '✅ 已开仓',
                                 'entry_result': f"{exit_trade['pnl']:+.2f}U",
                                 'exit_type': exit_trade['exit_type'],
