@@ -264,6 +264,11 @@ def analyze_entry_timing_v2(
                             print(f"     第一条AI决策actions数: {len(first_dec.get('actions', []))}")
                     
                     if ai_decisions_list:
+                        # 🔧 V8.3.32.6: 找到最接近的AI决策（而不是10分钟窗口）
+                        # 因为AI决策可能在机会之后，或者早期决策记录被覆盖
+                        closest_decision = None
+                        min_time_diff = float('inf')
+                        
                         for decision in ai_decisions_list:
                             decision_time_str = decision.get('timestamp', '')
                             if decision_time_str:
@@ -271,47 +276,48 @@ def analyze_entry_timing_v2(
                                     decision_time = pd.to_datetime(decision_time_str)
                                     time_diff_seconds = abs((decision_time - opp_time_dt).total_seconds())
                                     
-                                    if time_diff_seconds < 600:  # 10分钟内
-                                        # 🔧 V8.3.32.4: 显示AI决策理由（优先"analysis"精炼总结）
-                                        # 用户指出：对于错过机会，关键是分析"为什么没开仓"
-                                        # 字段价值排序：analysis（结论）> risk_assessment（风险依据）> 思考过程（详细推导）
-                                        
-                                        # 获取AI的决策理由（按价值优先级）
-                                        analysis_summary = decision.get('analysis', '')
-                                        risk_assessment = decision.get('risk_assessment', '')
-                                        thinking_process = decision.get('思考过程', '')
-                                        
-                                        # 获取操作记录（用于补充说明）
-                                        operations = decision.get('operations') or decision.get('actions', [])
-                                        
-                                        # 构建AI决策理由（优先顺序：analysis > risk_assessment > 思考过程）
-                                        if analysis_summary:
-                                            # 显示分析总结（最精炼，直接说明为什么没开仓）
-                                            ai_reason = f"【AI分析】{analysis_summary[:180]}"
-                                        elif risk_assessment:
-                                            # 显示风险评估（说明风控角度的决策依据）
-                                            ai_reason = f"【风险评估】{risk_assessment[:180]}"
-                                        elif thinking_process:
-                                            # 显示思考过程（最详细，但可能冗长）
-                                            ai_reason = f"【AI思考】{thinking_process[:180]}"
-                                        else:
-                                            # 决策记录不完整
-                                            ai_reason = f"AI有决策记录但分析字段缺失（时间差{time_diff_seconds/60:.1f}分钟）"
-                                        
-                                        # 补充：显示实际开仓的币种（过滤掉HOLD，只关注实际操作）
-                                        if operations:
-                                            real_ops = [op for op in operations if op.get('action', op.get('operation', '')) not in ['HOLD', 'hold', 'Hold']]
-                                            if real_ops:
-                                                # 只显示实际开仓/平仓的币种
-                                                operated_coins = [f"{op.get('coin', op.get('symbol', ''))}-{op.get('action', op.get('operation', ''))}" for op in real_ops[:2]]
-                                                ai_reason += f" ║ 实际操作：{', '.join(operated_coins)}"
-                                            # 如果全是HOLD，不额外显示（因为已经在analysis中说明了）
-                                        
-                                        break
+                                    # 找到时间差最小的决策（限制在同一天内，即<24小时）
+                                    if time_diff_seconds < 86400 and time_diff_seconds < min_time_diff:
+                                        min_time_diff = time_diff_seconds
+                                        closest_decision = decision
                                 except Exception as e:
-                                    if False:  # 调试模式
-                                        print(f"     ⚠️ 解析AI决策时间失败: {e}")
                                     continue
+                        
+                        # 如果找到最接近的决策
+                        if closest_decision:
+                            # 获取AI的决策理由（按价值优先级）
+                            analysis_summary = closest_decision.get('analysis', '')
+                            risk_assessment = closest_decision.get('risk_assessment', '')
+                            thinking_process = closest_decision.get('思考过程', '')
+                            
+                            # 获取操作记录（用于补充说明）
+                            operations = closest_decision.get('operations') or closest_decision.get('actions', [])
+                            
+                            # 计算时间差（小时）
+                            time_diff_hours = min_time_diff / 3600
+                            
+                            # 构建AI决策理由（优先顺序：analysis > risk_assessment > 思考过程）
+                            if analysis_summary:
+                                # 显示分析总结（最精炼，直接说明为什么没开仓）
+                                ai_reason = f"【AI分析·{time_diff_hours:.1f}h】{analysis_summary[:150]}"
+                            elif risk_assessment:
+                                # 显示风险评估（说明风控角度的决策依据）
+                                ai_reason = f"【风险评估·{time_diff_hours:.1f}h】{risk_assessment[:150]}"
+                            elif thinking_process:
+                                # 显示思考过程（最详细，但可能冗长）
+                                ai_reason = f"【AI思考·{time_diff_hours:.1f}h】{thinking_process[:150]}"
+                            else:
+                                # 决策记录不完整
+                                ai_reason = f"AI有决策记录但分析字段缺失（时间差{time_diff_hours:.1f}小时）"
+                            
+                            # 补充：显示实际开仓的币种（过滤掉HOLD，只关注实际操作）
+                            if operations:
+                                real_ops = [op for op in operations if op.get('action', op.get('operation', '')) not in ['HOLD', 'hold', 'Hold']]
+                                if real_ops:
+                                    # 只显示实际开仓/平仓的币种
+                                    operated_coins = [f"{op.get('coin', op.get('symbol', ''))}-{op.get('action', op.get('operation', ''))}" for op in real_ops[:2]]
+                                    ai_reason += f" ║ 实际操作：{', '.join(operated_coins)}"
+                                # 如果全是HOLD，不额外显示（因为已经在analysis中说明了）
                     
                     missed_opportunities.append({
                         'coin': coin,
