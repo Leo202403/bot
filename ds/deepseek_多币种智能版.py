@@ -3315,10 +3315,10 @@ def save_learning_config(config):
                 old_consensus = config[strategy].get('min_consensus', 2)
                 if old_consensus >= 2:
                     config[strategy]['min_consensus'] = 1
-                    # 提高信号质量要求作为补偿
-                    config[strategy]['min_signal_score'] = max(70, config[strategy].get('min_signal_score', 60))
+                    # 提高信号质量要求作为补偿（75分以上相对安全）
+                    config[strategy]['min_signal_score'] = max(75, config[strategy].get('min_signal_score', 60))
                     fixed_consensus = True
-                    print(f"  🔧 自动修复{strategy} min_consensus: {old_consensus} → 1 (提高signal_score≥70)")
+                    print(f"  🔧 自动修复{strategy} min_consensus: {old_consensus} → 1 (提高signal_score≥75)")
         
         if fixed_consensus:
             print("  💡 原因：共振≥2会错过98%的高质量机会（如BNB 82分/2共振 盈利20%）")
