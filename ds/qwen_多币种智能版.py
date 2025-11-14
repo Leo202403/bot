@@ -13300,7 +13300,7 @@ Auto-adjustment rules:
 | BOF/BPB/TST | 85-90 | S/R≥4 + structure confirm | 20-25% (counter) | Fading breakout/test chasers |
 | CPB | 78 | Retrace 38-62%, consol | WAIT | N/A - needs BO confirm |
 
-**YTC Fields**: ytc_signal{signal_type, direction, strength, sr_strength, weakness_score, entry_price(LWP)}  
+**YTC Fields**: ytc_signal{{signal_type, direction, strength, sr_strength, weakness_score, entry_price(LWP)}}  
 **Momentum Slope**: >0.5=strong bull, -0.1~0.1=stall(TST), <-0.5=strong bear
 
 **Decision Rules**:
