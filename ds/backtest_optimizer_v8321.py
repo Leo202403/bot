@@ -266,9 +266,10 @@ def define_param_grid_v8321(signal_type: str) -> Dict:
             'atr_stop_multiplier': [1.5, 2.0],
             'min_risk_reward': [1.5, 2.0, 2.5],
             
-            # V8.3.21新增：入场过滤参数
-            'min_signal_score': [40, 50, 60],  # 🔧 V8.3.21.16: 降低到[40,50,60]，因为很多盈利机会signal_score只有60
-            'min_consensus': [0, 1, 2],  # 🔧 V8.3.21.15: 添加0以允许无指标共振但signal_score高的机会
+            # 【V8.4】入场过滤参数 - 使用新的consensus_score（0-100分）
+            'min_signal_score': [50, 60, 70],  # 保持原有范围
+            'min_consensus_score': [20, 30, 40, 50],  # 🎯 V8.4: 新增consensus_score（0-100分）
+            'min_consensus': [0, 1, 2],  # 【兼容性】保留旧字段（0-5）
             'min_kline_bullish_ratio': [0.6, 0.7],
             'min_price_chg_pct': [0.5, 1.0, 1.5],
             'allowed_mkt_struct': ['all', 'trend_only'],
@@ -283,9 +284,10 @@ def define_param_grid_v8321(signal_type: str) -> Dict:
             'atr_stop_multiplier': [1.5, 2.0],
             'min_risk_reward': [1.5, 2.0, 2.5],
             
-            # V8.3.21新增：入场过滤参数
-            'min_signal_score': [40, 50, 60],  # 🔧 V8.3.21.16: 降低到[40,50,60]，因为很多盈利机会signal_score只有60
-            'min_consensus': [0, 1, 2],  # 🔧 V8.3.21.15: 添加0以允许无指标共振但signal_score高的机会
+            # 【V8.4】入场过滤参数 - 使用新的consensus_score（0-100分）
+            'min_signal_score': [50, 60, 70],  # 保持原有范围
+            'min_consensus_score': [20, 30, 40, 50],  # 🎯 V8.4: 新增consensus_score（0-100分）
+            'min_consensus': [0, 1, 2],  # 【兼容性】保留旧字段（0-5）
             'min_kline_bullish_ratio': [0.6, 0.7],
             'min_price_chg_pct': [0.5, 1.0, 1.5],
             'allowed_mkt_struct': ['all', 'trend_only'],
@@ -474,19 +476,32 @@ def get_profit_pct(opp: Dict) -> float:
 
 def passes_basic_filter(opp: Dict, params: Dict) -> bool:
     """
-    基础参数过滤
+    【V8.4】基础参数过滤 - 使用新的consensus_score
     
-    【V8.3.21.10修复】优先使用actual_risk_reward（基于ATR倍数的实际R:R）
-    而不是risk_reward（基于支撑阻力位的理论R:R），确保过滤条件与实际利润计算一致。
+    优先级：
+    1. 优先使用consensus_score（0-100）而非旧的consensus（0-5）
+    2. 优先使用actual_risk_reward而非risk_reward
     """
     # 优先使用actual_risk_reward，如果没有则回退到risk_reward
     rr_value = opp.get('actual_risk_reward', opp.get('risk_reward', 0))
     
-    return (
-        opp['signal_score'] >= params.get('min_signal_score', 50) and
-        opp['consensus'] >= params.get('min_consensus', 2) and
-        rr_value >= params.get('min_risk_reward', 1.5)
-    )
+    # 【V8.4】优先使用新的consensus_score（0-100分）
+    if 'consensus_score' in opp and 'min_consensus_score' in params:
+        # 新版过滤：使用consensus_score
+        return (
+            opp['signal_score'] >= params.get('min_signal_score', 50) and
+            opp['consensus_score'] >= params.get('min_consensus_score', 30) and
+            rr_value >= params.get('min_risk_reward', 1.5)
+        )
+    else:
+        # 【兼容性】回退到旧版过滤：使用consensus（0-5）
+        consensus_value = opp.get('consensus', opp.get('indicator_consensus', 0))
+        return (
+            opp['signal_score'] >= params.get('min_signal_score', 50) and
+            consensus_value >= params.get('min_consensus', 2) and
+            rr_value >= params.get('min_risk_reward', 1.5)
+        )
+
 
 
 def passes_kline_context_filter(opp: Dict, params: Dict) -> bool:

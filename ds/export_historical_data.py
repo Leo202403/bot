@@ -687,34 +687,105 @@ def export_date(date_str, output_dirs):
                     'volume_confirmed_score': 0
                 }
             
-            # 【V8.2.6修复】计算指标共振 - 使用严格标准
-            indicator_consensus = 0
+            # 【V8.4】计算综合确认度评分（0-100分）
+            # 从简单计数器升级为加权评分，包含指标、趋势、形态三大维度
+            consensus_score = 0
             
-            # 1. EMA明确发散（至少2%差距）
+            # === 第1层：指标确认（40分） ===
+            # 1. EMA发散（10分）
             if ema20 > 0 and ema50 > 0:
                 divergence = abs(ema20 - ema50) / ema50 * 100
-                if divergence >= 2.0:
-                    indicator_consensus += 1
+                if divergence >= 5.0:
+                    consensus_score += 10  # 强发散
+                elif divergence >= 2.0:
+                    consensus_score += 5   # 中发散
             
-            # 2. MACD明确金叉/死叉（histogram显著>0或<0，至少0.01）
+            # 2. MACD强度（10分）
             macd_hist = row.macd_histogram if pd.notna(row.macd_histogram) else 0
+            if abs(macd_hist) >= 0.05:
+                consensus_score += 10  # 强信号
+            elif abs(macd_hist) >= 0.01:
+                consensus_score += 5   # 中信号
+            
+            # 3. RSI极端值（10分）
+            rsi_14 = row.rsi_14 if pd.notna(row.rsi_14) else 50
+            if rsi_14 > 75 or rsi_14 < 25:
+                consensus_score += 10  # 超强极端
+            elif rsi_14 > 70 or rsi_14 < 30:
+                consensus_score += 7   # 强极端
+            elif 45 <= rsi_14 <= 55:
+                consensus_score += 3   # 中性（轻微加分）
+            
+            # 4. 成交量放量（10分）
+            if actual_position >= 20:
+                recent_avg_vol = full_df.iloc[max(0, actual_position-20):actual_position]['volume'].mean()
+                if recent_avg_vol > 0:
+                    vol_ratio = row.volume / recent_avg_vol
+                    if vol_ratio >= 2.0:
+                        consensus_score += 10  # 强放量
+                    elif vol_ratio >= 1.5:
+                        consensus_score += 5   # 中放量
+            
+            # === 第2层：趋势确认（30分） ===
+            # 5. 多周期趋势一致性（30分）
+            is_all_bullish = ("多头" in str(row.trend_15m) and "多头" in str(row.trend_1h) and "多头" in str(row.trend_4h))
+            is_all_bearish = ("空头" in str(row.trend_15m) and "空头" in str(row.trend_1h) and "空头" in str(row.trend_4h))
+            
+            if is_all_bullish or is_all_bearish:
+                consensus_score += 30  # 三层对齐
+            elif ("多头" in str(row.trend_1h) and "多头" in str(row.trend_4h)) or \
+                 ("空头" in str(row.trend_1h) and "空头" in str(row.trend_4h)):
+                consensus_score += 15  # 两层对齐
+            
+            # === 第3层：形态确认（30分） ===
+            # 6. 价格形态强度（15分）- 从components中提取
+            pattern_score = 0
+            if components.get('pin_bar_score', 0) > 0:
+                pattern_score += min(5, components['pin_bar_score'] / 2)  # Pin Bar最多5分
+            if components.get('engulfing_score', 0) > 0:
+                pattern_score += min(5, components['engulfing_score'] / 2)  # 吞没最多5分
+            if components.get('breakout_score', 0) > 0:
+                pattern_score += min(5, components['breakout_score'] / 5)  # 突破最多5分
+            consensus_score += int(pattern_score)
+            
+            # 7. K线序列一致性（10分）
+            if actual_position >= 3:
+                recent_closes = full_df.iloc[actual_position-3:actual_position+1]['close'].values
+                if len(recent_closes) >= 3:
+                    # 检查最近3根K线的方向一致性
+                    is_bullish_seq = all(recent_closes[i] < recent_closes[i+1] for i in range(len(recent_closes)-1))
+                    is_bearish_seq = all(recent_closes[i] > recent_closes[i+1] for i in range(len(recent_closes)-1))
+                    if is_bullish_seq or is_bearish_seq:
+                        consensus_score += 10  # 强一致
+                    elif (recent_closes[-1] > recent_closes[-2]) or (recent_closes[-1] < recent_closes[-2]):
+                        consensus_score += 5   # 弱一致
+            
+            # 8. 支撑阻力明确性（5分）
+            support = row.support if pd.notna(row.support) else 0
+            resistance = row.resistance if pd.notna(row.resistance) else 0
+            if support > 0 and resistance > 0:
+                sr_gap = abs(resistance - support) / row.close * 100
+                if sr_gap >= 3.0:
+                    consensus_score += 5  # 支撑阻力明确
+                elif sr_gap >= 1.5:
+                    consensus_score += 3  # 支撑阻力较明确
+            
+            # 限制在0-100范围
+            consensus_score = min(100, max(0, consensus_score))
+            
+            # 【兼容性】保留旧的indicator_consensus字段（简化版，用于向后兼容）
+            # 只计算最核心的5个指标
+            indicator_consensus = 0
+            if ema20 > 0 and ema50 > 0 and abs(ema20 - ema50) / ema50 * 100 >= 2.0:
+                indicator_consensus += 1
             if abs(macd_hist) >= 0.01:
                 indicator_consensus += 1
-            
-            # 3. RSI强信号（超买>70或超卖<30，或接近中性45-55）
-            rsi_14 = row.rsi_14 if pd.notna(row.rsi_14) else 50
             if rsi_14 > 70 or rsi_14 < 30 or (45 <= rsi_14 <= 55):
                 indicator_consensus += 1
-            
-            # 4. 成交量明显放量（>150%平均量）
             if actual_position >= 20:
                 recent_avg_vol = full_df.iloc[max(0, actual_position-20):actual_position]['volume'].mean()
                 if recent_avg_vol > 0 and row.volume >= recent_avg_vol * 1.5:
                     indicator_consensus += 1
-            
-            # 5. 多周期趋势一致（15m、1h、4h同向）
-            is_all_bullish = ("多头" in str(row.trend_15m) and "多头" in str(row.trend_1h) and "多头" in str(row.trend_4h))
-            is_all_bearish = ("空头" in str(row.trend_15m) and "空头" in str(row.trend_1h) and "空头" in str(row.trend_4h))
             if is_all_bullish or is_all_bearish:
                 indicator_consensus += 1
             
@@ -817,7 +888,8 @@ def export_date(date_str, output_dirs):
                 'atr': round(row.atr, 8) if pd.notna(row.atr) else 0,
                 'support': round(row.support, 8) if pd.notna(row.support) else row.low,
                 'resistance': round(row.resistance, 8) if pd.notna(row.resistance) else row.high,
-                'indicator_consensus': indicator_consensus,
+                'indicator_consensus': indicator_consensus,  # 【兼容性】保留旧字段（0-5）
+                'consensus_score': consensus_score,  # 【V8.4新增】综合确认度评分（0-100）
                 
                 # 【V8.2】信号评分维度（保存各个维度，不保存总分）
                 'signal_type': components.get('signal_type', 'swing'),
