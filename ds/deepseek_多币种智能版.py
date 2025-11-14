@@ -8340,38 +8340,120 @@ def analyze_and_adjust_params():
         else:
             config["market_regime"]["pause_trading"] = False
 
-        # ========== 第4.5步：用新参数重新评估历史机会 (V7.8.0 - 修正版) ==========
+        # ========== 【V8.4.10】第4.5步：用新参数重新评估历史机会（使用动态ATR） ==========
         print("\n【第4.5步：用新参数重新评估历史机会】")
         opportunity_analysis = None
+        validation_passed = True  # 【V8.4.10】默认通过
+        
         if kline_snapshots is not None and not kline_snapshots.empty:
             try:
-                yesterday_opened_trades_list = yesterday_opened_trades.to_dict('records')
-                opportunity_analysis = analyze_opportunities_with_new_params(
+                # 【V8.4.10】使用阶段2的逻辑（与动态ATR一致）
+                print("  ℹ️  使用动态ATR重新分析全量数据...")
+                full_analysis = analyze_separated_opportunities(
                     market_snapshots=kline_snapshots,
-                    actual_trades=yesterday_opened_trades_list,
-                    new_config=config,
-                    old_config=old_config  # 🔧 V7.8.0: 传入旧参数用于对比
+                    old_config=config
                 )
                 
-                stats = opportunity_analysis['stats']
-                print(f"✓ 发现{stats['total_opportunities']}个客观机会（实际达到利润目标）")
+                # 提取机会
+                scalping_opps = full_analysis['scalping']['opportunities']
+                swing_opps = full_analysis['swing']['opportunities']
+                all_opps = scalping_opps + swing_opps
+                
+                # 使用新参数过滤
+                from backtest_optimizer_v8321 import passes_basic_filter
+                
+                # 获取新参数
+                new_scalping_params = config.get('scalping_params', {})
+                new_swing_params = config.get('swing_params', {})
+                
+                # 获取旧参数（用于对比）
+                old_scalping_params = old_config.get('scalping_params', {}) if old_config else new_scalping_params
+                old_swing_params = old_config.get('swing_params', {}) if old_config else new_swing_params
+                
+                # 过滤机会
+                new_captured_scalping = [o for o in scalping_opps if passes_basic_filter(o, new_scalping_params)]
+                new_captured_swing = [o for o in swing_opps if passes_basic_filter(o, new_swing_params)]
+                new_captured = new_captured_scalping + new_captured_swing
+                
+                old_captured_scalping = [o for o in scalping_opps if passes_basic_filter(o, old_scalping_params)]
+                old_captured_swing = [o for o in swing_opps if passes_basic_filter(o, old_swing_params)]
+                old_captured = old_captured_scalping + old_captured_swing
+                
+                # 计算统计
+                total_opps = len(all_opps)
+                avg_actual_profit = sum(o.get('actual_profit_pct', 0) for o in all_opps) / total_opps if total_opps > 0 else 0
+                
+                old_count = len(old_captured)
+                old_avg_profit = sum(o.get('actual_profit_pct', 0) for o in old_captured) / old_count if old_count > 0 else 0
+                
+                new_count = len(new_captured)
+                new_avg_profit = sum(o.get('actual_profit_pct', 0) for o in new_captured) / new_count if new_count > 0 else 0
+                
+                # 构建stats
+                stats = {
+                    'total_opportunities': total_opps,
+                    'avg_actual_profit': avg_actual_profit,
+                    'old_captured_count': old_count,
+                    'old_capture_rate': (old_count / total_opps * 100) if total_opps > 0 else 0,
+                    'avg_old_captured_profit': old_avg_profit,
+                    'avg_old_efficiency': (old_avg_profit / avg_actual_profit * 100) if avg_actual_profit > 0 else 0,
+                    'new_captured_count': new_count,
+                    'new_capture_rate': (new_count / total_opps * 100) if total_opps > 0 else 0,
+                    'avg_new_captured_profit': new_avg_profit,
+                    'avg_new_efficiency': (new_avg_profit / avg_actual_profit * 100) if avg_actual_profit > 0 else 0,
+                    'capture_rate_improvement': ((new_count - old_count) / total_opps * 100) if total_opps > 0 else 0,
+                    'profit_improvement': new_avg_profit - old_avg_profit
+                }
+                
+                # 输出统计
+                print(f"✓ 发现{stats['total_opportunities']}个客观机会（基于动态ATR计算）")
                 print(f"  📊 实际平均利润: {stats['avg_actual_profit']:.1f}%")
                 print(f"  • 旧参数: 捕获{stats['old_captured_count']}个({stats['old_capture_rate']:.1f}%) | 平均获利{stats['avg_old_captured_profit']:.1f}% | 效率{stats['avg_old_efficiency']:.0f}%")
                 print(f"  • 新参数: 捕获{stats['new_captured_count']}个({stats['new_capture_rate']:.1f}%) | 平均获利{stats['avg_new_captured_profit']:.1f}% | 效率{stats['avg_new_efficiency']:.0f}%")
-                if stats['new_captured_count'] > stats['old_captured_count']:
-                    print(f"  ✅ 改进: 捕获率+{stats['capture_rate_improvement']:.1f}% | 利润+{stats['profit_improvement']:.1f}%")
-                elif stats['new_captured_count'] < stats['old_captured_count']:
-                    print(f"  ⚠️  退步: 捕获率{stats['capture_rate_improvement']:.1f}% | 利润{stats['profit_improvement']:.1f}%")
-                else:
-                    print(f"  ➡️  持平: 捕获率和利润无变化")
                 
-                if opportunity_analysis['missed']:
+                # 【V8.4.10】最终验证：如果新参数平均利润为负，拒绝优化
+                if stats['avg_new_captured_profit'] < 0:
+                    print(f"\n  ❌ 【V8.4.10最终验证失败】新参数平均利润{stats['avg_new_captured_profit']:.1f}%为负！")
+                    print(f"  🔄 将回滚到保守参数（避免过拟合）")
+                    validation_passed = False
+                else:
+                    print(f"\n  ✅ 【V8.4.10最终验证通过】新参数平均利润{stats['avg_new_captured_profit']:.1f}%为正")
+                    if stats['new_captured_count'] > stats['old_captured_count']:
+                        print(f"  ✅ 改进: 捕获率+{stats['capture_rate_improvement']:.1f}% | 利润+{stats['profit_improvement']:.1f}%")
+                    elif stats['new_captured_count'] < stats['old_captured_count']:
+                        print(f"  ⚠️  退步: 捕获率{stats['capture_rate_improvement']:.1f}% | 利润{stats['profit_improvement']:.1f}%")
+                    else:
+                        print(f"  ➡️  持平: 捕获率和利润无变化")
+                
+                # 构建返回结果
+                missed = [o for o in all_opps if o not in new_captured]
+                missed.sort(key=lambda x: x.get('objective_profit', 0), reverse=True)
+                
+                opportunity_analysis = {
+                    'all_opportunities': all_opps,
+                    'old_captured': old_captured,
+                    'new_captured': new_captured,
+                    'missed': missed[:30],  # 只保留TOP30
+                    'stats': stats
+                }
+                
+                if missed:
                     print(f"\n  📌 重点关注（错过的TOP3）:")
-                    for opp in opportunity_analysis['missed'][:3]:
-                        print(f"     {opp['coin']}: 信号分{opp['signal_score']} | {opp.get('miss_reason', '未知')}")
+                    for opp in missed[:3]:
+                        reasons = []
+                        if opp.get('signal_score', 0) < new_scalping_params.get('min_signal_score', 60):
+                            reasons.append(f"信号分{opp.get('signal_score', 0)}<{new_scalping_params.get('min_signal_score', 60)}")
+                        if opp.get('consensus_score', 0) < new_scalping_params.get('min_consensus_score', 0):
+                            reasons.append(f"共振{opp.get('consensus_score', 0)}<{new_scalping_params.get('min_consensus_score', 0)}")
+                        miss_reason = "、".join(reasons) if reasons else "其他"
+                        print(f"     {opp['coin']}: 信号分{opp.get('signal_score', 0)} | {miss_reason}")
+                
             except Exception as e:
+                import traceback
                 print(f"⚠️ 机会重评估失败: {e}")
+                print(f"  详细错误: {traceback.format_exc()}")
                 opportunity_analysis = None
+                validation_passed = True  # 失败时默认通过（不影响流程）
 
         # ========== 【V8.3.25.10】第4.55步：提取AI洞察的参数建议 ==========
         print("\n【第4.55步：提取AI洞察的参数建议】")
@@ -8494,8 +8576,11 @@ def analyze_and_adjust_params():
                         print(f"     建议: 策略需要重新设计（当前参数time_exit=100%，目标<90%）")
                     elif scalping_optimization.get('improvement') is not None:
                         # 【V8.4.5】检查验证期是否已回退
+                        # 【V8.4.10】检查第4.5步最终验证是否通过
                         if scalping_optimization.get('_validation_failed'):
                             print(f"  ⏭️  超短线参数已被验证期回退，跳过应用优化后的参数")
+                        elif not validation_passed:
+                            print(f"  ⏭️  【V8.4.10】第4.5步最终验证失败，跳过应用优化后的参数")
                         else:
                             # 更新config中的超短线参数
                             if 'scalping_params' not in config:
@@ -8533,8 +8618,11 @@ def analyze_and_adjust_params():
                     
                     if swing_optimization.get('improvement') is not None:
                         # 【V8.4.5】检查验证期是否已回退
+                        # 【V8.4.10】检查第4.5步最终验证是否通过
                         if swing_optimization.get('_validation_failed'):
                             print(f"  ⏭️  波段参数已被验证期回退，跳过应用优化后的参数")
+                        elif not validation_passed:
+                            print(f"  ⏭️  【V8.4.10】第4.5步最终验证失败，跳过应用优化后的参数")
                         else:
                             # 更新config中的波段参数
                             if 'swing_params' not in config:
@@ -19009,11 +19097,11 @@ def _simulate_trade_with_params(entry_price, direction, atr, future_data,
 
 def analyze_separated_opportunities_with_validation(market_snapshots, old_config, enable_validation=True):
     """
-    【V8.4.5】带前向验证的机会分析
+    【V8.4.5→V8.4.10】带前向验证的机会分析
     
     核心思路：
-    1. 训练期：前12天数据（约8000条）
-    2. 验证期：最近3天数据（约2000条）
+    1. 训练期：前10天数据（约7000条）【V8.4.10从12天减少到10天】
+    2. 验证期：最近4天数据（约2500条）【V8.4.10从3天增加到4天】
     3. 在训练期识别机会并优化参数
     4. 在验证期测试效果，防止过拟合
     
@@ -19039,18 +19127,18 @@ def analyze_separated_opportunities_with_validation(market_snapshots, old_config
             'combined': result
         }
     
-    # 【V8.4.5】分割训练期和验证期
+    # 【V8.4.5→V8.4.10】分割训练期和验证期
     total_records = len(market_snapshots)
     
-    # 前12天作为训练期（约85%）
-    train_size = int(total_records * 0.857)  # 12/14 ≈ 0.857
+    # 【V8.4.10】前10天作为训练期（约71%），后4天作为验证期（约29%）
+    train_size = int(total_records * 0.714)  # 10/14 ≈ 0.714
     
     train_snapshots = market_snapshots.iloc[:train_size]
     val_snapshots = market_snapshots.iloc[train_size:]
     
-    print(f"\n  【V8.4.5前向验证】")
-    print(f"  📊 训练期: {len(train_snapshots)}条记录（前12天）")
-    print(f"  🔍 验证期: {len(val_snapshots)}条记录（后3天）")
+    print(f"\n  【V8.4.5→V8.4.10前向验证】")
+    print(f"  📊 训练期: {len(train_snapshots)}条记录（前10天）")
+    print(f"  🔍 验证期: {len(val_snapshots)}条记录（后4天）")
     
     # 在训练期识别机会
     print(f"  ⚙️  分析训练期机会...")
