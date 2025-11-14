@@ -5892,21 +5892,25 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             # ============================================================
             rr_values = [opp.get('risk_reward', 0) for opp in all_opps if opp.get('risk_reward', 0) > 0]
             if rr_values:
+                rr_p10 = np.percentile(rr_values, 10)  # 🔧 V8.3.21.8: 改用10分位数（捕获更多机会）
                 rr_p25 = np.percentile(rr_values, 25)
                 rr_p75 = np.percentile(rr_values, 75)
                 rr_median = np.percentile(rr_values, 50)
                 rr_max = np.percentile(rr_values, 95)
-                dynamic_rr_range = [max(1.2, rr_p25), min(6.0, rr_max)]
+                # 🔧 V8.3.21.8: 使用10分位数作为下限，75分位数作为上限（而不是95分位数）
+                # 原因：高R:R机会虽然理论上好，但实际执行时可能因为止盈设置而错过
+                dynamic_rr_range = [max(1.2, rr_p10), min(3.0, rr_p75)]
                 
                 optimization_cache['rr_distribution'] = {
                     'range': dynamic_rr_range,
+                    'p10': float(rr_p10),
                     'p25': float(rr_p25),
                     'median': float(rr_median),
                     'p75': float(rr_p75),
                     'p95': float(rr_max)
                 }
-                print(f"  1️⃣ R:R分布: 25%={rr_p25:.2f}, 中位={rr_median:.2f}, 75%={rr_p75:.2f}, 95%={rr_max:.2f}")
-                print(f"     → 动态范围: [{dynamic_rr_range[0]:.2f}, {dynamic_rr_range[1]:.2f}]")
+                print(f"  1️⃣ R:R分布: 10%={rr_p10:.2f}, 25%={rr_p25:.2f}, 中位={rr_median:.2f}, 75%={rr_p75:.2f}, 95%={rr_max:.2f}")
+                print(f"     → 动态范围: [{dynamic_rr_range[0]:.2f}, {dynamic_rr_range[1]:.2f}] (使用10%-75%区间)")
             
             # ============================================================
             # 2. 精准率公式分析（新增）
