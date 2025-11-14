@@ -20220,13 +20220,49 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
                     print(f"     • {param_name}: {sensitivity['importance']} "
                           f"(影响={sensitivity['avg_impact']:+.3f})")
             
-            # 【V8.3.21修复】计算old_result/new_result以兼容邮件/bark
-            print(f"\n  📊 计算前后对比（兼容性）...")
-            baseline_result = simulate_params_on_opportunities(opportunities, current_params)
-            optimized_result = simulate_params_on_opportunities(
-                opportunities, 
-                v8321_result['optimized_params']
+            # 【V8.4.2修复】重新计算actual_profit以确保与参数一致
+            print(f"\n  📊 计算前后对比（使用真实利润）...")
+            
+            # 导入实际利润计算模块
+            from calculate_actual_profit import calculate_actual_profit_batch
+            
+            # 为baseline重新计算actual_profit
+            print(f"     计算baseline（当前参数）...")
+            baseline_opps_copy = [opp.copy() for opp in opportunities]
+            baseline_opps_updated = calculate_actual_profit_batch(
+                opportunities=baseline_opps_copy,
+                strategy_params=current_params,
+                batch_size=100
             )
+            print(f"")  # 换行
+            
+            # 为optimized重新计算actual_profit
+            print(f"     计算optimized（新参数）...")
+            optimized_opps_copy = [opp.copy() for opp in opportunities]
+            optimized_opps_updated = calculate_actual_profit_batch(
+                opportunities=optimized_opps_copy,
+                strategy_params=v8321_result['optimized_params'],
+                batch_size=100
+            )
+            print(f"")  # 换行
+            
+            # 计算统计数据（只统计触发TP/SL的交易，不包括time_exit）
+            baseline_trades = [o for o in baseline_opps_updated 
+                             if o.get('exit_reason') in ['tp', 'sl']]
+            optimized_trades = [o for o in optimized_opps_updated 
+                              if o.get('exit_reason') in ['tp', 'sl']]
+            
+            baseline_result = {
+                'captured_count': len(baseline_trades),
+                'avg_profit': (sum(o.get('actual_profit_pct', 0) for o in baseline_trades) / len(baseline_trades)) if baseline_trades else 0,
+                'capture_rate': len(baseline_trades) / len(opportunities) if opportunities else 0
+            }
+            
+            optimized_result = {
+                'captured_count': len(optimized_trades),
+                'avg_profit': (sum(o.get('actual_profit_pct', 0) for o in optimized_trades) / len(optimized_trades)) if optimized_trades else 0,
+                'capture_rate': len(optimized_trades) / len(opportunities) if opportunities else 0
+            }
             
             # 【V8.3.21 AI迭代】提取AI决策（如果有）
             ai_decision = v8321_result.get('ai_decision', None)
@@ -20700,13 +20736,49 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
                     print(f"     • {param_name}: {sensitivity['importance']} "
                           f"(影响={sensitivity['avg_impact']:+.3f})")
             
-            # 【V8.3.21修复】计算old_result/new_result以兼容邮件/bark
-            print(f"\n  📊 计算前后对比（兼容性）...")
-            baseline_result = simulate_params_on_opportunities(opportunities, current_params)
-            optimized_result = simulate_params_on_opportunities(
-                opportunities, 
-                v8321_result['optimized_params']
+            # 【V8.4.2修复】重新计算actual_profit以确保与参数一致
+            print(f"\n  📊 计算前后对比（使用真实利润）...")
+            
+            # 导入实际利润计算模块
+            from calculate_actual_profit import calculate_actual_profit_batch
+            
+            # 为baseline重新计算actual_profit
+            print(f"     计算baseline（当前参数）...")
+            baseline_opps_copy = [opp.copy() for opp in opportunities]
+            baseline_opps_updated = calculate_actual_profit_batch(
+                opportunities=baseline_opps_copy,
+                strategy_params=current_params,
+                batch_size=100
             )
+            print(f"")  # 换行
+            
+            # 为optimized重新计算actual_profit
+            print(f"     计算optimized（新参数）...")
+            optimized_opps_copy = [opp.copy() for opp in opportunities]
+            optimized_opps_updated = calculate_actual_profit_batch(
+                opportunities=optimized_opps_copy,
+                strategy_params=v8321_result['optimized_params'],
+                batch_size=100
+            )
+            print(f"")  # 换行
+            
+            # 计算统计数据（只统计触发TP/SL的交易，不包括time_exit）
+            baseline_trades = [o for o in baseline_opps_updated 
+                             if o.get('exit_reason') in ['tp', 'sl']]
+            optimized_trades = [o for o in optimized_opps_updated 
+                              if o.get('exit_reason') in ['tp', 'sl']]
+            
+            baseline_result = {
+                'captured_count': len(baseline_trades),
+                'avg_profit': (sum(o.get('actual_profit_pct', 0) for o in baseline_trades) / len(baseline_trades)) if baseline_trades else 0,
+                'capture_rate': len(baseline_trades) / len(opportunities) if opportunities else 0
+            }
+            
+            optimized_result = {
+                'captured_count': len(optimized_trades),
+                'avg_profit': (sum(o.get('actual_profit_pct', 0) for o in optimized_trades) / len(optimized_trades)) if optimized_trades else 0,
+                'capture_rate': len(optimized_trades) / len(opportunities) if opportunities else 0
+            }
             
             # 【V8.3.21 AI迭代】提取AI决策（如果有）
             ai_decision = v8321_result.get('ai_decision', None)
