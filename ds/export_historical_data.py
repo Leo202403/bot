@@ -446,11 +446,17 @@ def fetch_data_for_date(symbol, date_str):
         df['macd_1h_line'], df['macd_1h_signal'], df['macd_1h_histogram'] = calculate_macd(df['close'], 48, 104, 36)
         df['atr_1h'] = calculate_atr(df['high'], df['low'], df['close'], 56)
         
-        # 过滤目标日期
+        # 过滤目标日期（保留原始索引，用于后续访问历史数据）
         day_df = df[(df['timestamp'] >= start_ts) & (df['timestamp'] < end_ts)].copy()
         
-        print(f"    获取到 {len(day_df)} 条记录")
-        return day_df
+        # 【V8.3.21.1修复】记录当天数据在原始df中的索引范围
+        if len(day_df) > 0:
+            day_start_idx = df.index[df['timestamp'] >= start_ts].min()
+        else:
+            day_start_idx = 0
+        
+        print(f"    获取到 {len(day_df)} 条记录（原始df索引: {day_start_idx}-{day_start_idx+len(day_df)-1}）")
+        return df, day_df, day_start_idx  # 返回完整df、当天df、起始索引
         
     except Exception as e:
         print(f"    ✗ 获取失败: {e}")
@@ -466,26 +472,33 @@ def export_date(date_str, output_dirs):
     
     for symbol in SYMBOLS:
         coin_name = symbol.split('/')[0]
-        df = fetch_data_for_date(symbol, date_str)
+        fetch_result = fetch_data_for_date(symbol, date_str)
         
-        if df is None or len(df) == 0:
+        if fetch_result is None:
             continue
         
-        for position, row in enumerate(df.itertuples(index=False)):
+        # 【V8.3.21.1修复】解包返回值
+        full_df, day_df, day_start_idx = fetch_result
+        
+        if day_df is None or len(day_df) == 0:
+            continue
+        
+        for position, row in enumerate(day_df.itertuples(index=False)):
             time_str = datetime.fromtimestamp(row.timestamp / 1000).strftime('%H%M')
             
             # 【V8.2.3】增强market_data构造 - 基于历史数据判断各种形态
             ema20 = row.ema20_1h if pd.notna(row.ema20_1h) else row.close
             ema50 = row.ema50_1h if pd.notna(row.ema50_1h) else row.close
             
-            # 计算前一根K线数据（用于判断形态）
-            prev_position = max(0, position - 1)
-            prev_row = df.iloc[prev_position] if prev_position < position else row
+            # 【V8.3.21.1修复】计算前一根K线数据（使用原始df的索引）
+            actual_position = day_start_idx + position  # 在原始df中的实际位置
+            prev_position = max(0, actual_position - 1)
+            prev_row = full_df.iloc[prev_position] if prev_position < actual_position else row
             
             # 【增强1】成交量激增判断
             volume_surge_data = None
-            if position >= 20:  # 需要足够的历史数据
-                recent_volume = df.iloc[max(0, position-20):position]['volume'].mean()
+            if actual_position >= 20:  # 需要足够的历史数据
+                recent_volume = full_df.iloc[max(0, actual_position-20):actual_position]['volume'].mean()
                 if recent_volume > 0:
                     surge_ratio = row.volume / recent_volume
                     if surge_ratio > 2.0:  # 2倍平均量
@@ -519,10 +532,10 @@ def export_date(date_str, output_dirs):
             
             # 【增强3】趋势启动判断
             trend_initiation_data = None
-            if position >= 10:
+            if actual_position >= 10:
                 # V8.2.3.5：调整趋势启动逻辑，适应实际trend_15m字段值
                 # 实际值：多头、空头、多头转弱、空头转弱（没有"震荡"）
-                prev_trends = [df.iloc[i]['trend_15m'] for i in range(max(0, position-10), position)]
+                prev_trends = [full_df.iloc[i]['trend_15m'] for i in range(max(0, actual_position-10), actual_position)]
                 
                 # 方案1：从"转弱"转为"强势"（趋势启动）
                 weak_count = sum(1 for t in prev_trends if '转弱' in str(t))
@@ -546,8 +559,8 @@ def export_date(date_str, output_dirs):
             
             # 【增强4】连续K线判断
             consecutive_data = None
-            if position >= 4:
-                recent_candles = df.iloc[max(0, position-3):position+1]
+            if actual_position >= 4:
+                recent_candles = full_df.iloc[max(0, actual_position-3):actual_position+1]
                 all_bullish = all((c['close'] > c['open']) for _, c in recent_candles.iterrows())
                 all_bearish = all((c['close'] < c['open']) for _, c in recent_candles.iterrows())
                 if all_bullish or all_bearish:
@@ -570,7 +583,7 @@ def export_date(date_str, output_dirs):
             
             # 【增强6】吞没形态判断
             engulfing_data = None
-            if position > 0:
+            if actual_position > 0:
                 prev_body = abs(prev_row['close'] - prev_row['open'])
                 curr_body = abs(row.close - row.open)
                 if curr_body > prev_body * 1.5:  # 当前K线实体明显大于前一根
@@ -694,8 +707,8 @@ def export_date(date_str, output_dirs):
                 indicator_consensus += 1
             
             # 4. 成交量明显放量（>150%平均量）
-            if position >= 20:
-                recent_avg_vol = df.iloc[max(0, position-20):position]['volume'].mean()
+            if actual_position >= 20:
+                recent_avg_vol = full_df.iloc[max(0, actual_position-20):actual_position]['volume'].mean()
                 if recent_avg_vol > 0 and row.volume >= recent_avg_vol * 1.5:
                     indicator_consensus += 1
             
@@ -732,8 +745,8 @@ def export_date(date_str, output_dirs):
                     target_multiplier = 3.0  # 弱趋势/震荡
                 
                 # 3. 考虑成交量激增（进一步提高预期）
-                if position >= 20:
-                    recent_vol = df.iloc[max(0, position-20):position]['volume'].mean()
+                if actual_position >= 20:
+                    recent_vol = full_df.iloc[max(0, actual_position-20):actual_position]['volume'].mean()
                     if recent_vol > 0 and row.volume > recent_vol * 2.0:
                         target_multiplier *= 1.3  # 巨量额外加30%
                 
@@ -749,18 +762,24 @@ def export_date(date_str, output_dirs):
             else:
                 risk_reward = 0
             
+            # 【V8.3.20】成交量确认（用于swing模式）
+            if actual_position >= 20:
+                recent_avg_vol = full_df.iloc[max(0, actual_position-20):actual_position]['volume'].mean()
+                if recent_avg_vol > 0 and row.volume >= recent_avg_vol * 1.5:
+                    pass  # 已在indicator_consensus中计算
+            
             # 【V8.3.21】数据增强：调用新函数获取上下文数据
             kline_context_15m = None
             market_structure_15m = None
             resistance_history = None
             support_history = None
             
-            # 构建标准K线格式（用于数据增强函数）
-            if position >= 10:  # 确保有足够的历史数据
+            # 【V8.3.21.1修复】构建标准K线格式（使用原始df的索引）
+            if actual_position >= 10:  # 确保有足够的历史数据
                 standard_klines = []
-                start_pos = max(0, position - 100)  # 取最近100根K线（用于S/R历史分析）
-                for i in range(start_pos, position + 1):
-                    candle = df.iloc[i]
+                start_pos = max(0, actual_position - 100)  # 取最近100根K线（用于S/R历史分析）
+                for i in range(start_pos, actual_position + 1):
+                    candle = full_df.iloc[i]
                     standard_klines.append({
                         'open': candle['open'],
                         'high': candle['high'],
