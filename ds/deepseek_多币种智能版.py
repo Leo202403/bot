@@ -8484,6 +8484,9 @@ def analyze_and_adjust_params():
             # 🆕 V8.3.21.3: 发送Bark通知（优先显示V8.3.21真实数据）
             iter_desc = f"多轮迭代{iterative_result['total_rounds']}轮" if iterative_result else "参数已优化"
             
+            # 🔄 V8.3.32.10: 重新加载config以获取最新的v8321_insights
+            config = load_learning_config()
+            
             # 🔄 V8.3.21.3: 优先读取V8.3.21洞察（真实数据）
             backtest_info = f"\n调整{adjusted_count}个参数"
             v8321_insights = config.get('compressed_insights', {}).get('v8321_insights', {})
