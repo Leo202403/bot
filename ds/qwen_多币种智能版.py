@@ -2589,8 +2589,23 @@ def save_market_snapshot_v7(market_data_list):
             # 获取币种名称（用于日志）
             coin_name = data.get("symbol", "").split("/")[0]
             
-            # 获取当前K线数据（15分钟级别）
-            kline_list = data.get("kline_data", [])
+            # 【V8.3.21.2修复】获取并转换K线数据格式
+            # kline_data是ccxt格式的列表：[[timestamp, open, high, low, close, volume], ...]
+            kline_list_raw = data.get("kline_data", [])
+            
+            # 转换为字典格式，方便后续处理
+            kline_list = []
+            for kline in kline_list_raw:
+                if isinstance(kline, list) and len(kline) >= 6:
+                    kline_list.append({
+                        'timestamp': kline[0],
+                        'open': kline[1],
+                        'high': kline[2],
+                        'low': kline[3],
+                        'close': kline[4],
+                        'volume': kline[5]
+                    })
+            
             current_kline = kline_list[-1] if kline_list else {}
             
             # 【V8.1.2修复】数据质量检查：确保K线数据完整
