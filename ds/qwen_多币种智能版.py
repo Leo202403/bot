@@ -5582,11 +5582,8 @@ JSON (4 test points):
             },
         ]
     
-    # 🔧 V8.3.14.4.3: 验证并修正test_points中的硬约束
-    for point in test_points:
-        if point.get('min_indicator_consensus', 2) < 2:
-            print(f"     ⚠️ 检测到AI生成的参数违反硬约束: consensus={point['min_indicator_consensus']} < 2，强制调整为2")
-            point['min_indicator_consensus'] = 2
+    # 🔧 V8.3.21.7: 移除consensus>=2的硬约束（现在允许consensus=1配合signal_score≥75）
+    # 不再强制调整test_points中的consensus参数
     
     # 回测精细调整点
     print(f"     ━━━━━━━━━━━━━━━━━━━━ 回测{len(test_points)}个优化点...")
@@ -8240,13 +8237,9 @@ def analyze_and_adjust_params():
                 if param in config["global"]:
                     config["global"][param] = value
             
-            # 【V8.3.14.4】安全检查：min_indicator_consensus 必须 >= 2
-            # 注意：自V8.3.14.4起，采样范围已限制最小值为2，此检查作为最后防线
-            if config["global"].get("min_indicator_consensus", 2) < 2:
-                print(f"⚠️  【安全检查】检测到min_indicator_consensus={config['global']['min_indicator_consensus']} < 2")
-                print(f"             （这不应该发生，可能是旧配置文件）强制调整为2")
-                config["global"]["min_indicator_consensus"] = 2
-                adjustments['global']['min_indicator_consensus'] = 2
+            # 🔧 V8.3.21.7: 移除consensus>=2的硬约束
+            # 现在允许consensus=1（配合signal_score≥75）以捕获更多高质量机会
+            # 不再强制将consensus<2的参数调整为2
             
             # 🔧 修复：为成功的多轮迭代设置optimization变量
             optimization = {
