@@ -80,7 +80,8 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
     # ===== 阶段1：定义搜索空间 =====
     print("📊 阶段1: 定义搜索空间...")
     
-    param_grid = define_param_grid_v8321(signal_type)
+    # 【V8.4.4】传入current_params作为baseline，允许动态调整搜索中心
+    param_grid = define_param_grid_v8321(signal_type, baseline_params=current_params)
     total_combinations = calculate_total_combinations(param_grid)
     
     print(f"   ✅ 搜索空间定义完成")
@@ -250,26 +251,103 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
     }
 
 
-def define_param_grid_v8321(signal_type: str) -> Dict:
+def define_param_grid_v8321(signal_type: str, baseline_params: Dict = None) -> Dict:
     """
-    定义V8.3.21参数搜索空间
+    【V8.4.4】定义V8.3.21参数搜索空间（动态范围约束）
     
-    包含：
-    - 基础参数（4个）
-    - V8.3.21上下文过滤参数（7个）
+    核心思路：
+    1. 固定基准参数（阶段2用于计算actual_profit，确保客观性）
+    2. 优化器可以在基准±50%范围内搜索（自适应市场波动）
+    3. 设置绝对边界防止极端值（如atr_tp=6.0）
+    
+    示例（波段）：
+    - 基准：atr_tp=3.0
+    - 搜索范围：[1.5, 3.0, 4.5]（±50%）
+    - 绝对边界：[2.0, 5.0]（不允许<2.0或>5.0）
+    - 实际搜索：[2.0, 3.0, 4.5]
+    
+    Args:
+        signal_type: 'scalping' 或 'swing'
+        baseline_params: 上一次优化的参数（用于动态调整搜索中心）
+    
+    Returns:
+        参数搜索空间字典
     """
+    
+    # 【V8.4.4】定义固定基准和绝对边界
+    if signal_type == 'scalping':
+        # 超短线固定基准
+        baseline = {
+            'atr_tp_multiplier': 2.0,
+            'atr_stop_multiplier': 1.5,
+            'max_holding_hours': 8,
+            'min_risk_reward': 1.5
+        }
+        # 绝对边界（硬约束，防止极端值）
+        bounds = {
+            'atr_tp_multiplier': (1.0, 3.0),      # 不允许>3.0
+            'atr_stop_multiplier': (1.0, 2.0),
+            'max_holding_hours': (4, 16),
+            'min_risk_reward': (0.8, 2.5)
+        }
+    else:  # swing
+        # 波段固定基准
+        baseline = {
+            'atr_tp_multiplier': 3.0,
+            'atr_stop_multiplier': 1.5,
+            'max_holding_hours': 60,
+            'min_risk_reward': 1.5
+        }
+        # 绝对边界
+        bounds = {
+            'atr_tp_multiplier': (2.0, 5.0),      # 不允许>5.0（防止6.0这样的极端值）
+            'atr_stop_multiplier': (1.0, 2.5),
+            'max_holding_hours': (36, 96),
+            'min_risk_reward': (0.8, 3.0)
+        }
+    
+    # 【V8.4.4】如果提供了baseline_params，用它作为搜索中心（但仍受边界限制）
+    if baseline_params:
+        for key in ['atr_tp_multiplier', 'atr_stop_multiplier', 'max_holding_hours', 'min_risk_reward']:
+            if key in baseline_params:
+                value = baseline_params[key]
+                min_bound, max_bound = bounds[key]
+                # 限制在边界内
+                baseline[key] = max(min_bound, min(max_bound, value))
+    
+    # 【V8.4.4】生成搜索空间（基准±50%，受绝对边界限制）
+    def generate_search_range(param_name, center_value):
+        """生成搜索范围：center ± 50%，但不超过绝对边界"""
+        min_bound, max_bound = bounds[param_name]
+        
+        # 计算±50%范围
+        lower = max(min_bound, center_value * 0.5)
+        upper = min(max_bound, center_value * 1.5)
+        
+        # 生成3个采样点：下限、中心、上限
+        if param_name == 'max_holding_hours':
+            # 整数参数
+            return [int(lower), int(center_value), int(upper)]
+        else:
+            # 浮点参数，保留1位小数
+            return [
+                round(lower, 1),
+                round(center_value, 1),
+                round(upper, 1)
+            ]
+    
     if signal_type == 'scalping':
         grid = {
-            # 基础参数
-            'max_holding_hours': [1, 2, 4],
-            'atr_tp_multiplier': [2.0, 3.0, 4.0],
-            'atr_stop_multiplier': [1.5, 2.0],
-            'min_risk_reward': [1.0, 1.5, 2.0],  # 🎯 V8.4.3: 降低以捕获更多机会
+            # 【V8.4.4】基础参数（动态范围，围绕基准±50%）
+            'max_holding_hours': generate_search_range('max_holding_hours', baseline['max_holding_hours']),
+            'atr_tp_multiplier': generate_search_range('atr_tp_multiplier', baseline['atr_tp_multiplier']),
+            'atr_stop_multiplier': generate_search_range('atr_stop_multiplier', baseline['atr_stop_multiplier']),
+            'min_risk_reward': generate_search_range('min_risk_reward', baseline['min_risk_reward']),
             
-            # 【V8.4】入场过滤参数 - 使用新的consensus_score（0-100分）
-            'min_signal_score': [40, 50, 60],  # 🎯 V8.4.3: 进一步降低以捕获更多机会
-            'min_consensus_score': [0, 10, 20, 30],  # 🎯 V8.4.3: 降低范围以捕获更多机会
-            'min_consensus': [0, 1, 2],  # 【兼容性】保留旧字段（0-5）
+            # 入场过滤参数（保持原有范围）
+            'min_signal_score': [40, 50, 60],
+            'min_consensus_score': [0, 10, 20, 30],
+            'min_consensus': [0, 1, 2],
             'min_kline_bullish_ratio': [0.6, 0.7],
             'min_price_chg_pct': [0.5, 1.0, 1.5],
             'allowed_mkt_struct': ['all', 'trend_only'],
@@ -278,16 +356,16 @@ def define_param_grid_v8321(signal_type: str) -> Dict:
         }
     else:  # swing
         grid = {
-            # 基础参数
-            'max_holding_hours': [48, 60, 72],
-            'atr_tp_multiplier': [2.0, 3.0, 4.0],
-            'atr_stop_multiplier': [1.5, 2.0],
-            'min_risk_reward': [1.0, 1.5, 2.0],  # 🎯 V8.4.3: 降低以捕获更多机会
+            # 【V8.4.4】基础参数（动态范围，围绕基准±50%）
+            'max_holding_hours': generate_search_range('max_holding_hours', baseline['max_holding_hours']),
+            'atr_tp_multiplier': generate_search_range('atr_tp_multiplier', baseline['atr_tp_multiplier']),
+            'atr_stop_multiplier': generate_search_range('atr_stop_multiplier', baseline['atr_stop_multiplier']),
+            'min_risk_reward': generate_search_range('min_risk_reward', baseline['min_risk_reward']),
             
-            # 【V8.4】入场过滤参数 - 使用新的consensus_score（0-100分）
-            'min_signal_score': [40, 50, 60],  # 🎯 V8.4.3: 进一步降低以捕获更多机会
-            'min_consensus_score': [0, 10, 20, 30],  # 🎯 V8.4.3: 降低范围以捕获更多机会
-            'min_consensus': [0, 1, 2],  # 【兼容性】保留旧字段（0-5）
+            # 入场过滤参数（保持原有范围）
+            'min_signal_score': [40, 50, 60],
+            'min_consensus_score': [0, 10, 20, 30],
+            'min_consensus': [0, 1, 2],
             'min_kline_bullish_ratio': [0.6, 0.7],
             'min_price_chg_pct': [0.5, 1.0, 1.5],
             'allowed_mkt_struct': ['all', 'trend_only'],
