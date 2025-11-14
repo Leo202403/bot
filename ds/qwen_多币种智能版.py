@@ -20404,22 +20404,28 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
             )
             print(f"")  # 换行
             
-            # 计算统计数据（只统计触发TP/SL的交易，不包括time_exit）
-            baseline_trades = [o for o in baseline_opps_updated 
-                             if o.get('exit_reason') in ['tp', 'sl']]
-            optimized_trades = [o for o in optimized_opps_updated 
-                              if o.get('exit_reason') in ['tp', 'sl']]
+            # 【V8.4.5修复】统计所有交易（包括time_exit），与阶段3评分函数一致
+            baseline_all_trades = baseline_opps_updated
+            optimized_all_trades = optimized_opps_updated
+            
+            # 计算time_exit比例
+            baseline_time_exit_count = sum(1 for o in baseline_all_trades if o.get('exit_reason') == 'time_exit')
+            optimized_time_exit_count = sum(1 for o in optimized_all_trades if o.get('exit_reason') == 'time_exit')
             
             baseline_result = {
-                'captured_count': len(baseline_trades),
-                'avg_profit': (sum(o.get('actual_profit_pct', 0) for o in baseline_trades) / len(baseline_trades)) if baseline_trades else 0,
-                'capture_rate': len(baseline_trades) / len(opportunities) if opportunities else 0
+                'captured_count': len(baseline_all_trades),
+                'avg_profit': sum(o.get('actual_profit_pct', 0) for o in baseline_all_trades) / len(baseline_all_trades) if baseline_all_trades else 0,
+                'time_exit_count': baseline_time_exit_count,
+                'time_exit_ratio': baseline_time_exit_count / len(baseline_all_trades) if baseline_all_trades else 0,
+                'capture_rate': len(baseline_all_trades) / len(opportunities) if opportunities else 0
             }
             
             optimized_result = {
-                'captured_count': len(optimized_trades),
-                'avg_profit': (sum(o.get('actual_profit_pct', 0) for o in optimized_trades) / len(optimized_trades)) if optimized_trades else 0,
-                'capture_rate': len(optimized_trades) / len(opportunities) if opportunities else 0
+                'captured_count': len(optimized_all_trades),
+                'avg_profit': sum(o.get('actual_profit_pct', 0) for o in optimized_all_trades) / len(optimized_all_trades) if optimized_all_trades else 0,
+                'time_exit_count': optimized_time_exit_count,
+                'time_exit_ratio': optimized_time_exit_count / len(optimized_all_trades) if optimized_all_trades else 0,
+                'capture_rate': len(optimized_all_trades) / len(opportunities) if opportunities else 0
             }
             
             # 【V8.3.21 AI迭代】提取AI决策（如果有）
@@ -20920,22 +20926,28 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
             )
             print(f"")  # 换行
             
-            # 计算统计数据（只统计触发TP/SL的交易，不包括time_exit）
-            baseline_trades = [o for o in baseline_opps_updated 
-                             if o.get('exit_reason') in ['tp', 'sl']]
-            optimized_trades = [o for o in optimized_opps_updated 
-                              if o.get('exit_reason') in ['tp', 'sl']]
+            # 【V8.4.5修复】统计所有交易（包括time_exit），与阶段3评分函数一致
+            baseline_all_trades = baseline_opps_updated
+            optimized_all_trades = optimized_opps_updated
+            
+            # 计算time_exit比例
+            baseline_time_exit_count = sum(1 for o in baseline_all_trades if o.get('exit_reason') == 'time_exit')
+            optimized_time_exit_count = sum(1 for o in optimized_all_trades if o.get('exit_reason') == 'time_exit')
             
             baseline_result = {
-                'captured_count': len(baseline_trades),
-                'avg_profit': (sum(o.get('actual_profit_pct', 0) for o in baseline_trades) / len(baseline_trades)) if baseline_trades else 0,
-                'capture_rate': len(baseline_trades) / len(opportunities) if opportunities else 0
+                'captured_count': len(baseline_all_trades),
+                'avg_profit': sum(o.get('actual_profit_pct', 0) for o in baseline_all_trades) / len(baseline_all_trades) if baseline_all_trades else 0,
+                'time_exit_count': baseline_time_exit_count,
+                'time_exit_ratio': baseline_time_exit_count / len(baseline_all_trades) if baseline_all_trades else 0,
+                'capture_rate': len(baseline_all_trades) / len(opportunities) if opportunities else 0
             }
             
             optimized_result = {
-                'captured_count': len(optimized_trades),
-                'avg_profit': (sum(o.get('actual_profit_pct', 0) for o in optimized_trades) / len(optimized_trades)) if optimized_trades else 0,
-                'capture_rate': len(optimized_trades) / len(opportunities) if opportunities else 0
+                'captured_count': len(optimized_all_trades),
+                'avg_profit': sum(o.get('actual_profit_pct', 0) for o in optimized_all_trades) / len(optimized_all_trades) if optimized_all_trades else 0,
+                'time_exit_count': optimized_time_exit_count,
+                'time_exit_ratio': optimized_time_exit_count / len(optimized_all_trades) if optimized_all_trades else 0,
+                'capture_rate': len(optimized_all_trades) / len(opportunities) if opportunities else 0
             }
             
             # 【V8.3.21 AI迭代】提取AI决策（如果有）
