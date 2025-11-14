@@ -50,17 +50,17 @@ def calculate_dynamic_atr_multiplier(
     else:
         theoretical_multiplier = 3.0  # 默认值
     
-    # 取60%作为实际目标（平衡利润和成功率）
-    target_multiplier = theoretical_multiplier * 0.6
+    # 【V8.4.9.3】取70%作为实际目标（从60%提高，更接近50-70%目标）
+    target_multiplier = theoretical_multiplier * 0.7
     
     # 根据策略类型设置范围
     if signal_type == 'scalping':
-        # 超短线：2.0-4.0倍ATR
-        min_tp, max_tp = 2.0, 4.0
+        # 【V8.4.9.3】超短线：2.0-6.0倍ATR（上限从4.0提高到6.0）
+        min_tp, max_tp = 2.0, 6.0
         sl_multiplier = 1.5  # 固定止损
     else:  # swing
-        # 波段：3.0-6.0倍ATR
-        min_tp, max_tp = 3.0, 6.0
+        # 【V8.4.9.3】波段：3.0-10.0倍ATR（上限从6.0提高到10.0）
+        min_tp, max_tp = 3.0, 10.0
         sl_multiplier = 1.5  # 固定止损
     
     # 限制在合理范围内
@@ -236,11 +236,11 @@ def calculate_actual_profit_batch(
                 if i == 0 and len(batch_results) == 0:
                     atr_pct = (atr / entry_price) * 100
                     theoretical = objective_profit / atr_pct if atr_pct > 0 else 0
-                    print(f"\n  🔍 【动态ATR调试】样本:")
+                    print(f"\n  🔍 【V8.4.9.3动态ATR调试】样本:")
                     print(f"     理论利润: {objective_profit:.2f}%")
                     print(f"     ATR: {atr:.4f} ({atr_pct:.2f}%)")
                     print(f"     理论倍数: {theoretical:.2f}")
-                    print(f"     实际倍数: {tp_multiplier:.2f} (60%={theoretical*0.6:.2f})")
+                    print(f"     实际倍数: {tp_multiplier:.2f} (70%={theoretical*0.7:.2f})")
             else:
                 # 使用固定ATR倍数
                 tp_multiplier = default_tp_multiplier
@@ -298,7 +298,7 @@ def add_actual_profit_to_opportunities(
     - 波段：~2000个 * 1KB = 2MB
     - 总计：~3.3MB（远低于1GB限制）
     """
-    version_tag = "V8.4.8动态ATR" if use_dynamic_atr else "V8.4.6固定ATR"
+    version_tag = "V8.4.9.3动态ATR" if use_dynamic_atr else "V8.4.6固定ATR"
     print(f"\n  📊 【{version_tag}】计算实际利润（内存优化版）")
     print(f"     超短线机会: {len(scalping_opps)}个")
     print(f"     波段机会: {len(swing_opps)}个")
@@ -343,16 +343,16 @@ def add_actual_profit_to_opportunities(
             if len(scalping_opps) > 0:
                 sample_size = min(10, len(scalping_opps))
                 sample_opps = scalping_opps[:sample_size]
-                print(f"  🔍 【V8.4.9.2调试】前{sample_size}个机会的ATR倍数:")
+                print(f"  🔍 【V8.4.9.3调试】前{sample_size}个机会的ATR倍数:")
                 for idx, opp in enumerate(sample_opps, 1):
                     obj_profit = opp.get('objective_profit', 0)
                     atr = opp.get('atr', 0)
                     entry = opp.get('entry_price', 0)
                     atr_pct = (atr / entry * 100) if entry > 0 else 0
                     theoretical = (obj_profit / atr_pct) if atr_pct > 0 else 0
-                    target = theoretical * 0.6
-                    final = max(2.0, min(4.0, target))
-                    print(f"     [{idx}] 理论{obj_profit:.1f}% / ATR{atr_pct:.2f}% = {theoretical:.2f} → 60%={target:.2f} → 最终={final:.2f}")
+                    target = theoretical * 0.7
+                    final = max(2.0, min(6.0, target))
+                    print(f"     [{idx}] 理论{obj_profit:.1f}% / ATR{atr_pct:.2f}% = {theoretical:.2f} → 70%={target:.2f} → 最终={final:.2f}")
     
     if swing_opps:
         swing_objective = np.mean([o['objective_profit'] for o in swing_opps])
@@ -368,16 +368,16 @@ def add_actual_profit_to_opportunities(
             if len(swing_opps) > 0:
                 sample_size = min(10, len(swing_opps))
                 sample_opps = swing_opps[:sample_size]
-                print(f"  🔍 【V8.4.9.2调试】前{sample_size}个机会的ATR倍数:")
+                print(f"  🔍 【V8.4.9.3调试】前{sample_size}个机会的ATR倍数:")
                 for idx, opp in enumerate(sample_opps, 1):
                     obj_profit = opp.get('objective_profit', 0)
                     atr = opp.get('atr', 0)
                     entry = opp.get('entry_price', 0)
                     atr_pct = (atr / entry * 100) if entry > 0 else 0
                     theoretical = (obj_profit / atr_pct) if atr_pct > 0 else 0
-                    target = theoretical * 0.6
-                    final = max(3.0, min(6.0, target))
-                    print(f"     [{idx}] 理论{obj_profit:.1f}% / ATR{atr_pct:.2f}% = {theoretical:.2f} → 60%={target:.2f} → 最终={final:.2f}")
+                    target = theoretical * 0.7
+                    final = max(3.0, min(10.0, target))
+                    print(f"     [{idx}] 理论{obj_profit:.1f}% / ATR{atr_pct:.2f}% = {theoretical:.2f} → 70%={target:.2f} → 最终={final:.2f}")
     
     return scalping_opps, swing_opps
 
