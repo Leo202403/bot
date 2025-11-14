@@ -6043,7 +6043,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     else:
         sampling_range = {
             'min_risk_reward': dynamic_rr_range if dynamic_rr_range else [1.4, 3.5],  # 🔧 V8.3.30: 使用动态R:R范围
-            'min_indicator_consensus': [2, 5],  # 🔧 V8.3.30: 从2起步（避免假信号），到5（高质量共振）
+            'min_indicator_consensus': [1, 5],  # 🔧 V8.3.21.7: 从1起步（配合signal_score≥75），到5（高质量共振）
             'atr_stop_multiplier': [1.4, 1.9],
             'min_signal_score': [50, 80]  # 🔧 V8.3.29: 新增signal_score优化范围
         }
@@ -6062,25 +6062,25 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     print(f"  📐 测试范围: R:R [{rr_min:.2f}, {rr_max:.2f}], 共识 [{consensus_min}, {consensus_max}], 分数 [{score_min}, {score_max}]")
     
     test_points = [
-        # 宽松组合（高召回）- 低R:R + 低共振
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 2, 'atr_stop_multiplier': atr_min, 'min_signal_score': score_min, 'name': '极宽松'},
-        {'min_risk_reward': (rr_min + rr_max) / 3, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': score_min, 'name': '偏宽松'},
+        # 🔧 V8.3.21.7: 宽松组合（高召回）- 低R:R + 低共振（允许consensus=1）
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 75, 'name': '极宽松'},  # consensus=1 + 高signal_score
+        {'min_risk_reward': (rr_min + rr_max) / 3, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 75, 'name': '偏宽松'},  # consensus=1 + 高signal_score
         
         # 平衡组合（Precision vs Recall）
         {'min_risk_reward': (rr_min + rr_max) / 2, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': (score_min + score_max) / 2, 'name': '标准平衡'},
-        {'min_risk_reward': (rr_min + rr_max) / 2, 'min_indicator_consensus': 3, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': score_max, 'name': '高分中共振'},  # 3指标共振
+        {'min_risk_reward': (rr_min + rr_max) / 2, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': score_max, 'name': '高分低共振'},  # consensus=2
         
         # 严格组合（高精准）- 高R:R + 中共振
         {'min_risk_reward': (rr_min * 2 + rr_max) / 3, 'min_indicator_consensus': 3, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'min_signal_score': (score_min + score_max) / 2, 'name': '偏严格'},
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 4, 'atr_stop_multiplier': atr_max, 'min_signal_score': score_max, 'name': '严格'},  # 4指标共振
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': score_max, 'name': '严格'},  # consensus=3
         
         # 超严格组合（极高精准）- 超高R:R + 高共振
         {'min_risk_reward': rr_max * 1.1, 'min_indicator_consensus': 4, 'atr_stop_multiplier': atr_max, 'min_signal_score': score_max, 'name': '超严格'},
-        {'min_risk_reward': rr_max * 1.2, 'min_indicator_consensus': 5, 'atr_stop_multiplier': atr_max, 'min_signal_score': 85, 'name': '极严格'},  # 5指标完美共振
+        {'min_risk_reward': rr_max * 1.2, 'min_indicator_consensus': 4, 'atr_stop_multiplier': atr_max, 'min_signal_score': 85, 'name': '极严格'},  # consensus=4
         
         # 特殊组合（测试不同维度的极端值）
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 4, 'atr_stop_multiplier': atr_max, 'min_signal_score': 75, 'name': '低R:R高共振'},  # 测试：是否共振能补偿R:R
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 2, 'atr_stop_multiplier': atr_min, 'min_signal_score': 75, 'name': '高R:R低共振'},  # 测试：是否R:R能补偿共振
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 80, 'name': '低R:R高共振'},  # 测试：是否共振能补偿R:R
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 80, 'name': '高R:R低共振'},  # 测试：是否R:R能补偿共振
     ]
     
     # 🔧 V8.3.31.7: use_confirmed_opps 已在函数开始处定义（避免UnboundLocalError）
