@@ -264,11 +264,11 @@ def define_param_grid_v8321(signal_type: str) -> Dict:
             'max_holding_hours': [1, 2, 4],
             'atr_tp_multiplier': [2.0, 3.0, 4.0],
             'atr_stop_multiplier': [1.5, 2.0],
-            'min_risk_reward': [1.5, 2.0, 2.5],
+            'min_risk_reward': [1.0, 1.5, 2.0],  # 🎯 V8.4.3: 降低以捕获更多机会
             
             # 【V8.4】入场过滤参数 - 使用新的consensus_score（0-100分）
-            'min_signal_score': [50, 60, 70],  # 保持原有范围
-            'min_consensus_score': [20, 30, 40, 50],  # 🎯 V8.4: 新增consensus_score（0-100分）
+            'min_signal_score': [40, 50, 60],  # 🎯 V8.4.3: 进一步降低以捕获更多机会
+            'min_consensus_score': [0, 10, 20, 30],  # 🎯 V8.4.3: 降低范围以捕获更多机会
             'min_consensus': [0, 1, 2],  # 【兼容性】保留旧字段（0-5）
             'min_kline_bullish_ratio': [0.6, 0.7],
             'min_price_chg_pct': [0.5, 1.0, 1.5],
@@ -282,11 +282,11 @@ def define_param_grid_v8321(signal_type: str) -> Dict:
             'max_holding_hours': [48, 60, 72],
             'atr_tp_multiplier': [2.0, 3.0, 4.0],
             'atr_stop_multiplier': [1.5, 2.0],
-            'min_risk_reward': [1.5, 2.0, 2.5],
+            'min_risk_reward': [1.0, 1.5, 2.0],  # 🎯 V8.4.3: 降低以捕获更多机会
             
             # 【V8.4】入场过滤参数 - 使用新的consensus_score（0-100分）
-            'min_signal_score': [50, 60, 70],  # 保持原有范围
-            'min_consensus_score': [20, 30, 40, 50],  # 🎯 V8.4: 新增consensus_score（0-100分）
+            'min_signal_score': [40, 50, 60],  # 🎯 V8.4.3: 进一步降低以捕获更多机会
+            'min_consensus_score': [0, 10, 20, 30],  # 🎯 V8.4.3: 降低范围以捕获更多机会
             'min_consensus': [0, 1, 2],  # 【兼容性】保留旧字段（0-5）
             'min_kline_bullish_ratio': [0.6, 0.7],
             'min_price_chg_pct': [0.5, 1.0, 1.5],
