@@ -13171,12 +13171,18 @@ def ai_portfolio_decision(
         resist_false_bo = data.get('resist_hist_false_bo', 0)
         support_false_bd = data.get('support_hist_false_bd', 0)
         
+        # 【V8.4.1】提取consensus_score（综合确认度评分）
+        consensus_score = data.get('consensus_score', 0)
+        
         # 构建增强信息（仅当有有效数据时显示）
         enhanced_info = ""
         if trend_age > 0:
             enhanced_info += f" Age:{trend_age:.1f}h"
         if resist_false_bo > 0 or support_false_bd > 0:
             enhanced_info += f" FakeBO:{resist_false_bo}/{support_false_bd}"
+        # 【V8.4.1】添加consensus_score（0-100分制，直观易懂）
+        if consensus_score > 0:
+            enhanced_info += f" Q:{consensus_score}"  # Q=Quality Score
         
         market_overview += f"""
 === {coin_name} ===
