@@ -20420,8 +20420,9 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
             baseline_opps_copy = [opp.copy() for opp in opportunities]
             baseline_opps_updated = calculate_actual_profit_batch(
                 opportunities=baseline_opps_copy,
-                strategy_params=current_params,
-                batch_size=100
+                strategy_params={**current_params, 'signal_type': signal_type},
+                batch_size=100,
+                use_dynamic_atr=True  # 【V8.4.9】使用动态ATR
             )
             print(f"")  # 换行
             
@@ -20430,8 +20431,9 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
             optimized_opps_copy = [opp.copy() for opp in opportunities]
             optimized_opps_updated = calculate_actual_profit_batch(
                 opportunities=optimized_opps_copy,
-                strategy_params=v8321_result['optimized_params'],
-                batch_size=100
+                strategy_params={**v8321_result['optimized_params'], 'signal_type': signal_type},
+                batch_size=100,
+                use_dynamic_atr=True  # 【V8.4.9】使用动态ATR
             )
             print(f"")  # 换行
             
@@ -20942,8 +20944,9 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
             baseline_opps_copy = [opp.copy() for opp in opportunities]
             baseline_opps_updated = calculate_actual_profit_batch(
                 opportunities=baseline_opps_copy,
-                strategy_params=current_params,
-                batch_size=100
+                strategy_params={**current_params, 'signal_type': signal_type},
+                batch_size=100,
+                use_dynamic_atr=True  # 【V8.4.9】使用动态ATR
             )
             print(f"")  # 换行
             
@@ -20952,8 +20955,9 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
             optimized_opps_copy = [opp.copy() for opp in opportunities]
             optimized_opps_updated = calculate_actual_profit_batch(
                 opportunities=optimized_opps_copy,
-                strategy_params=v8321_result['optimized_params'],
-                batch_size=100
+                strategy_params={**v8321_result['optimized_params'], 'signal_type': signal_type},
+                batch_size=100,
+                use_dynamic_atr=True  # 【V8.4.9】使用动态ATR
             )
             print(f"")  # 换行
             
