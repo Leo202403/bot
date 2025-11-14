@@ -8407,6 +8407,20 @@ def analyze_and_adjust_params():
                 new_count = len(new_captured)
                 new_avg_profit = sum(o.get('actual_profit_pct', 0) for o in new_captured) / new_count if new_count > 0 else 0
                 
+                # 【V8.5.1】计算分类捕获率
+                scalping_total = len(scalping_opps)
+                swing_total = len(swing_opps)
+                
+                old_scalping_count = len(old_captured_scalping)
+                old_swing_count = len(old_captured_swing)
+                new_scalping_count = len(new_captured_scalping)
+                new_swing_count = len(new_captured_swing)
+                
+                scalping_old_rate = (old_scalping_count / scalping_total * 100) if scalping_total > 0 else 0
+                scalping_new_rate = (new_scalping_count / scalping_total * 100) if scalping_total > 0 else 0
+                swing_old_rate = (old_swing_count / swing_total * 100) if swing_total > 0 else 0
+                swing_new_rate = (new_swing_count / swing_total * 100) if swing_total > 0 else 0
+                
                 # 构建stats
                 stats = {
                     'total_opportunities': total_opps,
@@ -8420,7 +8434,12 @@ def analyze_and_adjust_params():
                     'avg_new_captured_profit': new_avg_profit,
                     'avg_new_efficiency': (new_avg_profit / avg_actual_profit * 100) if avg_actual_profit > 0 else 0,
                     'capture_rate_improvement': ((new_count - old_count) / total_opps * 100) if total_opps > 0 else 0,
-                    'profit_improvement': new_avg_profit - old_avg_profit
+                    'profit_improvement': new_avg_profit - old_avg_profit,
+                    # 【V8.5.1】分类捕获率
+                    'scalping_old_rate': scalping_old_rate,
+                    'scalping_new_rate': scalping_new_rate,
+                    'swing_old_rate': swing_old_rate,
+                    'swing_new_rate': swing_new_rate
                 }
                 
                 # 输出统计
@@ -10103,12 +10122,20 @@ def analyze_and_adjust_params():
                     print(f"⚠️ 生成交易员摘要失败: {e}")
                 
                 # 【V7.9新增】分Scalping/Swing参数对比
+                # 【V8.5.1修复】从正确的位置读取参数
                 type_params_html = ""
                 try:
                     current_config = load_learning_config()
-                    if current_config and 'global' in current_config:
-                        scalping_params = current_config['global'].get('scalping_params', {})
-                        swing_params = current_config['global'].get('swing_params', {})
+                    if current_config:
+                        # V8.5之后，参数存储在config['scalping_params']和config['swing_params']中
+                        scalping_params = current_config.get('scalping_params', {})
+                        swing_params = current_config.get('swing_params', {})
+                        
+                        # 如果没有，尝试从global中读取（向后兼容）
+                        if not scalping_params and 'global' in current_config:
+                            scalping_params = current_config['global'].get('scalping_params', {})
+                        if not swing_params and 'global' in current_config:
+                            swing_params = current_config['global'].get('swing_params', {})
                         
                         if scalping_params and swing_params:
                             type_params_html = """
