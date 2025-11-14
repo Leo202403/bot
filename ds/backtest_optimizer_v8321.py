@@ -502,6 +502,23 @@ def calculate_total_combinations(grid: Dict) -> int:
 # 【步骤3】V8.3.21上下文过滤函数
 # ============================================================
 
+def test_params_on_opportunities(opportunities: List[Dict], params: Dict) -> Dict:
+    """
+    【V8.4.5】测试参数在机会集上的表现（别名函数）
+    
+    这是simulate_params_with_v8321_filter的别名，
+    用于前向验证时测试参数效果。
+    
+    Args:
+        opportunities: 机会列表
+        params: 参数字典
+    
+    Returns:
+        统计结果字典（包括avg_profit, capture_rate等）
+    """
+    return simulate_params_with_v8321_filter(opportunities, params)
+
+
 def simulate_params_with_v8321_filter(opportunities: List[Dict], params: Dict) -> Dict:
     """
     【V8.3.21→V8.3.21.1】使用上下文过滤参数模拟交易（修复过度过滤）
