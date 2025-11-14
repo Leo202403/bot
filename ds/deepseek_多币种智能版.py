@@ -13081,11 +13081,23 @@ def ai_portfolio_decision(
         else:
             pos_status_en = ""
         
+        # 【V8.3.21.4】提取数据增强字段
+        trend_age = data.get('mkt_struct_age_hours', 0)
+        resist_false_bo = data.get('resist_hist_false_bo', 0)
+        support_false_bd = data.get('support_hist_false_bd', 0)
+        
+        # 构建增强信息（仅当有有效数据时显示）
+        enhanced_info = ""
+        if trend_age > 0:
+            enhanced_info += f" Age:{trend_age:.1f}h"
+        if resist_false_bo > 0 or support_false_bd > 0:
+            enhanced_info += f" FakeBO:{resist_false_bo}/{support_false_bd}"
+        
         market_overview += f"""
 === {coin_name} ===
 Price: ${price:,.2f} ({data['price_change']:+.2f}%)
 
-🔹Trend: 4H={trend_4h_en}, 1H={trend_1h_en}, 15m={trend_15m_en}
+🔹Trend: 4H={trend_4h_en}, 1H={trend_1h_en}, 15m={trend_15m_en}{enhanced_info}
 → {mode}
 
 🔹1H S/R: Res ${(mt_sr.get('nearest_resistance') or {}).get('price', 0):,.0f}, Sup ${(mt_sr.get('nearest_support') or {}).get('price', 0):,.0f}, ATR {mt.get('atr_14', 0):.1f}
