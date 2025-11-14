@@ -694,7 +694,7 @@ def export_date(date_str, output_dirs):
             if ema20 > 0 and ema50 > 0:
                 divergence = abs(ema20 - ema50) / ema50 * 100
                 if divergence >= 2.0:
-                    indicator_consensus += 1
+                indicator_consensus += 1
             
             # 2. MACD明确金叉/死叉（histogram显著>0或<0，至少0.01）
             macd_hist = row.macd_histogram if pd.notna(row.macd_histogram) else 0
@@ -710,7 +710,7 @@ def export_date(date_str, output_dirs):
             if actual_position >= 20:
                 recent_avg_vol = full_df.iloc[max(0, actual_position-20):actual_position]['volume'].mean()
                 if recent_avg_vol > 0 and row.volume >= recent_avg_vol * 1.5:
-                    indicator_consensus += 1
+                indicator_consensus += 1
             
             # 5. 多周期趋势一致（15m、1h、4h同向）
             is_all_bullish = ("多头" in str(row.trend_15m) and "多头" in str(row.trend_1h) and "多头" in str(row.trend_4h))

@@ -17645,10 +17645,16 @@ def trading_bot():
             # 时间戳错误不发送通知（太频繁）
         else:
             print(f"\n❌ 交易循环异常 (耗时: {elapsed:.1f}秒): {e}")
+            
+            # 打印完整的异常堆栈到stdout（确保出现在日志中）
+            import traceback
+            import io
+            error_buffer = io.StringIO()
+            traceback.print_exc(file=error_buffer)
+            error_trace = error_buffer.getvalue()
+            print(f"\n完整异常堆栈：\n{error_trace}")
+            
             send_bark_notification("[通义千问]系统异常⚠️", f"交易循环出错 {str(e)}")
-        
-        import traceback
-        traceback.print_exc()
 
 
 def main():
