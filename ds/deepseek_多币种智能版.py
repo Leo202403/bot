@@ -13473,8 +13473,8 @@ Your core principles:
 - Dynamically adjust positions to ensure total risk is controlled
 - Always respond in Chinese (中文)"""
         
-        response = qwen_client.chat.completions.create(
-            model="qwen3-max",  # Qwen模型（思考模式，提升复杂策略分析能力）
+        response = deepseek_client.chat.completions.create(
+            model="deepseek-reasoner",  # DeepSeek推理模型
             messages=[
                 {
                     "role": "system",
