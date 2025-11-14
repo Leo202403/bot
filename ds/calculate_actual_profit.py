@@ -101,13 +101,34 @@ def simulate_trade_execution(
     }
 
 
+def calculate_actual_risk_reward(opp: Dict, strategy_params: Dict) -> float:
+    """
+    计算基于ATR倍数的实际可实现R:R。
+    这个R:R反映了实际交易中的止盈止损比例，而不是理论上的支撑阻力位比例。
+    
+    Args:
+        opp: 机会字典
+        strategy_params: 策略参数
+    
+    Returns:
+        实际R:R值
+    """
+    # 获取ATR倍数
+    tp_multiplier = opp.get('ai_atr_tp_multiplier') or strategy_params.get('atr_tp_multiplier', 2.0)
+    sl_multiplier = opp.get('ai_atr_sl_multiplier') or strategy_params.get('atr_stop_multiplier', 1.5)
+    
+    # 计算实际R:R
+    actual_rr = tp_multiplier / sl_multiplier if sl_multiplier > 0 else 999
+    return actual_rr
+
+
 def calculate_actual_profit_batch(
     opportunities: List[Dict],
     strategy_params: Dict,
     batch_size: int = 100
 ) -> List[Dict]:
     """
-    批量计算actual_profit_pct（内存优化版）
+    批量计算actual_profit_pct和actual_risk_reward（内存优化版）
     
     Args:
         opportunities: 机会列表
@@ -115,7 +136,7 @@ def calculate_actual_profit_batch(
         batch_size: 批次大小（控制内存使用）
     
     Returns:
-        更新后的机会列表（添加了actual_profit_pct字段）
+        更新后的机会列表（添加了actual_profit_pct和actual_risk_reward字段）
     
     内存优化：
     - 每次处理batch_size个机会
@@ -141,6 +162,7 @@ def calculate_actual_profit_batch(
             if 'future_data' not in opp:
                 # 没有未来数据，跳过
                 opp['actual_profit_pct'] = opp.get('objective_profit', 0)
+                opp['actual_risk_reward'] = calculate_actual_risk_reward(opp, strategy_params)
                 opp['exit_reason'] = 'no_future_data'
                 batch_results.append(opp)
                 continue
@@ -153,8 +175,12 @@ def calculate_actual_profit_batch(
                 sl_multiplier=sl_multiplier
             )
             
+            # 计算实际R:R
+            actual_rr = calculate_actual_risk_reward(opp, strategy_params)
+            
             # 更新机会数据
             opp.update(result)
+            opp['actual_risk_reward'] = actual_rr
             batch_results.append(opp)
         
         updated_opps.extend(batch_results)

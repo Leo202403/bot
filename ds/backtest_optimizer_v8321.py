@@ -473,11 +473,19 @@ def get_profit_pct(opp: Dict) -> float:
 
 
 def passes_basic_filter(opp: Dict, params: Dict) -> bool:
-    """基础参数过滤"""
+    """
+    基础参数过滤
+    
+    【V8.3.21.10修复】优先使用actual_risk_reward（基于ATR倍数的实际R:R）
+    而不是risk_reward（基于支撑阻力位的理论R:R），确保过滤条件与实际利润计算一致。
+    """
+    # 优先使用actual_risk_reward，如果没有则回退到risk_reward
+    rr_value = opp.get('actual_risk_reward', opp.get('risk_reward', 0))
+    
     return (
         opp['signal_score'] >= params.get('min_signal_score', 50) and
         opp['consensus'] >= params.get('min_consensus', 2) and
-        opp['risk_reward'] >= params.get('min_risk_reward', 1.5)
+        rr_value >= params.get('min_risk_reward', 1.5)
     )
 
 
