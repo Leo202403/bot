@@ -17045,6 +17045,23 @@ def _execute_single_open_action_v55(
 
         # 计算数量
         amount = (planned_position * leverage) / entry_price
+        
+        # 🔧 V8.3.32.12: 检查最小名义价值（币安要求）
+        notional_value = planned_position * leverage  # 名义价值 = 仓位 × 杠杆
+        min_notional = 100  # 币安USDT合约最小名义价值通常是100U
+        
+        if notional_value < min_notional:
+            print(f"\n❌ 名义价值不足")
+            print(f"当前名义价值: ${notional_value:.2f} (${planned_position:.2f} × {leverage}x)")
+            print(f"最小要求: ${min_notional:.2f}")
+            print(f"建议: 提高仓位至 ${min_notional / leverage:.2f}U 或降低杠杆")
+            
+            # 发送Bark通知
+            send_bark_notification(
+                f"[{model_display_name}]{coin_name}开仓失败❌",
+                f"名义价值不足\n当前:{notional_value:.0f}U 要求:{min_notional}U\n建议仓位:{min_notional/leverage:.0f}U"
+            )
+            return
 
         # 🔧 V7.7.0.14: 检查最小交易数量 + AI智能调整
         try:
