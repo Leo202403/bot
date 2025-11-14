@@ -7879,8 +7879,29 @@ def analyze_and_adjust_params():
         config = load_learning_config()
         
         # 🔧 V7.8.0: 保存旧参数配置的副本（用于新旧参数对比）
+        # 【V8.5.1修复】确保old_config包含scalping_params和swing_params
         import copy
         old_config = copy.deepcopy(config)
+        
+        # 如果config中没有这些参数，从global中提取作为旧参数
+        if 'scalping_params' not in old_config:
+            old_config['scalping_params'] = {
+                'atr_tp_multiplier': old_config.get('global', {}).get('atr_tp_multiplier', 2.0),
+                'atr_stop_multiplier': old_config.get('global', {}).get('atr_stop_multiplier', 1.5),
+                'min_risk_reward': old_config.get('global', {}).get('min_risk_reward', 1.5),
+                'min_signal_score': old_config.get('global', {}).get('min_signal_score', 60),
+                'min_indicator_consensus': old_config.get('global', {}).get('min_indicator_consensus', 1),
+                'max_holding_hours': 12
+            }
+        if 'swing_params' not in old_config:
+            old_config['swing_params'] = {
+                'atr_tp_multiplier': old_config.get('global', {}).get('atr_tp_multiplier', 3.0),
+                'atr_stop_multiplier': old_config.get('global', {}).get('atr_stop_multiplier', 1.5),
+                'min_risk_reward': old_config.get('global', {}).get('min_risk_reward', 2.0),
+                'min_signal_score': old_config.get('global', {}).get('min_signal_score', 60),
+                'min_indicator_consensus': old_config.get('global', {}).get('min_indicator_consensus', 1),
+                'max_holding_hours': 72
+            }
         
         if kline_snapshots is not None and len(trends) > 0:
             try:
