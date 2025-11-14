@@ -19302,11 +19302,13 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         try:
             from calculate_actual_profit import add_actual_profit_to_opportunities
             
+            # 【V8.4.8】启用动态ATR倍数
             scalping_opps, swing_opps = add_actual_profit_to_opportunities(
                 scalping_opps=scalping_opps,
                 swing_opps=swing_opps,
                 scalping_params=scalping_params,
-                swing_params=swing_params
+                swing_params=swing_params,
+                use_dynamic_atr=True  # 【V8.4.8】动态ATR倍数
             )
         except Exception as e:
             print(f"\n  ⚠️  实际利润计算失败（将使用理论利润）: {e}")

@@ -1,14 +1,72 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-实际利润计算模块 V8.3.21.9
+实际利润计算模块 V8.4.8
 
 功能：为每个交易机会计算actual_profit_pct（实际执行后的利润）
 内存优化：确保在1GB限制内运行
+V8.4.8新增：动态ATR倍数计算
 """
 
 import numpy as np
 from typing import Dict, List, Tuple, Optional
+
+
+def calculate_dynamic_atr_multiplier(
+    objective_profit_pct: float,
+    atr: float,
+    entry_price: float,
+    signal_type: str = 'scalping'
+) -> Tuple[float, float]:
+    """
+    【V8.4.8】根据理论利润动态计算ATR倍数
+    
+    核心思路：
+    1. 计算达到理论利润需要的ATR倍数
+    2. 取理论倍数的60%作为实际目标（让actual_profit达到objective_profit的50-70%）
+    3. 限制在合理范围内（防止极端值）
+    
+    Args:
+        objective_profit_pct: 理论利润百分比（例如15.5）
+        atr: ATR值
+        entry_price: 入场价格
+        signal_type: 'scalping' 或 'swing'
+    
+    Returns:
+        (atr_tp_multiplier, atr_sl_multiplier)
+    
+    示例：
+        objective_profit=10%, atr=2%, entry_price=100
+        → theoretical_multiplier = 10/2 = 5.0
+        → atr_tp = 5.0 * 0.6 = 3.0
+        → 限制在[2.0, 4.0]范围内 → 3.0 ✅
+    """
+    # 计算ATR占入场价的百分比
+    atr_pct = (atr / entry_price) * 100
+    
+    # 计算理论倍数
+    if atr_pct > 0:
+        theoretical_multiplier = objective_profit_pct / atr_pct
+    else:
+        theoretical_multiplier = 3.0  # 默认值
+    
+    # 取60%作为实际目标（平衡利润和成功率）
+    target_multiplier = theoretical_multiplier * 0.6
+    
+    # 根据策略类型设置范围
+    if signal_type == 'scalping':
+        # 超短线：2.0-4.0倍ATR
+        min_tp, max_tp = 2.0, 4.0
+        sl_multiplier = 1.5  # 固定止损
+    else:  # swing
+        # 波段：3.0-6.0倍ATR
+        min_tp, max_tp = 3.0, 6.0
+        sl_multiplier = 1.5  # 固定止损
+    
+    # 限制在合理范围内
+    atr_tp_multiplier = max(min_tp, min(max_tp, target_multiplier))
+    
+    return atr_tp_multiplier, sl_multiplier
 
 
 def simulate_trade_execution(
@@ -115,7 +173,8 @@ def simulate_trade_execution(
 def calculate_actual_profit_batch(
     opportunities: List[Dict],
     strategy_params: Dict,
-    batch_size: int = 100
+    batch_size: int = 100,
+    use_dynamic_atr: bool = False
 ) -> List[Dict]:
     """
     批量计算actual_profit_pct和actual_risk_reward（内存优化版）
@@ -124,6 +183,7 @@ def calculate_actual_profit_batch(
         opportunities: 机会列表
         strategy_params: 策略参数（包含atr_tp_multiplier等）
         batch_size: 批次大小（控制内存使用）
+        use_dynamic_atr: 【V8.4.8】是否使用动态ATR倍数
     
     Returns:
         更新后的机会列表（添加了actual_profit_pct和actual_risk_reward字段）
@@ -136,8 +196,9 @@ def calculate_actual_profit_batch(
     import gc
     
     # 获取策略参数
-    tp_multiplier = strategy_params.get('atr_tp_multiplier', 2.0)
-    sl_multiplier = strategy_params.get('atr_stop_multiplier', 1.5)
+    default_tp_multiplier = strategy_params.get('atr_tp_multiplier', 2.0)
+    default_sl_multiplier = strategy_params.get('atr_stop_multiplier', 1.5)
+    signal_type = strategy_params.get('signal_type', 'scalping')  # 【V8.4.8】获取策略类型
     
     total = len(opportunities)
     updated_opps = []
@@ -152,10 +213,28 @@ def calculate_actual_profit_batch(
             if 'future_data' not in opp:
                 # 没有未来数据，使用理论值
                 opp['actual_profit_pct'] = opp.get('objective_profit', 0)
-                opp['actual_risk_reward'] = opp.get('risk_reward', tp_multiplier / sl_multiplier)
+                opp['actual_risk_reward'] = opp.get('risk_reward', default_tp_multiplier / default_sl_multiplier)
                 opp['exit_reason'] = 'no_future_data'
                 batch_results.append(opp)
                 continue
+            
+            # 【V8.4.8】决定使用固定还是动态ATR倍数
+            if use_dynamic_atr:
+                # 动态计算ATR倍数
+                objective_profit = opp.get('objective_profit', 0)
+                atr = opp.get('atr', opp['entry_price'] * 0.02)
+                entry_price = opp['entry_price']
+                
+                tp_multiplier, sl_multiplier = calculate_dynamic_atr_multiplier(
+                    objective_profit_pct=objective_profit,
+                    atr=atr,
+                    entry_price=entry_price,
+                    signal_type=signal_type
+                )
+            else:
+                # 使用固定ATR倍数
+                tp_multiplier = default_tp_multiplier
+                sl_multiplier = default_sl_multiplier
             
             # 模拟交易执行（会自动计算actual_risk_reward）
             result = simulate_trade_execution(
@@ -188,7 +267,8 @@ def add_actual_profit_to_opportunities(
     scalping_opps: List[Dict],
     swing_opps: List[Dict],
     scalping_params: Dict,
-    swing_params: Dict
+    swing_params: Dict,
+    use_dynamic_atr: bool = False
 ) -> Tuple[List[Dict], List[Dict]]:
     """
     为超短线和波段机会添加actual_profit_pct
@@ -198,6 +278,7 @@ def add_actual_profit_to_opportunities(
         swing_opps: 波段机会列表
         scalping_params: 超短线策略参数
         swing_params: 波段策略参数
+        use_dynamic_atr: 【V8.4.8】是否使用动态ATR倍数
     
     Returns:
         (updated_scalping_opps, updated_swing_opps)
@@ -207,18 +288,24 @@ def add_actual_profit_to_opportunities(
     - 波段：~2000个 * 1KB = 2MB
     - 总计：~3.3MB（远低于1GB限制）
     """
-    print(f"\n  📊 【V8.3.21.9】计算实际利润（内存优化版）")
+    version_tag = "V8.4.8动态ATR" if use_dynamic_atr else "V8.4.6固定ATR"
+    print(f"\n  📊 【{version_tag}】计算实际利润（内存优化版）")
     print(f"     超短线机会: {len(scalping_opps)}个")
     print(f"     波段机会: {len(swing_opps)}个")
     print(f"     预计内存: <5MB")
+    
+    # 【V8.4.8】添加signal_type到参数中
+    scalping_params_with_type = {**scalping_params, 'signal_type': 'scalping'}
+    swing_params_with_type = {**swing_params, 'signal_type': 'swing'}
     
     # 计算超短线实际利润
     if scalping_opps:
         print(f"\n  ⚡ 处理超短线机会...")
         scalping_opps = calculate_actual_profit_batch(
             scalping_opps,
-            scalping_params,
-            batch_size=100
+            scalping_params_with_type,
+            batch_size=100,
+            use_dynamic_atr=use_dynamic_atr
         )
     
     # 计算波段实际利润
@@ -226,8 +313,9 @@ def add_actual_profit_to_opportunities(
         print(f"\n  🌊 处理波段机会...")
         swing_opps = calculate_actual_profit_batch(
             swing_opps,
-            swing_params,
-            batch_size=100
+            swing_params_with_type,
+            batch_size=100,
+            use_dynamic_atr=use_dynamic_atr
         )
     
     # 统计对比
@@ -238,6 +326,9 @@ def add_actual_profit_to_opportunities(
         print(f"     理论利润: {scalping_objective:.2f}%")
         print(f"     实际利润: {scalping_actual:.2f}%")
         print(f"     差距: {scalping_objective - scalping_actual:.2f}%")
+        if use_dynamic_atr:
+            ratio = (scalping_actual / scalping_objective * 100) if scalping_objective > 0 else 0
+            print(f"     实际/理论: {ratio:.1f}%  【V8.4.8目标: 50-70%】")
     
     if swing_opps:
         swing_objective = np.mean([o['objective_profit'] for o in swing_opps])
@@ -246,6 +337,9 @@ def add_actual_profit_to_opportunities(
         print(f"     理论利润: {swing_objective:.2f}%")
         print(f"     实际利润: {swing_actual:.2f}%")
         print(f"     差距: {swing_objective - swing_actual:.2f}%")
+        if use_dynamic_atr:
+            ratio = (swing_actual / swing_objective * 100) if swing_objective > 0 else 0
+            print(f"     实际/理论: {ratio:.1f}%  【V8.4.8目标: 50-70%】")
     
     return scalping_opps, swing_opps
 
