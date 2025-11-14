@@ -17056,7 +17056,7 @@ def _execute_single_open_action_v55(
             
             # 🆕 V8.3.32.12: 检查最小名义价值（币安要求）
             notional_value = planned_position * leverage
-            min_notional = 100  # 币安USDT合约最小名义价值
+            min_notional = 120  # 币安USDT合约最小名义价值（BTC/ETH等主流币种需要120U）
             needs_adjustment = False
             adjustment_reason = ""
             suggested_position = planned_position
