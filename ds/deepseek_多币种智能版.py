@@ -14255,7 +14255,7 @@ def calculate_signal_score_components(market_data, signal_type='scalping'):
         ma = market_data.get("moving_averages", {}) or {}
         vol = market_data.get("volume_analysis", {}) or {}
         
-        components = {'signal_type': signal_type}
+        components = {'signal_type': 'scalping'}
         
         # === 超短线维度 ===
         if signal_type == 'scalping':
@@ -14462,7 +14462,7 @@ def calculate_signal_score_components(market_data, signal_type='scalping'):
         print(f"⚠️ 【V8.2】计算评分维度失败: {e}")
         # 返回默认值
         return {
-            'signal_type': signal_type,
+            'signal_type': 'scalping',
             'total_score': 50,
             # 超短线默认维度
             'volume_surge_type': '',
@@ -19255,7 +19255,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         'risk_reward': risk_reward,
                         'atr': atr,
                         'signal_score': signal_score,  # 【V8.3.21】添加signal_score字段
-                        'signal_type': signal_type,
+                        'signal_type': 'scalping',
                         'signal_name': signal_name,
                         'objective_profit': objective_profit,
                         'future_data': future_summary,  # 【V8.3.21】使用摘要代替完整DataFrame
@@ -20420,7 +20420,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
             baseline_opps_copy = [opp.copy() for opp in opportunities]
             baseline_opps_updated = calculate_actual_profit_batch(
                 opportunities=baseline_opps_copy,
-                strategy_params={**current_params, 'signal_type': signal_type},
+                strategy_params={**current_params, 'signal_type': 'scalping'},
                 batch_size=100,
                 use_dynamic_atr=True  # 【V8.4.9】使用动态ATR
             )
@@ -20431,7 +20431,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
             optimized_opps_copy = [opp.copy() for opp in opportunities]
             optimized_opps_updated = calculate_actual_profit_batch(
                 opportunities=optimized_opps_copy,
-                strategy_params={**v8321_result['optimized_params'], 'signal_type': signal_type},
+                strategy_params={**v8321_result['optimized_params'], 'signal_type': 'scalping'},
                 batch_size=100,
                 use_dynamic_atr=True  # 【V8.4.9】使用动态ATR
             )
@@ -20944,7 +20944,7 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
             baseline_opps_copy = [opp.copy() for opp in opportunities]
             baseline_opps_updated = calculate_actual_profit_batch(
                 opportunities=baseline_opps_copy,
-                strategy_params={**current_params, 'signal_type': signal_type},
+                strategy_params={**current_params, 'signal_type': 'swing'},
                 batch_size=100,
                 use_dynamic_atr=True  # 【V8.4.9】使用动态ATR
             )
@@ -20955,7 +20955,7 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
             optimized_opps_copy = [opp.copy() for opp in opportunities]
             optimized_opps_updated = calculate_actual_profit_batch(
                 opportunities=optimized_opps_copy,
-                strategy_params={**v8321_result['optimized_params'], 'signal_type': signal_type},
+                strategy_params={**v8321_result['optimized_params'], 'signal_type': 'swing'},
                 batch_size=100,
                 use_dynamic_atr=True  # 【V8.4.9】使用动态ATR
             )
