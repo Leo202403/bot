@@ -18936,9 +18936,23 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         scalping_opps = []
         swing_opps = []
         
-        # 获取当前参数
-        scalping_params = old_config.get('scalping_params', {})
-        swing_params = old_config.get('swing_params', {})
+        # 【V8.4.4修复】使用固定的基准参数，确保阶段2的客观性
+        # 不再依赖old_config，避免上一次优化失败的参数影响本次回测
+        scalping_params = {
+            'atr_tp_multiplier': 2.0,    # 固定基准：超短线2倍ATR
+            'atr_stop_multiplier': 1.5,
+            'max_holding_hours': 12
+        }
+        
+        swing_params = {
+            'atr_tp_multiplier': 3.0,    # 固定基准：波段3倍ATR
+            'atr_stop_multiplier': 1.5,
+            'max_holding_hours': 72
+        }
+        
+        print(f"  🎯 使用固定基准参数计算actual_profit（确保客观性）")
+        print(f"     超短线: atr_tp=2.0, atr_sl=1.5")
+        print(f"     波段: atr_tp=3.0, atr_sl=1.5")
         
         print(f"  📊 分析历史快照: {len(market_snapshots)}条记录")
         if ENABLE_SAMPLING:
