@@ -19039,20 +19039,38 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         print(f"\n  ⚡ 超短线机会: {len(scalping_opps)}个（已优化）")
         print(f"  🌊 波段机会: {len(swing_opps)}个（已优化）")
         
-        # 分析超短线表现
+        # 【V8.3.21.9】计算实际利润（内存优化版）
+        try:
+            from calculate_actual_profit import add_actual_profit_to_opportunities
+            
+            scalping_opps, swing_opps = add_actual_profit_to_opportunities(
+                scalping_opps=scalping_opps,
+                swing_opps=swing_opps,
+                scalping_params=scalping_params,
+                swing_params=swing_params
+            )
+        except Exception as e:
+            print(f"\n  ⚠️  实际利润计算失败（将使用理论利润）: {e}")
+            # 降级：使用objective_profit作为actual_profit_pct
+            for opp in scalping_opps:
+                opp['actual_profit_pct'] = opp.get('objective_profit', 0)
+            for opp in swing_opps:
+                opp['actual_profit_pct'] = opp.get('objective_profit', 0)
+        
+        # 分析超短线表现（使用actual_profit_pct）
         scalping_analysis = {
             'total_opportunities': len(scalping_opps),
-            'profitable_count': 0,
-            'avg_profit': 0,
+            'profitable_count': len([o for o in scalping_opps if o.get('actual_profit_pct', 0) > 0]),
+            'avg_profit': np.mean([o.get('actual_profit_pct', 0) for o in scalping_opps]) if scalping_opps else 0,
             'time_exit_rate': 0,
             'opportunities': scalping_opps
         }
         
-        # 分析波段表现
+        # 分析波段表现（使用actual_profit_pct）
         swing_analysis = {
             'total_opportunities': len(swing_opps),
-            'profitable_count': 0,
-            'avg_profit': 0,
+            'profitable_count': len([o for o in swing_opps if o.get('actual_profit_pct', 0) > 0]),
+            'avg_profit': np.mean([o.get('actual_profit_pct', 0) for o in swing_opps]) if swing_opps else 0,
             'time_exit_rate': 0,
             'opportunities': swing_opps
         }
