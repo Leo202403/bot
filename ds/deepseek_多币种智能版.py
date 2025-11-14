@@ -8183,15 +8183,18 @@ def analyze_and_adjust_params():
             # 快速探索模式（1-2分钟）- 为V8.3.12提供初始参数
             print(f"  ℹ️  使用快速探索模式（V8.3.16）")
             
-            # 🔧 V8.3.25.23: 先生成confirmed_opportunities用于快速探索
+            # 🔧 V8.3.25.23→V8.4.5: 先生成confirmed_opportunities用于快速探索（使用带验证的函数）
             quick_search_opportunities = None
             if kline_snapshots is not None and not kline_snapshots.empty:
                 try:
                     print(f"  📊 准备confirmed_opportunities用于快速探索...")
-                    quick_search_opportunities = analyze_separated_opportunities(
+                    # 【V8.4.5】快速探索也使用带验证的函数，但禁用验证以节省时间
+                    quick_search_result = analyze_separated_opportunities_with_validation(
                         market_snapshots=kline_snapshots,
-                        old_config=config
+                        old_config=config,
+                        enable_validation=False  # 快速探索不需要验证
                     )
+                    quick_search_opportunities = quick_search_result['combined']
                     print(f"     ✓ 超短线机会: {len(quick_search_opportunities['scalping']['opportunities'])}个")
                     print(f"     ✓ 波段机会: {len(quick_search_opportunities['swing']['opportunities'])}个")
                 except Exception as e:
