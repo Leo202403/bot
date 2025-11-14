@@ -12552,6 +12552,8 @@ def get_ohlcv_data(symbol):
             },
             # 支撑阻力位（15分钟，用于入场判断）
             "support_resistance": sr_levels,
+            # 【V8.3.21.2修复】添加K线历史数据，用于save_market_snapshot中的数据增强计算
+            "kline_data": ohlcv_15m,  # 原始K线数据列表，每个元素是[timestamp, open, high, low, close, volume]
         }
 
     except TimeoutError:
