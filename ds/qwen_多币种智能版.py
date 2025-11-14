@@ -3309,6 +3309,21 @@ def load_learning_config():
 def save_learning_config(config):
     """保存学习参数"""
     try:
+        # 【V8.3.21.5修复】检查并修复过高的共振阈值
+        fixed_consensus = False
+        for strategy in ['scalping', 'swing']:
+            if strategy in config:
+                old_consensus = config[strategy].get('min_consensus', 2)
+                if old_consensus >= 2:
+                    config[strategy]['min_consensus'] = 1
+                    # 提高信号质量要求作为补偿
+                    config[strategy]['min_signal_score'] = max(70, config[strategy].get('min_signal_score', 60))
+                    fixed_consensus = True
+                    print(f"  🔧 自动修复{strategy} min_consensus: {old_consensus} → 1 (提高signal_score≥70)")
+        
+        if fixed_consensus:
+            print("  💡 原因：共振≥2会错过98%的高质量机会（如BNB 82分/2共振 盈利20%）")
+        
         config["last_update"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(LEARNING_CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=2, default=str)  # 🔧 V7.6.7: 添加default=str防止bool序列化错误

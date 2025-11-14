@@ -815,9 +815,9 @@ def calculate_v8321_optimization_score(result: Dict) -> float:
        - 确保不过度保守
     
     权重设计（对齐"利润最大+亏损最小"）：
-    - 期望收益: 50%（核心，已包含盈亏）【从40%提升到50%】
-    - 盈亏比: 25%（赚多亏少）【从30%降到25%】
-    - 捕获率: 15%（不过度保守）【从20%降到15%】
+    - 期望收益: 40%（核心，已包含盈亏）
+    - 盈亏比: 30%（赚多亏少）
+    - 捕获率: 20%（不过度保守）
     - 回撤惩罚: -10%（控制风险）
     
     示例：
@@ -826,16 +826,6 @@ def calculate_v8321_optimization_score(result: Dict) -> float:
     """
     if result['captured_count'] == 0:
         return 0.0
-    
-    # 【修复】硬性约束：平均利润必须为正
-    avg_profit = result.get('avg_profit', 0)
-    if avg_profit <= 0:
-        return 0.0  # 直接淘汰负利润配置
-    
-    # 【修复】硬性约束：期望收益必须为正
-    expectancy = result.get('expectancy', 0)
-    if expectancy <= 0:
-        return 0.0  # 直接淘汰负期望配置
     
     # 1. 期望收益（核心指标）
     # = (胜率 × 盈利) + (败率 × 亏损)
@@ -859,9 +849,9 @@ def calculate_v8321_optimization_score(result: Dict) -> float:
     
     # 加权（利润最大+亏损最小）
     total_score = (
-        expectancy_score * 0.50 +      # 期望收益 50%（提升）
-        plr_score * 0.25 +              # 盈亏比 25%
-        capture_score * 0.15 +          # 捕获率 15%（降低）
+        expectancy_score * 0.40 +      # 期望收益 40%
+        plr_score * 0.30 +              # 盈亏比 30%
+        capture_score * 0.20 +          # 捕获率 20%
         - drawdown_penalty * 0.10       # 回撤惩罚 -10%
     )
     
