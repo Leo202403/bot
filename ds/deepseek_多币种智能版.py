@@ -8431,18 +8431,26 @@ def analyze_and_adjust_params():
             print(f"  ⚠️  提取AI参数建议失败: {e}")
             ai_suggested_params = None
 
-        # ========== 【V8.3.12】第4.6步：分离策略优化 ==========
-        print("\n【第4.6步：分离策略优化（V8.3.12）】")
+        # ========== 【V8.3.12→V8.4.5】第4.6步：分离策略优化（带前向验证） ==========
+        print("\n【第4.6步：分离策略优化（V8.3.12→V8.4.5）】")
         scalping_optimization = None
         swing_optimization = None
         
         if kline_snapshots is not None and not kline_snapshots.empty:
             try:
-                # 分析超短线和波段的分离机会
-                separated_analysis = analyze_separated_opportunities(
+                # 【V8.4.5】使用带前向验证的机会分析
+                separated_analysis_with_val = analyze_separated_opportunities_with_validation(
                     market_snapshots=kline_snapshots,
-                    old_config=config
+                    old_config=config,
+                    enable_validation=True  # 启用前向验证
                 )
+                
+                # 提取训练期和验证期数据
+                train_analysis = separated_analysis_with_val['train']
+                val_analysis = separated_analysis_with_val['val']
+                
+                # 用于优化的数据（仅训练期）
+                separated_analysis = separated_analysis_with_val['combined']
                 
                 # 【V8.3.16】技术债1修复：使用V7.7.0快速探索的结果作为初始参数
                 # 【V8.3.16.3】修复：从iterative_result中提取final_params
@@ -8528,6 +8536,81 @@ def analyze_and_adjust_params():
                         print(f"     捕获率: {old_capture*100:.0f}% → {new_capture*100:.0f}% ({(new_capture-old_capture)*100:+.0f}%)")
                 else:
                     print(f"  ⚠️  波段机会不足20个（{separated_analysis['swing']['total_opportunities']}个），跳过优化")
+                
+                # 【V8.4.5】前向验证：在验证期测试优化后的参数
+                if val_analysis and (scalping_optimization or swing_optimization):
+                    print(f"\n  🔍 【V8.4.5前向验证】在验证期测试优化后的参数...")
+                    
+                    # 导入测试函数
+                    from backtest_optimizer_v8321 import test_params_on_opportunities
+                    
+                    # 验证超短线参数
+                    if scalping_optimization and scalping_optimization.get('optimized_params'):
+                        val_scalping_opps = val_analysis['scalping']['opportunities']
+                        if len(val_scalping_opps) >= 5:
+                            optimized_scalping_params = scalping_optimization['optimized_params']
+                            val_result = test_params_on_opportunities(
+                                opportunities=val_scalping_opps,
+                                params=optimized_scalping_params
+                            )
+                            
+                            val_avg_profit = val_result.get('avg_profit', 0)
+                            val_capture_rate = val_result.get('capture_rate', 0)
+                            
+                            print(f"     超短线验证期表现:")
+                            print(f"       平均利润: {val_avg_profit:.2f}%")
+                            print(f"       捕获率: {val_capture_rate*100:.1f}%")
+                            
+                            # 决策：如果验证期表现太差，回退到保守参数
+                            if val_avg_profit < -1.0:  # 亏损超过1%
+                                print(f"       ⚠️  验证期亏损严重，回退到保守参数")
+                                config['scalping_params'] = {
+                                    'atr_tp_multiplier': 2.0,
+                                    'atr_stop_multiplier': 1.5,
+                                    'max_holding_hours': 12,
+                                    'min_risk_reward': 1.5,
+                                    'min_signal_score': 50
+                                }
+                            elif val_avg_profit > 0:
+                                print(f"       ✅ 验证期表现良好，使用优化后的参数")
+                            else:
+                                print(f"       🟡 验证期表现一般，保留优化后的参数")
+                        else:
+                            print(f"     ⚠️  超短线验证期机会不足（{len(val_scalping_opps)}个），跳过验证")
+                    
+                    # 验证波段参数
+                    if swing_optimization and swing_optimization.get('optimized_params'):
+                        val_swing_opps = val_analysis['swing']['opportunities']
+                        if len(val_swing_opps) >= 5:
+                            optimized_swing_params = swing_optimization['optimized_params']
+                            val_result = test_params_on_opportunities(
+                                opportunities=val_swing_opps,
+                                params=optimized_swing_params
+                            )
+                            
+                            val_avg_profit = val_result.get('avg_profit', 0)
+                            val_capture_rate = val_result.get('capture_rate', 0)
+                            
+                            print(f"     波段验证期表现:")
+                            print(f"       平均利润: {val_avg_profit:.2f}%")
+                            print(f"       捕获率: {val_capture_rate*100:.1f}%")
+                            
+                            # 决策：如果验证期表现太差，回退到保守参数
+                            if val_avg_profit < -1.0:  # 亏损超过1%
+                                print(f"       ⚠️  验证期亏损严重，回退到保守参数")
+                                config['swing_params'] = {
+                                    'atr_tp_multiplier': 3.0,
+                                    'atr_stop_multiplier': 1.5,
+                                    'max_holding_hours': 72,
+                                    'min_risk_reward': 1.5,
+                                    'min_signal_score': 50
+                                }
+                            elif val_avg_profit > 0:
+                                print(f"       ✅ 验证期表现良好，使用优化后的参数")
+                            else:
+                                print(f"       🟡 验证期表现一般，保留优化后的参数")
+                        else:
+                            print(f"     ⚠️  波段验证期机会不足（{len(val_swing_opps)}个），跳过验证")
                 
             except Exception as e:
                 print(f"⚠️ 分离策略优化失败: {e}")
