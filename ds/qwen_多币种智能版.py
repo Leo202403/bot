@@ -18896,6 +18896,70 @@ def _simulate_trade_with_params(entry_price, direction, atr, future_data,
 # 【V8.3.12】Separated Strategy Optimization - 分离策略优化
 # ============================================================================
 
+def analyze_separated_opportunities_with_validation(market_snapshots, old_config, enable_validation=True):
+    """
+    【V8.4.5】带前向验证的机会分析
+    
+    核心思路：
+    1. 训练期：前12天数据（约8000条）
+    2. 验证期：最近3天数据（约2000条）
+    3. 在训练期识别机会并优化参数
+    4. 在验证期测试效果，防止过拟合
+    
+    Args:
+        market_snapshots: 14天历史快照（9177条）
+        old_config: 当前配置
+        enable_validation: 是否启用前向验证（默认True）
+    
+    Returns:
+        {
+            'train': {'scalping': {...}, 'swing': {...}},  # 训练期机会
+            'val': {'scalping': {...}, 'swing': {...}},    # 验证期机会（可选）
+            'combined': {'scalping': {...}, 'swing': {...}}  # 合并后机会（用于优化）
+        }
+    """
+    
+    if not enable_validation:
+        # 不启用验证，直接返回全部数据
+        result = analyze_separated_opportunities(market_snapshots, old_config)
+        return {
+            'train': result,
+            'val': None,
+            'combined': result
+        }
+    
+    # 【V8.4.5】分割训练期和验证期
+    total_records = len(market_snapshots)
+    
+    # 前12天作为训练期（约85%）
+    train_size = int(total_records * 0.857)  # 12/14 ≈ 0.857
+    
+    train_snapshots = market_snapshots.iloc[:train_size]
+    val_snapshots = market_snapshots.iloc[train_size:]
+    
+    print(f"\n  【V8.4.5前向验证】")
+    print(f"  📊 训练期: {len(train_snapshots)}条记录（前12天）")
+    print(f"  🔍 验证期: {len(val_snapshots)}条记录（后3天）")
+    
+    # 在训练期识别机会
+    print(f"  ⚙️  分析训练期机会...")
+    train_result = analyze_separated_opportunities(train_snapshots, old_config)
+    
+    # 在验证期识别机会
+    print(f"  ⚙️  分析验证期机会...")
+    val_result = analyze_separated_opportunities(val_snapshots, old_config)
+    
+    print(f"  ✅ 训练期: 超短线{len(train_result['scalping']['opportunities'])}个, 波段{len(train_result['swing']['opportunities'])}个")
+    print(f"  ✅ 验证期: 超短线{len(val_result['scalping']['opportunities'])}个, 波段{len(val_result['swing']['opportunities'])}个")
+    
+    # 返回训练期数据用于优化（不包含验证期，防止过拟合）
+    return {
+        'train': train_result,
+        'val': val_result,
+        'combined': train_result  # 优化器只用训练期数据
+    }
+
+
 def analyze_separated_opportunities(market_snapshots, old_config):
     """
     【V8.3.12→V8.3.21】分析超短线和波段的分离机会（内存优化版）
