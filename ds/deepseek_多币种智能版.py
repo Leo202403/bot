@@ -3061,6 +3061,27 @@ def save_market_snapshot_v7(market_data_list):
             print(f"⚠️ 市场快照为空，无数据保存（所有币种获取失败）")
             return
         
+        # 【V8.5.2新增】去重逻辑：检查当前时间点是否已有数据
+        if snapshot_file.exists():
+            try:
+                existing_df = pd.read_csv(snapshot_file, dtype={'time': str})
+                
+                # 获取当前要保存的时间点
+                current_time_str = snapshot_data[0].get('time')
+                
+                if current_time_str:
+                    # 检查这个时间点是否已存在
+                    existing_times = set(existing_df['time'].values)
+                    
+                    if current_time_str in existing_times:
+                        print(f"⏭️  跳过保存：时间点 {current_time_str} 的数据已存在")
+                        return  # 跳过保存
+                    else:
+                        print(f"✅ 时间点 {current_time_str} 尚未保存，继续保存")
+                
+            except Exception as e:
+                print(f"⚠️ 读取现有文件失败: {e}，将直接追加")
+        
         df = pd.DataFrame(snapshot_data)
         if snapshot_file.exists():
             df.to_csv(snapshot_file, mode='a', header=False, index=False, encoding='utf-8', quoting=csv.QUOTE_MINIMAL)
@@ -12582,6 +12603,16 @@ def get_adjusted_params_for_signal(
 def get_ohlcv_data(symbol):
     """获取单个币种的K线数据和技术指标（已移除signal.alarm以兼容supervisor）"""
     try:
+        # 【V8.5.2新增】确保获取完整的15分钟K线数据
+        # 在每个15分钟周期的第1分钟获取，确保上一个K线已完全形成
+        from datetime import datetime
+        current_time = datetime.now()
+        current_minute = current_time.minute
+        
+        # 如果不在正确的时机，打印警告（但仍然继续，避免阻塞）
+        if current_minute % 15 not in [0, 1]:
+            print(f"⚠️ {symbol}: 当前时间 {current_time.strftime('%H:%M')} 不是最佳获取时机（建议在每15分钟的第1分钟）")
+        
         # === 15分钟K线数据（短期） ===
         # ccxt自带timeout机制，无需signal.alarm
         limit_15m = 1344  # 14天数据
@@ -18128,13 +18159,13 @@ def main():
         print("初始化失败")
         return
     
-    # 设置定时任务（固定时间点，避免重启导致错过）
+    # 【V8.5.2修改】设置定时任务（延后1分钟，确保K线完全形成）
     if TRADE_CONFIG["timeframe"] == "15m":
-        schedule.every().hour.at(":00").do(trading_bot)
-        schedule.every().hour.at(":15").do(trading_bot)
-        schedule.every().hour.at(":30").do(trading_bot)
-        schedule.every().hour.at(":45").do(trading_bot)
-        print("执行频率: 每小时的0、15、30、45分（固定时间）")
+        schedule.every().hour.at(":01").do(trading_bot)
+        schedule.every().hour.at(":16").do(trading_bot)
+        schedule.every().hour.at(":31").do(trading_bot)
+        schedule.every().hour.at(":46").do(trading_bot)
+        print("执行频率: 每小时的1、16、31、46分（延后1分钟，确保K线完整）")
     elif TRADE_CONFIG["timeframe"] == "1h":
         schedule.every().hour.at(":01").do(trading_bot)
         print("执行频率: 每小时")
