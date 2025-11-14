@@ -6126,8 +6126,21 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                         # R:R的键也是字符串
                         available_rrs = sorted([float(k) for k in precision_data['by_rr'].keys() if float(k) <= min_rr])
                         if available_rrs:
-                            # 使用字符串键查找
-                            rr_precision = precision_data['by_rr'][str(available_rrs[-1])]
+                            # 🔧 V8.3.32.11: 尝试多种格式匹配（"2.0", "2", "2.5"等）
+                            target_rr = available_rrs[-1]
+                            # 先尝试直接匹配
+                            if str(target_rr) in precision_data['by_rr']:
+                                rr_precision = precision_data['by_rr'][str(target_rr)]
+                            # 尝试整数格式
+                            elif str(int(target_rr)) in precision_data['by_rr']:
+                                rr_precision = precision_data['by_rr'][str(int(target_rr))]
+                            # 尝试格式化为1位小数
+                            elif f"{target_rr:.1f}" in precision_data['by_rr']:
+                                rr_precision = precision_data['by_rr'][f"{target_rr:.1f}"]
+                            else:
+                                # 降级：使用1.0
+                                print(f"  ⚠️ 未找到R:R={target_rr}的精准率数据，使用默认值1.0")
+                                rr_precision = 1.0
                         else:
                             rr_precision = 1.0
                     
