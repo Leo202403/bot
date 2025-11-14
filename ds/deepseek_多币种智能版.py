@@ -879,7 +879,7 @@ def send_email_notification(subject, body_html, model_name="DeepSeek"):
         # 创建邮件
         msg = MIMEMultipart('alternative')
         # 根据model_name添加前缀（映射：deepseek->DeepSeek, qwen->Qwen）
-        display_name = "DeepSeek" if "deepseek" in model_name.lower() else "Qwen" if "qwen" in model_name.lower() else model_name
+        display_name = "DeepSeek" if "deepseek" in model_name.lower() else "Deepseek" if "deepseek" in model_name.lower() else model_name
         print(f"[邮件通知] 映射后display_name: {display_name}")
         msg['Subject'] = f"[{display_name}] {subject}"
         print(f"[邮件通知] 最终邮件主题: {msg['Subject']}")
@@ -13163,8 +13163,10 @@ System has learned from {trades_count} completed trades
 💡 These parameters are auto-adjusted by AI based on historical performance. Strictly follow them to improve win rate.
 """
     
-    # 🆕 V7.6.5: 构建币种特性信息
-    symbol_characteristics_info = "\n=== 🪙 SYMBOL-SPECIFIC CHARACTERISTICS (V7.6.5) ===\n\n"
+    # 🆕 币种特性信息（表格化，节省~30%tokens）
+    symbol_characteristics_info = "\n=== 🪙 SYMBOL CHARACTERISTICS ===\n\n"
+    symbol_characteristics_info += "| Symbol | Vol | Liquidity | Style | Hold | FakeBO Risk |\n"
+    symbol_characteristics_info += "|--------|-----|-----------|-------|------|-------------|\n"
     for data in market_data_list:
         if data is None:
             continue
@@ -13172,82 +13174,35 @@ System has learned from {trades_count} completed trades
         profile = SYMBOL_PROFILES.get(symbol, {})
         if profile:
             coin_name = symbol.split("/")[0]
-            symbol_characteristics_info += f"""**{coin_name}** - {profile.get('name', coin_name)}
-- Volatility: {profile.get('volatility', 'UNKNOWN')} | Liquidity: {profile.get('liquidity', 'UNKNOWN')}
-- Trend Style: {profile.get('trend_style', 'UNKNOWN')}
-- Recommended Holding: ~{profile.get('recommended_holding_hours', 4)} hours
-- False Breakout Risk: {profile.get('false_breakout_rate', 'UNKNOWN')}
-- Key Characteristics: {profile.get('characteristics', 'N/A')}
-
-"""
+            vol = profile.get('volatility', 'N/A')[:4]  # 缩写
+            liq = profile.get('liquidity', 'N/A')[:4]
+            style = profile.get('trend_style', 'N/A')[:6]
+            hold_hrs = profile.get('recommended_holding_hours', 4)
+            fake_bo = profile.get('false_breakout_rate', 'N/A')[:4]
+            symbol_characteristics_info += f"| {coin_name:6s} | {vol:3s} | {liq:4s} | {style:6s} | {hold_hrs}h | {fake_bo:4s} |\n"
+    symbol_characteristics_info += "\n"
     
-    # 🆕 V7.9: 双模式交易策略说明
+    # 双模式策略（表格化精简）
     dual_mode_info = """
-=== 🎯 DUAL-MODE TRADING STRATEGY (V7.9 - Critical Update) ===
+=== 🎯 DUAL-MODE STRATEGY ===
 
-The system now supports TWO distinct trading modes with different holding periods and TP/SL strategies:
+| Mode | Holding | Signals | R:R | TP/SL Base | Best For |
+|------|---------|---------|-----|------------|----------|
+| SCALPING | 15-45min | Pin Bar/Engulfing/TST @ key level | ≥1.5 | 15m ATR | Range, reversals |
+| SWING | 2-24h | Inception/Pullback/BOF/BPB | ≥2.5 | 1H S/R | Trends, momentum |
 
-**【SCALPING Mode】** - Quick In/Out (15-45 minutes)
-Suitable Signals:
-- Pin Bar + at key support/resistance
-- Engulfing pattern near key levels
-- Extreme volume spike (>3x) + high volatility
-- YTC-TST (Test signal with momentum stall)
-
-Characteristics:
-- Expected Holding: 15-45 minutes
-- TP/SL: Based on 15m ATR (tight stops, quick targets)
-- Target R:R: 1.5:1
-- Exit Strategy: Sensitive - any counter signal triggers exit
-- Best For: Range-bound markets, fast reversals
-
-**【SWING Mode】** - Medium-Term (2-24 hours)
-Suitable Signals:
-- Trend Inception (Strong/Moderate)
-- Simple Pullback completion
-- YTC-BOF/BPB (structural breakout signals)
-- YTC-PB with weakness≥0.85
-- Consecutive breakouts (6+ candles)
-
-Characteristics:
-- Expected Holding: 2-24 hours
-- TP/SL: Based on 1h S/R levels (wider stops, larger targets)
-- Target R:R: 2.5:1+
-- Exit Strategy: Patient - requires multi-timeframe confirmation
-- Best For: Trending markets, riding momentum
-
-**Decision Framework:**
-When you identify a signal, explicitly state:
-1. Signal Type: Scalping or Swing
-2. Rationale: Why this signal fits the chosen mode
-3. Risk Management: Matching TP/SL strategy
-
-Example:
-"Signal Type: Swing
-Rationale: Strong Trend Inception with 4H+1H alignment, this is a wave-riding opportunity not a quick bounce
-    Expected Holding: 4-6 hours
-TP Target: 1H resistance level"
-
-**CRITICAL**: Don't use Swing strategy for reversal signals, and don't use Scalping strategy for trend signals. Mismatching mode and signal type leads to premature exits or excessive risk.
+**Decision Rule**: Scalping for quick reversals at levels, Swing for trend continuation. Explicitly state mode + rationale in your reason field.
     """
     
-    # 🆕 V7.6.5: 构建信号分级提示
+    # 信号分级（表格化）
     signal_tier_info = """
-=== 📊 SIGNAL QUALITY TIERS (V7.6.5) ===
+=== 📊 SIGNAL TIERS ===
 
-**HIGH Tier** (Score ≥75, Swing signals):
-- Strategy: Aggressive (R:R 2.5:1, Position 1.3x base)
-- Rationale: High-quality trend signals with multi-timeframe confirmation
-
-**MEDIUM Tier** (Score 70-74, Scalping signals):
-- Strategy: Quick (R:R 1.5:1, Position 1.0x base)
-- Rationale: Fast reversal opportunities at key levels
-
-**LOW Tier** (Score <70):
-- Strategy: PASS - Do not trade
-- Rationale: Insufficient signal quality
-
-**IMPORTANT**: The system will automatically apply mode-specific TP/SL. Focus on correctly identifying signal type (Scalping vs Swing).
+| Tier | Score | Mode | R:R | Position | Action |
+|------|-------|------|-----|----------|--------|
+| HIGH | ≥75 | Swing | 2.5:1 | 1.3x base | Multi-TF trend confirmation |
+| MID | 70-74 | Scalping | 1.5:1 | 1.0x base | Reversal at key level |
+| LOW | <70 | - | - | - | PASS (insufficient quality) |
 """
     
     prompt = f"""
@@ -13287,519 +13242,102 @@ Auto-adjustment rules:
 - Frequent stop-outs → Widen stop-loss buffer
 - High risk signals → Require 5/5 indicator consensus
 
-=== 3-LAYER TREND ALIGNMENT FRAMEWORK V6.5 ===
+=== 3-LAYER FRAMEWORK ===
 
-**Mode 1: Trend Following (Recommended)**
-- Condition: 4H + 1H + 15m aligned
-- Position: 60-70%, Hold: 6-24h, R:R ≥1.5
+| Layer | TF | Weight | Purpose | Key Rule |
+|-------|----|----|---------|----------|
+| 1 | 4H | 40% | Primary trend | Bull/Bear alignment required |
+| 2 | 1H | 30% | TP/SL levels | SL=S/R±ATR×0.5, TP=S/R-ATR×1.0, R:R≥{learning_config['global']['min_risk_reward']} |
+| 3 | 15m | 20% | Entry timing | Consensus≥{learning_config['global']['min_indicator_consensus']}/5 + PA confirmation |
 
-**Mode 2: Counter-Trend (Cautious)**
-- Condition: 4H opposite to 1H+15m
-- Position: 30-40%, Hold: 1-4h, R:R ≥2.0
+**Modes**: Mode1 (all aligned, 60-70% pos, 6-24h) | Mode2 (4H vs 1H+15m, 30-40% pos, 1-4h, R:R≥2.0)
 
-**Layer 1 - 4H Trend** (40% weight, see trend_4h field)
-- Bullish/Bearish → Seek aligned trades only
-- Weakening → Reduce positions
+**🎯 LESSON APPLICATION (Match Mode to Lesson)**
 
-**Layer 2 - 1H Trend & Stops** (30% weight, see trend_1h/mid_term)
-- Stop-Loss: 1H support/resistance ± ATR14×0.5
-- Take-Profit: 1H resistance/support - ATR14×1.0
-- Required R:R ≥ {learning_config['global']['min_risk_reward']}
-- **Filter trend exhaustion**: 4H bull + 1H bear = possible reversal → wait or Mode 2
+| Lesson Type | Scalping Response | Swing Response |
+|-------------|-------------------|----------------|
+| "TP Too Conservative" | IGNORE (quick exits by design) | APPLY: TP×1.5-2, use 4H levels |
+| "High SL Rate" | APPLY cautiously (tighter entry @ exact S/R) | APPLY strongly (score≥75, perfect alignment) |
+| "Premature Exit" | IGNORE (early exits expected) | APPLY: ≥2h holding, use 1H S/R |
 
-**🎯 EXIT TIMING OPTIMIZATION (V7.9 - Apply Yesterday's Lessons by Signal Type):**
+**Tag lessons**: [Scalping Lesson] or [Swing Lesson] in your reason field. Mismatching mode causes confusion.
 
-【V7.9 CRITICAL】Yesterday's Lessons must be applied according to signal type!
+**Entry Checklist** (LONG when 4H bull, SHORT when 4H bear):
+- Indicator Consensus: EMA20 vs EMA50, MACD>/<0, RSI 30-70, Vol>120%, ATR moderate
+- PA Confirmation (Highest priority): Support/Resistance + Pin Bar/Engulfing OR Simple Pullback completion
+- Position Context: at_resistance→Short, at_support→Long, neutral→Follow 4H
 
-If you see exit lessons in "Yesterday's Lessons":
+=== PRICE ACTION PATTERNS ===
 
-**For SCALPING Signals (15-45min):**
-1. **"TP Set Too Conservative"** → ⚠️ **IGNORE for Scalping**
-   - Scalping needs quick profit-taking by design
-   - Don't expand TP beyond 15m resistance/support
-   - Reason: Scalping is about speed, not greed
+| Pattern | Priority | Conditions | Position | Action |
+|---------|----------|------------|----------|--------|
+| **Trend Inception (Strong)** | 1 (Highest) | BO candle (body>70%, range>1.5%) + 3 consecutive + 4H align | 50% (Max) | Enter immediately |
+| **Simple Pullback** | 2 (Best R:R) | 1-3 candles, retrace<38.2%, recover>50% | 47.5% | Enter immediately |
+| **Extreme Volume** | 3 | Vol≥3× + break high | 48.75% | Enter (win rate >80%) |
+| **Trend Inception (Mod)** | 4 | BO candle (body>70%) only | 37.5% | Wait confirm or pullback |
+| **Breakout Marubozu** | 5 | Body>60%, break high, vol>1.5× | 42.5% | Enter even 4H neutral |
+| **Complex Pullback** | 6 | Retrace 38-62%, consol<3% | 25% | WAIT for breakout |
+| **Consecutive Candles** | 7 | 3+ same direction | 35% | Chase entry |
+| **Pin Bar Bounce** | 8 | Wick>2×body + bounce>1.5% | 32.5% | Long @ support |
+| **⚠️ Exhaustion (High)** | EXIT NOW | Wick>60% OR Engulfing reversal | - | Close regardless P&L |
+| **⚠️ Exhaustion (Mod)** | EXIT Consider | Doji @ high/low OR body shrink>50% | - | Close if profitable |
 
-2. **"High SL Rate"** → ✓ **APPLY with caution**
-   - Stricter entry at key reversals
-   - Demand Pin Bar/Engulfing AT exact S/R
-   - But don't raise score requirement too high (Scalping naturally lower score)
-   - Reason: "Applying Scalping lesson: tighter entry zones"
+**Priority**: Exhaustion Exit > Strong Inception > Simple Pullback > Extreme Vol > Others
+**Rules**: (1) Inception beats all; (2) Pullbacks = best R:R; (3) Exhaustion = forced exit; (4) Complex pullback = WAIT; (5) No FOMO after rally
 
-3. **"Premature Exit"** → ⚠️ **IGNORE for Scalping**
-   - Scalping is supposed to exit early!
-   - Don't hold beyond expected 15-45min window
-   - Reason: Signal type mismatch, not applicable
+=== YTC STRUCTURAL SIGNALS ===
 
-**For SWING Signals (2-24h):**
-1. **"TP Set Too Conservative"** → ✓ **STRONGLY APPLY**
-   - Expand TP by 1.5-2x normal distance
-   - Set TP beyond next S/R level (target 2nd resistance)
-   - Use 4H levels instead of 1H levels
-   - Reason: "Applying Swing lesson: let winners run longer"
+**⚠️ Can override 4H trend when S/R≥4 OR weakness≥0.85**
 
-2. **"High SL Rate"** → ✓ **STRONGLY APPLY**
-   - Demand perfect trend alignment (4H+1H+15m)
-   - Only enter at pullback completion, not mid-pullback
-   - Require signal score ≥75 for Swing entries
-   - Reason: "Applying Swing lesson: stricter confluence"
+| Signal | Score | Condition | Position | Trapped Psychology |
+|--------|-------|-----------|----------|--------------------|
+| PB | 92 | weakness≥0.85 + trend align | 35-45% | Fading reversal traders |
+| BOF/BPB/TST | 85-90 | S/R≥4 + structure confirm | 20-25% (counter) | Fading breakout/test chasers |
+| CPB | 78 | Retrace 38-62%, consol | WAIT | N/A - needs BO confirm |
 
-3. **"Premature Exit / early exit -X%"** → ✓ **STRONGLY APPLY**
-   - Use 1H S/R for TP/SL, not 15m
-   - Give trade at least 2 hours before considering early exit
-   - Check if yesterday's exit was at key level
-   - Reason: "Applying Swing lesson: more patience for wave completion"
+**YTC Fields**: ytc_signal{signal_type, direction, strength, sr_strength, weakness_score, entry_price(LWP)}  
+**Momentum Slope**: >0.5=strong bull, -0.1~0.1=stall(TST), <-0.5=strong bear
 
-**LESSON TAGGING (V7.9):**
-- When applying a lesson, explicitly tag: `[Scalping Lesson]` or `[Swing Lesson]`
-- Example: "Entry at support - [Swing Lesson: stricter confluence after yesterday's SL]"
-    - If lesson type mismatches signal type, explicitly state: "[Ignored - wrong signal type]"
+**Decision Rules**:
+1. Score≥85: Enter (Counter-trend: R:R≥2.0, pos 20-25% | Trend-following: R:R≥1.5, pos 35-45%)
+2. Score<85 (CPB): WAIT for breakout
+3. LWP Check: current_price vs LWP >0.5% → CHASING, REJECT (No FOMO)
+4. Priority: YTC PB(92) > YTC BOF/BPB/TST(85-90) > Trend Inception(88-90)
 
-**IMPORTANT**: In your `reason` field, state which lesson you applied and verify signal type match. Misapplying lessons across signal types causes strategy confusion.
+=== PRIORITY HIERARCHY ===
 
-**Layer 3 - 15m Entry** (20% weight, see trend_15m)
-- Indicator consensus ≥ {learning_config['global']['min_indicator_consensus']}/5 (EMA, MACD, RSI, Volume, ATR)
-- Price action confirmation required
+1. YTC (S/R≥4) > 4H Trend | 2. PA @ Key Level > Indicators | 3. 4H Trend > 15m | 4. Reversal PA > TP | 5. In Profit + Counter Signal → Exit
 
-**LONG Entry Signals (when 4H bullish):**
-  1. EMA20 > EMA50 ✓
-  2. MACD histogram > 0 ✓
-  3. RSI14: 30-70 ✓
-  4. Volume surge (ratio >120%) ✓
-  5. ATR moderate ✓
+=== SL/TP LOGIC (1H Based) ===
 
-**SHORT Entry Signals (when 4H bearish):**
-  1. EMA20 < EMA50 ✓
-  2. MACD histogram < 0 ✓
-  3. RSI14: 30-70 ✓
-  4. Volume surge (ratio >120%) ✓
-  5. ATR moderate ✓
+**LONG**: SL = 1H support - ATR×0.5, TP = 1H resistance - ATR×1.0  
+**SHORT**: SL = 1H resistance + ATR×0.5, TP = 1H support + ATR×1.0  
+**If S/R unclear**: SL = Entry ± ATR×{learning_config['global']['atr_stop_multiplier']:.1f}, calc TP from R:R  
+**Validation**: R:R≥{learning_config['global']['min_risk_reward']:.1f}, else reject
 
-**Price Action Final Confirmation (Highest priority):**
-- **LONG signals:**
-  * Support + Bullish Pin Bar = Strong buy ✓✓✓
-  * Support + Bullish Engulfing = Strong buy ✓✓✓
-  * Simple pullback entry = Optimal timing ✓✓✓
-  
-- **SHORT signals:**
-  * Resistance + Bearish Pin Bar = Strong sell ✓✓✓
-  * Resistance + Bearish Engulfing = Strong sell ✓✓✓
-  * Simple pullback entry = Optimal timing ✓✓✓
+=== ENTRY/EXIT CONDITIONS ===
 
-- **15m Position Check:**
-  * at_resistance: Short opportunity / Reduce longs
-  * at_support: Long opportunity / Reduce shorts
-  * neutral: Follow Layer 1 + Layer 2 signals
+**Entry**: (1) 4H trend align (2) 15m consensus≥{learning_config['global']['min_indicator_consensus']}/5 (3) PA + safe location (support/resistance)  
+**HIGH**: Support/Resistance + Pin/Engulfing + 5/5 consensus
 
-=== ENHANCED PRICE ACTION PATTERNS (V5.0: Pullback & Trend Inception) ===
+**Exit Levels**:
+- **L1 (Close NOW)**: SL triggered (<1%) | 4H reversal | Loss>2% + L2+L3 reversed
+- **L2 (Early TP)**: TP<10% + reversal PA | Profit>80% TP + MACD shrink + RSI extreme | TP<2%
+- **L3 (HOLD)**: TP>10% normal | Small profit<3% no counter | Single indicator weak
 
-🚀 **TREND INCEPTION - Strongest Entry (Priority 1)**
+=== ANALYSIS WORKFLOW ===
 
-1. **Strong Trend Inception** ✓✓✓✓ (Highest priority)
-   - Signal: 🚀🚀🚀 "Trend Inception (LONG/SHORT) Breakout+Consecutive+4H Confirmed"
-   - Conditions:
-     * Strong breakout candle (body >70%, range >1.5%)
-     * 3 consecutive same-direction candles before
-     * 4H trend confirmation
-   - Action: **Enter immediately - Best entry point!**
-   - Position: Auto-allocated 50% (Max)
-   - Rationale: Triple confirmation, trend just started, optimal risk-reward
+For each symbol: [L1] 4H trend → [L2] 15m consensus (X/5) → [L3] PA + location → [SL/TP] R:R calc → [Decision] + rationale
 
-2. **Moderate Trend Inception** ✓✓✓
-   - Signal: 📈 "Possible Trend Inception (LONG/SHORT) Strong Breakout Candle"
-   - Conditions: Strong breakout candle (body >70%, range >1.5%)
-   - Action: Wait for next candle confirmation or enter on simple pullback
-   - Position: Auto-allocated 37.5%
-   - Rationale: Potential inception, safer with confirmation
+=== LEVERAGE ===
 
-🎯 **PULLBACK ENTRY - Second-Best Entry (Priority 2)**
-
-3. **Simple Pullback Entry** ✓✓✓ (Best risk-reward)
-   - Signal: 🎯 "Simple Pullback (Retraced X%, Recovered Y%) Optimal Entry"
-   - Conditions:
-     * 1-3 pullback candles within trend
-     * Retracement <38.2%
-     * Recovery >50%
-   - Action: **Enter immediately - Best timing after pullback!**
-   - Position: Auto-allocated 47.5% (Near max)
-   - Rationale: Entry within trend, tight stop, high R:R
-
-4. **Complex Pullback - Wait for Breakout** ✓✓
-   - Signal: 📊 "Complex Pullback (Retraced X%, Consolidating Y%) Wait Breakout"
-   - Conditions:
-     * Retracement 38.2%-61.8%
-     * Narrow consolidation formed (<3%)
-   - Action: **Wait for breakout above consolidation range**
-   - Position: Auto-allocated 25% (Conservative)
-   - Rationale: Clearer direction after breakout, safer
-
-⚠️ **TREND EXHAUSTION - Forced Exit (Highest Priority)**
-
-5. **High-Risk Exhaustion** ⚠️⚠️⚠️
-   - Signal: ⚠️⚠️⚠️ "Bullish/Bearish Exhaustion (XXX) Close NOW"
-   - Conditions:
-     * Long upper/lower wick (wick >60%)
-     * Engulfing reversal pattern
-   - Action: **Close immediately, regardless of P&L!**
-   - Rationale: Reversal signal, extreme risk to hold
-
-6. **Moderate Exhaustion** ⚠️
-   - Signal: ⚠️ "Bullish/Bearish Exhaustion (XXX) Consider Closing"
-   - Conditions:
-     * Doji at high/low
-     * Momentum decay (candle body shrinks >50%)
-   - Action: Close if profitable, watch 1-2 candles if losing
-   - Rationale: Trend may end, protect profit first
-
-🔥 **OTHER KEY PATTERNS (Priority 3):**
-
-7. **Extreme Volume Breakout** ✓✓✓✓
-   - Conditions: Volume ≥3× average + Break previous high + Strong bullish candle
-   - Signal Mark: "💥 Extreme Volume"
-   - Action: **Enter immediately regardless of other indicators**
-   - Position: Auto-allocated 48.75%
-   - Rationale: Historical win rate >80%
-
-8. **Breakout Marubozu** ✓✓✓
-   - Conditions: Body >60% total height + Break previous high + Volume >1.5×
-   - Signal Mark: "🚀 Breakout Marubozu"
-   - Action: Enter even if 4H neutral
-   - Position: Auto-allocated 42.5%
-   - Rationale: Strong breakout, high continuation probability
-
-9. **Consecutive Bullish Candles** ✓✓
-   - Conditions: 3+ consecutive bullish candles, each close > previous
-   - Signal Mark: "📈 Consecutive N Bullish"
-   - Action: Chase entry, trend continues
-   - Position: Auto-allocated 35%
-   - Rationale: Trend formed, momentum continues
-
-10. **Pin Bar + Quick Bounce** ✓✓
-    - Conditions: Lower wick >2× body + Next candle bounces >1.5%
-    - Signal Mark: "🔄 Pin Bar Quick Bounce"
-    - Action: Long at support
-    - Position: Auto-allocated 32.5%
-    - Rationale: Panic sell followed by strong bounce, solid buying
-
-🎯 **Decision Priority Hierarchy (V5.0):**
-```
-EXIT: Exhaustion (Forced) > 
-ENTRY: Strong Trend Inception (✓✓✓✓) > Simple Pullback (✓✓✓) > Extreme Volume (✓✓✓✓) 
-  > Moderate Inception (✓✓✓) > Breakout Marubozu (✓✓✓) > Support Pin Bar (✓✓✓) 
-  > Complex Pullback Breakout (✓✓) > Consecutive Candles (✓✓) > Pin Bar Bounce (✓✓) > Indicators (✓)
-```
-
-⚠️ **V5.0 KEY STRATEGY UPDATES:**
-1. **Trend Inception > All**: See 🚀🚀🚀 → Enter full position
-2. **Pullbacks are Gold**: Simple pullback entry = lowest risk, highest R:R
-3. **Exhaustion Must Exit**: See ⚠️⚠️⚠️ → Close immediately, protect profit
-4. **Complex Pullback Wait**: Don't enter early, wait for breakout confirmation
-5. **No FOMO**: After strong inception rally, wait for simple pullback
-
-=== YTC STRUCTURAL SIGNALS (V7.6 COMPLETE LAYER) ===
-
-**⚠️ CRITICAL: YTC signals can override 4H trend when S/R strength ≥4 OR weakness_score ≥0.85**
-
-Market data provides ytc_signal field with BOF/BPB/PB/TST/CPB detection. If detected:
-
-📊 **YTC Signal Scoring (integrate with existing patterns):**
-
-| YTC Signal | Description | Score (Max) | Key Conditions | Trapped Traders (Psychological Edge) |
-|------------|-------------|-------------|----------------|--------------------------------------|
-| **PB (Pullback)** | Weak pullback in strong trend, optimal re-entry | **92** | weakness_score ≥0.85 + Aligned Trend | **Fading Trapped Reversal Traders**: Sellers/Buyers who entered against the main trend during the weak pullback are about to be stopped out. |
-| **BOF (Breakout Fail)** | Breakout immediately reverses (long wick/engulfing) | **90** | S/R ≥4 + Immediate Rejection | **Fading Trapped Breakout Traders**: Those who chased the failed breakout are now forced to exit for a loss. |
-| **BPB (Breakout Pullback)** | Strong break + weak pullback to polarity level | **90** | S/R ≥4 + Polarity Switch + Weak Pullback | **Fading Trapped Counter-Faders**: Traders attempting to fade the successful breakout are trapped by the weakness of their own move. |
-| **TST (Test)** | Weak test of strong S/R + momentum stalls | **90** | S/R ≥4 + Momentum Stall (Slope ~ 0) | **Fading Late Chasers**: Traders who chased the exhausted move into the strong S/R are trapped by the immediate stall. |
-| **CPB (Complex Pullback)** | Deep pullback (38.2%-61.8%), consolidating | **78** | Observation only | **N/A - Wait Mode**. Needs confirmation of a failed breakout of the consolidation range. |
-
-**YTC Signal Structure (from market data):**
-```python
-ytc_signal = {{
-    'signal_type': 'BOF|BPB|PB|TST|CPB',
-    'direction': 'LONG|SHORT|WAIT',
-    'strength': 3-5,  // Signal quality
-    'entry_price': float,  // LWP reference (wholesale price)
-    'rationale': str,
-    'sr_strength': int,  // 1-5 (for structural signals BOF/BPB/TST)
-    'weakness_score': float,  // 0.0-1.0 (for PB/CPB pullbacks)
-    'trapped_traders': str  // Psychology: Who is trapped and why
-}}
-```
-
-**Momentum Slope Interpretation:**
-```
-price_action.momentum_slope_15m: Linear regression slope (5-period)
-- Value >0.5: Strong bullish momentum (supports LONG)
-- Value 0.1~0.5: Moderate bullish momentum
-- Value -0.1~0.1: Stalled/ranging (supports TST signal)
-- Value -0.5~-0.1: Moderate bearish momentum
-- Value <-0.5: Strong bearish momentum (supports SHORT)
-```
-
-**Decision Logic for YTC Signals:**
-
-1. **If ytc_signal detected AND Score ≥ 85:**
-   - **Entry Mode**: Use this signal as the primary entry point
-   - **Counter-Trend Override**: If entry is against 4H trend:
-     * Verify R:R ≥ 2.0 (stricter than normal ≥1.5)
-     * Reduce position to 20-25% (vs normal 30-40%)
-     * Rationale MUST explain why S/R strength allows the override
-   - **Trend-Following (PB with weakness≥0.85)**:
-     * BEST entries when aligned with 4H trend
-     * Normal position sizing 35-45%
-     * Standard R:R ≥1.5
-     * Rationale: "YTC TTF Pullback, weakness={{weakness_score}}, optimal re-entry"
-
-2. **If ytc_signal detected AND Score < 85 (e.g., CPB):**
-   - **Action**: HOLD or WAIT for next candle
-   - **Do NOT enter**: Complex pullback needs breakout confirmation
-
-3. **Signal Scoring Integration:**
-   - **PB @ weakness≥0.85**: Score = 92 (HIGHEST - Main YTC scenario)
-   - BOF @ strength=5: Score = 90
-   - BPB @ strength=5: Score = 90
-   - TST @ strength=5: Score = 90
-   - PB @ weakness=0.7-0.85: Score = 87
-   - BOF @ strength=3-4: Score = 85
-   - BPB @ strength=4: Score = 85
-   - TST @ strength=4: Score = 85
-   - CPB: Score = 78 (Observation only, no entry)
-
-4. **Priority vs Existing Patterns:**
-   - YTC PB (weakness≥0.85) = 92 points **(HIGHEST priority in trend)**
-   - YTC BOF/BPB/TST (S/R≥4) = 85-90 points
-   - Original Trend Inception = 88-90 points
-   - YTC signals compete with all existing patterns
-   - **Choose highest scoring signal overall**
-
-**LWP Reference Price Handling (Strict Wholesale):**
-
-LWP is the ideal entry price (Last Wholesale Price). Use current_price to check:
-
-- **If current_price (bid/ask) is > 0.5% worse than LWP:**
-  * For LONG: current_price > lwp_long * 1.005
-  * For SHORT: current_price < lwp_short * 0.995
-  * **Mark as "CHASING" and REJECT the trade (No FOMO)**
-  * Rationale: "Chasing price beyond wholesale level, waiting for better entry"
-
-- **If current_price within 0.5% of LWP:**
-  * Mark as "OPTIMAL" → proceed with normal position
-  * This is the best execution quality
-
-**CRITICAL**: Never enter a YTC signal if chasing price. Wait for the next setup.
-
-**LWP Violation Protocol (No FOMO):**
-
-If entry price is marked as "CHASING" (more than 0.5% worse than LWP):
-- **Action**: HOLD (Wait for next setup)
-- **Rationale**: "Must avoid chasing price beyond wholesale level, violating the low-risk entry core tenet of YTC. Waiting for: [BPB signal / Next PB opportunity / Price return to LWP]"
-- **Alternative Strategy**: Monitor for:
-  * Next PB signal (if trend continues)
-  * BPB signal (if price returns to test the level)
-  * Better LWP opportunity on retracement
-
-**Example YTC Decision:**
-
-Scenario: BTC @ $110,000, resistance $110,500 (strength 5/5, polarity switched)
-- Price breaks resistance → immediately reverses (long wick 60%)
-- ytc_signal = BOF, direction=SHORT, strength=5
-- 4H trend = bullish (normally reject short)
-
-Decision:
-```
-✓ YTC BOF signal detected (score=90)
-✓ S/R strength 5/5 (allows override)
-✓ Calculated R:R = 2.3 (≥2.0 required)
-→ OPEN_SHORT 25% position (reduced from 40%)
-→ Rationale: "BOF突破$110,500失败，S/R强度5/5，逆4H趋势入场"
-```
-
-=== DECISION CONFLICT RESOLUTION (Priority Order) ===
-
-**Updated Priority (V7.5 with YTC):**
-
-1. **YTC Structural Signal (S/R≥4) > 4H Trend**
-   Ex1: BOF @ resistance strength=5 → Short (even if 4H bullish)
-   Ex2: BPB @ support strength=5 → Long (even if 4H bearish)
-   Condition: Must have R:R≥2.0 and reduce position to 20-25%
-
-2. **Price Action at Key Level > Technical Indicators**
-   Ex1: Resistance + Bearish Pin Bar → Short (even if indicators bullish)
-   Ex2: Support + Bullish Pin Bar → Long (even if indicators bearish)
-   
-3. **4H Trend > 15m Indicators** (降级但保留)
-   Ex1: 4H bearish + No YTC signal → Only seek shorts
-   Ex2: 4H bull + YTC BOF signal (S/R≥4) → Can short with reduced position
-   
-4. **Reversal Price Action > Take-Profit Target**
-   Ex: Before TP but engulfing reversal appears → Close immediately
-   
-5. **2+ Indicators Deteriorate > Continue Holding**
-
-6. **In Profit + Any Counter Signal → Protect Profit First**
-
-=== STOP-LOSS & TAKE-PROFIT LOGIC (V6.0: Using 1H Data) ===
-
-**Calculation Method** (Based on 1H S/R + 1H ATR14):
-
-**LONG Positions:**
-- Stop-Loss = 1H strong support - 1H ATR14×0.5 (tight buffer for strong support)
-- Take-Profit = 1H strong resistance - 1H ATR14×1.0 (exit early)
-- Required R:R ≥ {learning_config['global']['min_risk_reward']:.1f}:1
-
-**SHORT Positions:**
-- Stop-Loss = 1H strong resistance + 1H ATR14×0.5 (tight buffer for strong resistance)
-- Take-Profit = 1H strong support + 1H ATR14×1.0 (exit early)
-- Required R:R ≥ {learning_config['global']['min_risk_reward']:.1f}:1
-
-**When Key Levels Unclear:**
-- Stop-Loss = Entry ± 1H ATR14×{learning_config['global']['atr_stop_multiplier']:.1f}
-- Take-Profit = Reverse calculate from R:R
-
-**Why Use 1H Data?**
-1. ✅ More reliable S/R: 1H levels less prone to false breakouts
-2. ✅ Better stop buffer: Avoid 15m noise whipsaws
-3. ✅ Better R:R: Wider stop, more reasonable TP target
-4. ✅ Reduce stop-outs: 1H ATR reflects true volatility
-
-**Validation Required:**
-- R:R < {learning_config['global']['min_risk_reward']:.1f} → Reject entry
-- TP beyond resistance → Adjust or skip
-
-=== ENTRY CONDITIONS (All 3 Layers Must Pass) ===
-
-**LONG Conditions:**
-✓ Layer 1: 4H bullish trend
-✓ Layer 2: 15m bullish consensus ≥ {learning_config['global']['min_indicator_consensus']}/5
-✓ Layer 3: Bullish price action + Safe location (support or neutral)
-
-**SHORT Conditions:**
-✓ Layer 1: 4H bearish trend
-✓ Layer 2: 15m bearish consensus ≥ {learning_config['global']['min_indicator_consensus']}/5
-✓ Layer 3: Bearish price action + Safe location (resistance or neutral)
-
-**Bonus Upgrade to HIGH Signal:**
-- LONG: Support + Bullish Pin/Engulfing + 5/5 consensus
-- SHORT: Resistance + Bearish Pin/Engulfing + 5/5 consensus
-
-=== EXIT CONDITIONS (Any Trigger) ===
-
-**IMPORTANT: Trust Your Exit Plan!**
-- Stop-loss/Take-profit orders already set on exchange (hard protection)
-- Only exit early on **strong counter signals**
-- Give TP target some "patience", avoid frequent mind changes
-
-**Exit Priority Levels:**
-
-**Level 1: Must Close Immediately (Ignore TP)**
-1. Stop-loss triggered or imminent (distance <1%)
-2. 4H strong reversal (bull→bear / bear→bull + confirmed with strong candle)
-3. Loss >2% AND Layer 2 + Layer 3 both reversed
-
-**Level 2: Early TP (When Close to Target)**
-1. Distance to TP <10% + Layer 3 reversal signal (engulfing/Pin Bar)
-2. Profit >80% of TP + MACD shrinking + RSI overbought/oversold
-3. TP triggered or distance <2% (exchange order auto-fills)
-
-**Level 3: Continue Holding (Give Plan Time)**
-1. Distance to TP >10% and indicators normal → **HOLD, trust plan!**
-2. Small profit (<3%) without strong counter signal → **HOLD**
-3. Only single Layer 2 indicator weakens, Layer 1+3 normal → **HOLD**
-
-**LONG Exit Criteria** (by priority):
-- ✗ [Level 1] 4H turns bearish + confirmed with bearish candle
-- ✗ [Level 1] Loss >2% + MACD bearish + Break below EMA20 + Resistance bearish signal
-- ✗ [Level 2] Distance to TP <10% + Resistance bearish Pin/Engulfing
-- ✗ [Level 2] Profit >80% TP + RSI7 >75 + MACD shrinking
-- ✗ [Level 3] Stop/TP triggered (exchange auto-fills)
-- ✓ [HOLD] Otherwise: Continue holding, trust plan
-
-**SHORT Exit Criteria** (by priority):
-- ✗ [Level 1] 4H turns bullish + confirmed with bullish candle
-- ✗ [Level 1] Loss >2% + MACD bullish + Break above EMA20 + Support bullish signal
-- ✗ [Level 2] Distance to TP <10% + Support bullish Pin/Engulfing
-- ✗ [Level 2] Profit >80% TP + RSI7 <25 + MACD shrinking
-- ✗ [Level 3] Stop/TP triggered (exchange auto-fills)
-- ✓ [HOLD] Otherwise: Continue holding, trust plan
-
-=== ANALYSIS WORKFLOW (Must Be Complete) ===
-
-For each symbol, follow this structure:
-
-**Example 1: LONG Decision**
-```
-BTC Analysis:
-[Layer 1] 4H Trend = Bullish ✓ (Supports LONG)
-
-[Layer 2] 15m Bullish Indicators
-1. EMA20>EMA50: ✓
-2. MACD histogram>0: ✓
-3. RSI neutral(30-70): ✓
-4. Volume surge: ✗
-5. ATR normal: ✓
-→ Score 4/5 ✓
-
-[Layer 3] Price Action & Location
-- Pin Bar: Bullish Pin Bar ✓✓
-- Location: at_support ✓✓
-- Engulfing: None
-
-[Stop & TP]
-- Support: $108,500 / Resistance: $110,500
-- Stop: $108,375 / TP: $110,125
-- R:R: 1.72:1 ✓
-
-[Decision] OPEN_LONG (HIGH)
-```
-
-**Example 2: SHORT Decision**
-```
-ETH Analysis:
-[Layer 1] 4H Trend = Bearish ✓ (Supports SHORT)
-
-[Layer 2] 15m Bearish Indicators
-1. EMA20<EMA50: ✓
-2. MACD histogram<0: ✓
-3. RSI neutral(30-70): ✓
-4. Volume surge: ✓
-5. ATR normal: ✓
-→ Score 5/5 ✓✓
-
-[Layer 3] Price Action & Location
-- Pin Bar: Bearish Pin Bar ✓✓
-- Location: at_resistance ✓✓ (At resistance)
-- Engulfing: None
-
-[Stop & TP]
-- Resistance: $3,550 / Support: $3,480
-- Stop: $3,560 / TP: $3,485
-- R:R: 2.1:1 ✓✓
-
-[Decision] OPEN_SHORT (HIGH)
-```
-
-=== LEVERAGE SELECTION (1-5x Smart Adjustment) ===
-
-**Leverage adapts to signal quality:**
-
-**5x Leverage (Strongest):**
-- HIGH signal + R:R≥2.0 + 5/5 consensus + Key level (S/R)
-- Ex: Support + Bullish Pin + All 5 indicators ✓
-
-**4x Leverage (Strong):**
-- HIGH signal + R:R≥1.8 + 4/5 consensus
-- Ex: Key level + Engulfing + 4 indicators ✓
-
-**3x Leverage (Medium):**
-- MEDIUM signal + R:R≥1.5 + 3-4/5 consensus
-- Or HIGH signal but neutral location
-
-**2x Leverage (Weak):**
-- MEDIUM signal + R:R 1.5-1.8 + 3/5 consensus
-- Or barely qualified signal
-
-**1x Leverage (Weakest):**
-- LOW signal or R:R barely qualified (<1.6)
-- Or ranging market, unclear signal
+| Leverage | Signal | R:R | Consensus | Condition |
+|----------|--------|-----|-----------|-----------|
+| 5x | HIGH | ≥2.0 | 5/5 | @ Key S/R |
+| 4x | HIGH | ≥1.8 | 4/5 | Strong confluence |
+| 3x | MID/HIGH | ≥1.5 | 3-4/5 | Medium quality |
+| 2x | MID | 1.5-1.8 | 3/5 | Barely qualified |
+| 1x | LOW | <1.6 | <3/5 | Weak/ranging |
 
 **Calculation Formula:**
 Base leverage = 1x
@@ -13815,7 +13353,7 @@ Final leverage = min(sum, 5)
 === OUTPUT FORMAT (Strict JSON) ===
 
 ⚠️ **Field Priority (if space constrained):**
-1. **actions (Most Important)** - Must be complete with all trading decisions
+    1. **actions (Most Important)** - Must be complete with all trading decisions
 2. **risk_assessment** - Must be complete with overall risk assessment
 3. **analysis** - Must be complete with decision summary
 4. **思考过程** - As complete as possible, at minimum key symbols analysis; if space limited, can simplify but must include core decision logic
@@ -13844,7 +13382,7 @@ Final leverage = min(sum, 5)
             "ytc_signal_detected": false,  // YTC signal detected
             "ytc_signal_type": "NONE",  // BOF|BPB|PB|TST|CPB|NONE
             "sr_strength_used": 0,  // S/R strength (1-5, for BOF/BPB/TST)
-            "weakness_score": 0.0,  // Pullback weakness (0.0-1.0, for PB/CPB)
+                "weakness_score": 0.0,  // Pullback weakness (0.0-1.0, for PB/CPB)
             "trapped_traders": "",  // Psychology: who is trapped? (e.g., "Fading early sellers at pullback low")
             "lwp_reference": 0.0,  // LWP reference price
             "price_vs_lwp": "UNKNOWN",  // OPTIMAL|ACCEPTABLE|CHASING|UNKNOWN
@@ -13868,7 +13406,7 @@ While code executes as single position, AI should plan multi-part management:
 - **Part 2 (Trend Run)**: Target next major 4H S/R OR trail stop aggressively:
   * Use 15m structural moves (swing highs/lows) as trailing stops
   * Apply YTC SCRATCH logic: if momentum stalls >3 candles + no profit growth, exit remaining
-  * Let winners run until premise invalidates OR major HTF S/R hit
+      * Let winners run until premise invalidates OR major HTF S/R hit
 
 **KEY REMINDERS V5.5:**
 1. **Long & Short Equally**: In 4H bearish, actively seek SHORT, not just long
@@ -13922,7 +13460,7 @@ While code executes as single position, AI should plan multi-part management:
         }
     
     try:
-        # 🔧 优化System Prompt结构（利于DeepSeek后端缓存）
+        # 🔧 优化System Prompt结构（利于Qwen后端缓存）
         optimized_system_prompt = """You are a professional quantitative portfolio manager AI specializing in multi-asset analysis and capital allocation.
 
 Your core principles:
@@ -13932,8 +13470,8 @@ Your core principles:
 - Dynamically adjust positions to ensure total risk is controlled
 - Always respond in Chinese (中文)"""
         
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",  # DeepSeek模型（思考模式，提升复杂策略分析能力）
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",  # Qwen模型（思考模式，提升复杂策略分析能力）
             messages=[
                 {
                     "role": "system",
@@ -13942,7 +13480,7 @@ Your core principles:
                 {"role": "user", "content": prompt},
             ],
             stream=False,
-            max_tokens=16000,  # 🔧 从8K提升到16K，避免JSON被截断
+            max_tokens=2000,  # 🔧 Qwen限制：最大2000
         )
         
         result = response.choices[0].message.content
@@ -14756,7 +14294,7 @@ def calculate_signal_score_components(market_data, signal_type='scalping'):
 def calculate_signal_score(market_data):
     """
     【V8.0 重构】信号质量评分路由函数
-
+    
     根据信号类型，路由到不同的评分函数：
     - scalping → calculate_scalping_score()
     - swing → calculate_swing_score()
@@ -14823,7 +14361,7 @@ def _calculate_signal_score_v79_legacy(market_data):
         score = 50
         pa = market_data["price_action"]
         lt = market_data["long_term"]
-
+        
         # 1. 趋势发起（最高优先级）
         if pa.get("trend_initiation"):
             if (
@@ -14987,7 +14525,7 @@ def check_risk_budget(
             margin = (
                 position_value / pos.get("leverage", 1)
                 if pos.get("leverage", 1) > 0
-                else position_value
+                    else position_value
             )
             current_risk += margin
 
@@ -15204,7 +14742,7 @@ def check_time_invalidation(entry_time_str: str, max_hours: int = 24) -> bool:
     
     Args:
         entry_time_str: 开仓时间字符串
-        max_hours: 最大持仓小时数
+            max_hours: 最大持仓小时数
     
     Returns:
         bool: 是否时间失效
@@ -15282,7 +14820,7 @@ def request_ai_close_confirmation(symbol, position, market_data, invalidation_re
 - Exit sensitivity: LOW - ignore single-bar noise
 - Noise tolerance: HIGH - allow normal pullbacks within trend
 - Profit protection: Only exit if multi-timeframe (1H+4H) trend reverses
-- Time factor: If held <2 hours, give it more time to develop
+    - Time factor: If held <2 hours, give it more time to develop
 - Key levels: Only worry if breaking through support/resistance
     """
         
