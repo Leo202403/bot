@@ -12603,12 +12603,25 @@ def get_ohlcv_data(symbol):
         # 【V8.5.2新增】确保获取完整的15分钟K线数据
         # 在每个15分钟周期的第1分钟获取，确保上一个K线已完全形成
         from datetime import datetime
+        import time
+        
         current_time = datetime.now()
         current_minute = current_time.minute
         
-        # 如果不在正确的时机，打印警告（但仍然继续，避免阻塞）
+        # 如果不在正确的时机，等待到下一个正确时机
         if current_minute % 15 not in [0, 1]:
-            print(f"⚠️ {symbol}: 当前时间 {current_time.strftime('%H:%M')} 不是最佳获取时机（建议在每15分钟的第1分钟）")
+            # 计算需要等待的分钟数
+            next_target = ((current_minute // 15) + 1) * 15 + 1
+            if next_target >= 60:
+                next_target = 1
+            wait_minutes = (next_target - current_minute) % 60
+            
+            print(f"⏰ {symbol}: 当前时间 {current_time.strftime('%H:%M')} 不是最佳获取时机")
+            print(f"   等待 {wait_minutes} 分钟到下一个获取时机...")
+            
+            # 等待到正确时机（最多等待15分钟）
+            time.sleep(wait_minutes * 60)
+            print(f"✅ {symbol}: 已到达获取时机，开始获取数据")
         
         # === 15分钟K线数据（短期） ===
         # ccxt自带timeout机制，无需signal.alarm
