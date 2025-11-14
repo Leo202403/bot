@@ -8852,39 +8852,58 @@ def analyze_and_adjust_params():
                     print(f"[Bark调试] swing.performance是否为空: {not swing_perf_debug}")
             print(f"[Bark调试] ========== 调试结束 ==========\n")
             
+            # 【V8.5.1】优先使用scalping_optimization和swing_optimization的数据
+            scalp_opt = scalping_optimization if scalping_optimization else {}
+            swing_opt = swing_optimization if swing_optimization else {}
+            
+            # 尝试从v8321_insights读取（作为备选）
             if v8321_insights and ('scalping' in v8321_insights or 'swing' in v8321_insights):
-                # 使用V8.3.21的优化后预期数据
                 scalp_perf = v8321_insights.get('scalping', {}).get('performance', {})
                 swing_perf = v8321_insights.get('swing', {}).get('performance', {})
+            else:
+                scalp_perf = {}
+                swing_perf = {}
+            
+            # 检查是否有任何优化数据
+            has_scalp_data = scalp_opt or scalp_perf
+            has_swing_data = swing_opt or swing_perf
+            
+            if has_scalp_data or has_swing_data:
+                # 标题行
+                bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
+                bark_content_lines.append("")
+                bark_content_lines.append("📊 优化后预期收益:")
                 
-                if scalp_perf or swing_perf:
-                    # 标题行
-                    bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
-                    bark_content_lines.append("")
-                    bark_content_lines.append("📊 优化后预期收益:")
-                    
-                    # 超短线数据
-                    if scalp_perf:
+                # 超短线数据（优先使用scalp_opt）
+                if has_scalp_data:
+                    if scalp_opt:
+                        # 使用scalping_optimization的数据
+                        cap_rate = scalp_opt.get('new_capture_rate', 0)
+                        avg_profit = scalp_opt.get('new_avg_profit', 0) / 100  # 转为小数
+                    else:
+                        # 使用v8321_insights的数据
                         cap_rate = scalp_perf.get('capture_rate', 0)
                         avg_profit = scalp_perf.get('avg_profit', 0)
-                        bark_content_lines.append(f"⚡超短线: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
-                    
-                    # 波段数据
-                    if swing_perf:
+                    bark_content_lines.append(f"⚡超短线: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
+                
+                # 波段数据（优先使用swing_opt）
+                if has_swing_data:
+                    if swing_opt:
+                        # 使用swing_optimization的数据
+                        cap_rate = swing_opt.get('new_capture_rate', 0)
+                        avg_profit = swing_opt.get('new_avg_profit', 0) / 100  # 转为小数
+                    else:
+                        # 使用v8321_insights的数据
                         cap_rate = swing_perf.get('capture_rate', 0)
                         avg_profit = swing_perf.get('avg_profit', 0)
-                        bark_content_lines.append(f"🌊波段: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
-                    
-                    # 显示当前ROI参数
-                    bark_content_lines.append("")
-                    min_rr = config.get('global', {}).get('min_risk_reward', 'N/A')
-                    bark_content_lines.append(f"🎯 当前ROI: {min_rr}:1")
-                else:
-                    # V8.3.21数据存在但为空，使用历史数据
-                    bark_content_lines.append(f"胜率{win_rate*100:.0f}% 盈亏比{win_loss_ratio:.1f}")
-                    bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
+                    bark_content_lines.append(f"🌊波段: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
+                
+                # 显示当前ROI参数
+                bark_content_lines.append("")
+                min_rr = config.get('global', {}).get('min_risk_reward', 'N/A')
+                bark_content_lines.append(f"🎯 当前ROI: {min_rr}:1")
             else:
-                # 没有V8.3.21数据，使用历史统计数据
+                # 没有任何优化数据，使用历史统计数据
                 bark_content_lines.append(f"胜率{win_rate*100:.0f}% 盈亏比{win_loss_ratio:.1f}")
                 bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
             
