@@ -231,6 +231,16 @@ def calculate_actual_profit_batch(
                     entry_price=entry_price,
                     signal_type=signal_type
                 )
+                
+                # 【V8.4.9.2调试】每100个机会打印一次样本
+                if i == 0 and len(batch_results) == 0:
+                    atr_pct = (atr / entry_price) * 100
+                    theoretical = objective_profit / atr_pct if atr_pct > 0 else 0
+                    print(f"\n  🔍 【动态ATR调试】样本:")
+                    print(f"     理论利润: {objective_profit:.2f}%")
+                    print(f"     ATR: {atr:.4f} ({atr_pct:.2f}%)")
+                    print(f"     理论倍数: {theoretical:.2f}")
+                    print(f"     实际倍数: {tp_multiplier:.2f} (60%={theoretical*0.6:.2f})")
             else:
                 # 使用固定ATR倍数
                 tp_multiplier = default_tp_multiplier
@@ -329,6 +339,20 @@ def add_actual_profit_to_opportunities(
         if use_dynamic_atr:
             ratio = (scalping_actual / scalping_objective * 100) if scalping_objective > 0 else 0
             print(f"     实际/理论: {ratio:.1f}%  【V8.4.8目标: 50-70%】")
+            # 【V8.4.9.2调试】统计ATR倍数分布
+            if len(scalping_opps) > 0:
+                sample_size = min(10, len(scalping_opps))
+                sample_opps = scalping_opps[:sample_size]
+                print(f"  🔍 【V8.4.9.2调试】前{sample_size}个机会的ATR倍数:")
+                for idx, opp in enumerate(sample_opps, 1):
+                    obj_profit = opp.get('objective_profit', 0)
+                    atr = opp.get('atr', 0)
+                    entry = opp.get('entry_price', 0)
+                    atr_pct = (atr / entry * 100) if entry > 0 else 0
+                    theoretical = (obj_profit / atr_pct) if atr_pct > 0 else 0
+                    target = theoretical * 0.6
+                    final = max(2.0, min(4.0, target))
+                    print(f"     [{idx}] 理论{obj_profit:.1f}% / ATR{atr_pct:.2f}% = {theoretical:.2f} → 60%={target:.2f} → 最终={final:.2f}")
     
     if swing_opps:
         swing_objective = np.mean([o['objective_profit'] for o in swing_opps])
@@ -340,6 +364,20 @@ def add_actual_profit_to_opportunities(
         if use_dynamic_atr:
             ratio = (swing_actual / swing_objective * 100) if swing_objective > 0 else 0
             print(f"     实际/理论: {ratio:.1f}%  【V8.4.8目标: 50-70%】")
+            # 【V8.4.9.2调试】统计ATR倍数分布
+            if len(swing_opps) > 0:
+                sample_size = min(10, len(swing_opps))
+                sample_opps = swing_opps[:sample_size]
+                print(f"  🔍 【V8.4.9.2调试】前{sample_size}个机会的ATR倍数:")
+                for idx, opp in enumerate(sample_opps, 1):
+                    obj_profit = opp.get('objective_profit', 0)
+                    atr = opp.get('atr', 0)
+                    entry = opp.get('entry_price', 0)
+                    atr_pct = (atr / entry * 100) if entry > 0 else 0
+                    theoretical = (obj_profit / atr_pct) if atr_pct > 0 else 0
+                    target = theoretical * 0.6
+                    final = max(3.0, min(6.0, target))
+                    print(f"     [{idx}] 理论{obj_profit:.1f}% / ATR{atr_pct:.2f}% = {theoretical:.2f} → 60%={target:.2f} → 最终={final:.2f}")
     
     return scalping_opps, swing_opps
 
