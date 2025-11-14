@@ -267,7 +267,7 @@ def define_param_grid_v8321(signal_type: str) -> Dict:
             'min_risk_reward': [1.5, 2.0, 2.5],
             
             # V8.3.21新增：入场过滤参数
-            'min_signal_score': [50, 60, 70, 80],  # 🔧 V8.3.21.14: 添加80以测试更高门槛
+            'min_signal_score': [40, 50, 60],  # 🔧 V8.3.21.16: 降低到[40,50,60]，因为很多盈利机会signal_score只有60
             'min_consensus': [0, 1, 2],  # 🔧 V8.3.21.15: 添加0以允许无指标共振但signal_score高的机会
             'min_kline_bullish_ratio': [0.6, 0.7],
             'min_price_chg_pct': [0.5, 1.0, 1.5],
@@ -284,7 +284,7 @@ def define_param_grid_v8321(signal_type: str) -> Dict:
             'min_risk_reward': [1.5, 2.0, 2.5],
             
             # V8.3.21新增：入场过滤参数
-            'min_signal_score': [50, 60, 70, 80],  # 🔧 V8.3.21.14: 添加80以测试更高门槛
+            'min_signal_score': [40, 50, 60],  # 🔧 V8.3.21.16: 降低到[40,50,60]，因为很多盈利机会signal_score只有60
             'min_consensus': [0, 1, 2],  # 🔧 V8.3.21.15: 添加0以允许无指标共振但signal_score高的机会
             'min_kline_bullish_ratio': [0.6, 0.7],
             'min_price_chg_pct': [0.5, 1.0, 1.5],
