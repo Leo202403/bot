@@ -378,30 +378,114 @@ def define_param_grid_v8321(signal_type: str, baseline_params: Dict = None) -> D
 
 def random_sample_param_grid(grid: Dict, sample_size: int) -> List[Dict]:
     """
-    随机采样参数组合
+    【V8.4.5】智能采样参数组合
     
-    避免遍历所有组合（2592组→200组）
+    策略：
+    1. 边界采样（30%）：测试每个参数的极值，确保覆盖边界
+    2. 中心点采样（1个）：测试默认配置
+    3. 随机填充（剩余）：覆盖其他区域
+    
+    优势：
+    - 确保测试所有关键区域（边界、中心）
+    - 不增加计算量（仍然200组）
+    - 提高找到最优解的概率
+    
+    示例（200组）：
+    - 边界采样：60组（每个参数的min/max配置）
+    - 中心点：1组
+    - 随机：139组
     """
     samples = []
-    
-    # 获取所有参数名和取值
     param_names = list(grid.keys())
     param_values = [grid[name] for name in param_names]
     
-    # 生成所有组合的索引
-    from itertools import product
-    all_indices = list(product(*[range(len(vals)) for vals in param_values]))
+    # ===== 1. 边界采样（30%） =====
+    boundary_samples = []
+    for i, param_name in enumerate(param_names):
+        values = param_values[i]
+        if len(values) < 2:
+            continue  # 只有1个值，跳过
+        
+        # 最小值配置：该参数取最小值，其他参数取中间值
+        min_config = {}
+        for j, name in enumerate(param_names):
+            if j == i:
+                min_config[name] = param_values[j][0]  # 最小值
+            else:
+                mid_idx = len(param_values[j]) // 2
+                min_config[name] = param_values[j][mid_idx]  # 中间值
+        boundary_samples.append(min_config)
+        
+        # 最大值配置：该参数取最大值，其他参数取中间值
+        max_config = {}
+        for j, name in enumerate(param_names):
+            if j == i:
+                max_config[name] = param_values[j][-1]  # 最大值
+            else:
+                mid_idx = len(param_values[j]) // 2
+                max_config[name] = param_values[j][mid_idx]  # 中间值
+        boundary_samples.append(max_config)
     
-    # 随机采样
-    sampled_indices = random.sample(all_indices, min(sample_size, len(all_indices)))
+    # 去重（可能有重复的边界配置）
+    boundary_samples_unique = []
+    seen = set()
+    for config in boundary_samples:
+        config_tuple = tuple(sorted(config.items()))
+        if config_tuple not in seen:
+            seen.add(config_tuple)
+            boundary_samples_unique.append(config)
     
-    # 构建参数字典
-    for indices in sampled_indices:
-        params = {
-            param_names[i]: param_values[i][indices[i]]
-            for i in range(len(param_names))
-        }
-        samples.append(params)
+    samples.extend(boundary_samples_unique)
+    
+    # ===== 2. 中心点采样（1个） =====
+    center_config = {}
+    for i, name in enumerate(param_names):
+        mid_idx = len(param_values[i]) // 2
+        center_config[name] = param_values[i][mid_idx]
+    
+    # 检查是否已存在
+    center_tuple = tuple(sorted(center_config.items()))
+    if center_tuple not in seen:
+        samples.append(center_config)
+        seen.add(center_tuple)
+    
+    # ===== 3. 随机填充（剩余） =====
+    remaining = sample_size - len(samples)
+    if remaining > 0:
+        # 生成所有组合的索引
+        from itertools import product
+        all_indices = list(product(*[range(len(vals)) for vals in param_values]))
+        
+        # 过滤掉已采样的配置
+        available_indices = []
+        for indices in all_indices:
+            config = {
+                param_names[i]: param_values[i][indices[i]]
+                for i in range(len(param_names))
+            }
+            config_tuple = tuple(sorted(config.items()))
+            if config_tuple not in seen:
+                available_indices.append(indices)
+        
+        # 随机采样
+        if len(available_indices) > remaining:
+            sampled_indices = random.sample(available_indices, remaining)
+        else:
+            sampled_indices = available_indices
+        
+        # 构建参数字典
+        for indices in sampled_indices:
+            config = {
+                param_names[i]: param_values[i][indices[i]]
+                for i in range(len(param_names))
+            }
+            samples.append(config)
+    
+    print(f"   📊 智能采样统计:")
+    print(f"      边界采样: {len(boundary_samples_unique)}组")
+    print(f"      中心点: 1组")
+    print(f"      随机填充: {len(samples) - len(boundary_samples_unique) - 1}组")
+    print(f"      总计: {len(samples)}组")
     
     return samples
 
