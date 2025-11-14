@@ -13483,7 +13483,7 @@ Your core principles:
                 {"role": "user", "content": prompt},
             ],
             stream=False,
-            max_tokens=2000,  # 🔧 Qwen限制：最大2000
+            max_tokens=4000,  # 🔧 DeepSeek-reasoner需要更多空间输出推理过程
         )
         
         result = response.choices[0].message.content
