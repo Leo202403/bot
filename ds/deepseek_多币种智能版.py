@@ -2726,6 +2726,9 @@ def save_market_snapshot_v7(market_data_list):
                 indicator_consensus += 1
             
             # 【V8.2】计算信号评分的各个维度（保存"原料"而非"成品"）
+            # 初始化signal_type（防止未定义错误）
+            signal_type = 'swing'
+            
             try:
                 # 【V8.3.10.3修复】确保data不为None
                 if not data or not isinstance(data, dict):
@@ -2740,7 +2743,7 @@ def save_market_snapshot_v7(market_data_list):
             except Exception as e:
                 print(f"⚠️ 计算评分维度失败: {e}")
                 components = {
-                    'signal_type': 'swing',
+                    'signal_type': signal_type,
                     'total_score': 0,
                     # 默认维度值
                     'volume_surge_type': '',
