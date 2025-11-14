@@ -92,34 +92,24 @@ def simulate_trade_execution(
         profit_pct = (entry_price - exit_price) / entry_price * 100
         profit_pct -= fee_pct * 2  # 开仓+平仓手续费
     
+    # 计算实际R:R（基于实际执行的止盈止损价格）
+    if direction == 'long':
+        tp_distance_pct = abs(tp_price - entry_price) / entry_price * 100
+        sl_distance_pct = abs(entry_price - sl_price) / entry_price * 100
+    else:  # short
+        tp_distance_pct = abs(entry_price - tp_price) / entry_price * 100
+        sl_distance_pct = abs(sl_price - entry_price) / entry_price * 100
+    
+    actual_rr = tp_distance_pct / sl_distance_pct if sl_distance_pct > 0 else 999
+    
     return {
         'actual_profit_pct': profit_pct,
+        'actual_risk_reward': actual_rr,
         'exit_reason': exit_reason,
         'exit_price': exit_price,
         'tp_price': tp_price,
         'sl_price': sl_price
     }
-
-
-def calculate_actual_risk_reward(opp: Dict, strategy_params: Dict) -> float:
-    """
-    计算基于ATR倍数的实际可实现R:R。
-    这个R:R反映了实际交易中的止盈止损比例，而不是理论上的支撑阻力位比例。
-    
-    Args:
-        opp: 机会字典
-        strategy_params: 策略参数
-    
-    Returns:
-        实际R:R值
-    """
-    # 获取ATR倍数
-    tp_multiplier = opp.get('ai_atr_tp_multiplier') or strategy_params.get('atr_tp_multiplier', 2.0)
-    sl_multiplier = opp.get('ai_atr_sl_multiplier') or strategy_params.get('atr_stop_multiplier', 1.5)
-    
-    # 计算实际R:R
-    actual_rr = tp_multiplier / sl_multiplier if sl_multiplier > 0 else 999
-    return actual_rr
 
 
 def calculate_actual_profit_batch(
@@ -160,14 +150,14 @@ def calculate_actual_profit_batch(
         for opp in batch:
             # 检查是否有future_data
             if 'future_data' not in opp:
-                # 没有未来数据，跳过
+                # 没有未来数据，使用理论值
                 opp['actual_profit_pct'] = opp.get('objective_profit', 0)
-                opp['actual_risk_reward'] = calculate_actual_risk_reward(opp, strategy_params)
+                opp['actual_risk_reward'] = opp.get('risk_reward', tp_multiplier / sl_multiplier)
                 opp['exit_reason'] = 'no_future_data'
                 batch_results.append(opp)
                 continue
             
-            # 模拟交易执行
+            # 模拟交易执行（会自动计算actual_risk_reward）
             result = simulate_trade_execution(
                 opp=opp,
                 future_data_summary=opp['future_data'],
@@ -175,12 +165,8 @@ def calculate_actual_profit_batch(
                 sl_multiplier=sl_multiplier
             )
             
-            # 计算实际R:R
-            actual_rr = calculate_actual_risk_reward(opp, strategy_params)
-            
-            # 更新机会数据
+            # 更新机会数据（result已包含actual_risk_reward）
             opp.update(result)
-            opp['actual_risk_reward'] = actual_rr
             batch_results.append(opp)
         
         updated_opps.extend(batch_results)
