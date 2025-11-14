@@ -17045,45 +17045,51 @@ def _execute_single_open_action_v55(
 
         # 计算数量
         amount = (planned_position * leverage) / entry_price
-        
-        # 🔧 V8.3.32.12: 检查最小名义价值（币安要求）
-        notional_value = planned_position * leverage  # 名义价值 = 仓位 × 杠杆
-        min_notional = 100  # 币安USDT合约最小名义价值通常是100U
-        
-        if notional_value < min_notional:
-            print(f"\n❌ 名义价值不足")
-            print(f"当前名义价值: ${notional_value:.2f} (${planned_position:.2f} × {leverage}x)")
-            print(f"最小要求: ${min_notional:.2f}")
-            print(f"建议: 提高仓位至 ${min_notional / leverage:.2f}U 或降低杠杆")
-            
-            # 发送Bark通知
-            send_bark_notification(
-                f"[{model_display_name}]{coin_name}开仓失败❌",
-                f"名义价值不足\n当前:{notional_value:.0f}U 要求:{min_notional}U\n建议仓位:{min_notional/leverage:.0f}U"
-            )
-            return
 
-        # 🔧 V7.7.0.14: 检查最小交易数量 + AI智能调整
+        # 🔧 V8.3.32.12 & V7.7.0.14: 检查最小要求（名义价值 + 交易数量）+ AI智能调整
         try:
             markets = exchange.load_markets()
             market_info = markets.get(symbol, {})
             min_amount = market_info.get('limits', {}).get('amount', {}).get('min', 0)
             
-            if min_amount and amount < min_amount:
-                min_value_usd = min_amount * entry_price / leverage
-                adjustment_pct = (min_value_usd - planned_position) / planned_position * 100
+            # 🆕 V8.3.32.12: 检查最小名义价值（币安要求）
+            notional_value = planned_position * leverage
+            min_notional = 100  # 币安USDT合约最小名义价值
+            needs_adjustment = False
+            adjustment_reason = ""
+            suggested_position = planned_position
+            
+            if notional_value < min_notional:
+                needs_adjustment = True
+                adjustment_reason = "名义价值不足"
+                suggested_position = min_notional / leverage
+                
+                print(f"\n⚠️ 名义价值不足")
+                print(f"当前名义价值: ${notional_value:.2f} (${planned_position:.2f} × {leverage}x)")
+                print(f"最小要求: ${min_notional:.2f}")
+                print(f"建议仓位: ${suggested_position:.2f}U")
+            
+            elif min_amount and amount < min_amount:
+                needs_adjustment = True
+                adjustment_reason = "交易数量不足"
+                suggested_position = min_amount * entry_price / leverage
+                
+                adjustment_pct = (suggested_position - planned_position) / planned_position * 100
                 
                 print(f"\n⚠️ 交易数量不足")
                 print(f"计划开仓: {amount:.6f} {coin_name} (${planned_position:.0f}U)")
-                print(f"最小数量: {min_amount:.6f} {coin_name} (${min_value_usd:.0f}U)")
-                print(f"需要调整: +{adjustment_pct:.0f}% (+${min_value_usd - planned_position:.0f}U)")
+                print(f"最小数量: {min_amount:.6f} {coin_name} (${suggested_position:.0f}U)")
+                print(f"需要调整: +{adjustment_pct:.0f}% (+${suggested_position - planned_position:.0f}U)")
+            
+            # 🆕 统一的AI评估流程（处理名义价值和交易数量两种情况）
+            if needs_adjustment:
+                adjustment_pct = (suggested_position - planned_position) / planned_position * 100
                 
-                # 🆕 调用AI评估是否接受调整
-                print("\n【AI智能仓位调整评估】")
+                print(f"\n【AI智能仓位调整评估】原因: {adjustment_reason}")
                 ai_decision = ai_evaluate_position_adjustment(
                     coin_name=coin_name,
                     original_position=planned_position,
-                    suggested_position=min_value_usd,
+                    suggested_position=suggested_position,
                     signal_quality={
                         'score': signal_score,
                         'risk_reward': risk_reward,
@@ -17094,21 +17100,23 @@ def _execute_single_open_action_v55(
                 )
                 
                 if ai_decision['decision'] == 'ACCEPT':
-                    print(f"✓ AI接受调整: ${planned_position:.0f}U → ${min_value_usd:.0f}U")
+                    old_position = planned_position
+                    print(f"✓ AI接受调整: ${old_position:.0f}U → ${suggested_position:.0f}U")
                     print(f"置信度: {ai_decision['confidence']}")
                     print(f"理由: {ai_decision['reason']}")
                     
                     # 使用调整后的仓位
-                    planned_position = min_value_usd
-                    amount = min_amount
+                    planned_position = suggested_position
+                    amount = (planned_position * leverage) / entry_price
                     
                     # 🔧 V7.7.0.15: 截断理由避免URL过长
                     ai_reason = ai_decision['reason']
                     ai_reason_short = ai_reason[:60] + "..." if len(ai_reason) > 60 else ai_reason
                     send_bark_notification(
-                        f"[DeepSeek]{coin_name}仓位智能调整✅",
+                        f"[{model_display_name}]{coin_name}仓位智能调整✅",
                         f"{'多' if operation=='OPEN_LONG' else '空'}仓 {leverage}x杠杆\n"
-                        f"调整: ${planned_position:.0f}U→${min_value_usd:.0f}U (+{adjustment_pct:.0f}%)\n"
+                        f"原因: {adjustment_reason}\n"
+                        f"调整: ${old_position:.0f}U→${suggested_position:.0f}U (+{adjustment_pct:.0f}%)\n"
                         f"信号: {signal_score}分 R:R{risk_reward:.2f}\n"
                         f"置信度: {ai_decision['confidence']}\n"
                         f"理由: {ai_reason_short}"
@@ -17119,11 +17127,11 @@ def _execute_single_open_action_v55(
                     print(f"理由: {ai_decision['reason']}")
                     
                     send_bark_notification(
-                        f"[DeepSeek]{coin_name}开仓取消❌",
+                        f"[{model_display_name}]{coin_name}开仓取消❌",
                         f"方向:{'多' if operation=='OPEN_LONG' else '空'}仓 仓位:{planned_position:.0f}U {leverage}x杠杆\n"
                         f"信号: 得分{signal_score} R:R{risk_reward:.2f}\n"
-                        f"原因: 仓位不足且AI拒绝调整\n"
-                        f"需要${min_value_usd:.0f}U (+{adjustment_pct:.0f}%)\n"
+                        f"原因: {adjustment_reason}且AI拒绝调整\n"
+                        f"需要${suggested_position:.0f}U (+{adjustment_pct:.0f}%)\n"
                         f"AI理由: {ai_decision['reason'][:80]}"
                     )
                     return
