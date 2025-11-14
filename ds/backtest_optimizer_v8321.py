@@ -281,14 +281,14 @@ def define_param_grid_v8321(signal_type: str, baseline_params: Dict = None) -> D
             'atr_tp_multiplier': 2.0,
             'atr_stop_multiplier': 1.5,
             'max_holding_hours': 8,
-            'min_risk_reward': 1.5
+            'min_risk_reward': 1.0  # 【V8.4.7】从1.5降到1.0（匹配实际R:R分布）
         }
         # 绝对边界（硬约束，防止极端值）
         bounds = {
             'atr_tp_multiplier': (1.0, 3.0),      # 不允许>3.0
             'atr_stop_multiplier': (1.0, 2.0),
             'max_holding_hours': (4, 16),
-            'min_risk_reward': (0.8, 2.5)
+            'min_risk_reward': (0.5, 2.5)  # 【V8.4.7】下限从0.8降到0.5
         }
     else:  # swing
         # 波段固定基准
@@ -296,14 +296,14 @@ def define_param_grid_v8321(signal_type: str, baseline_params: Dict = None) -> D
             'atr_tp_multiplier': 3.0,
             'atr_stop_multiplier': 1.5,
             'max_holding_hours': 60,
-            'min_risk_reward': 1.5
+            'min_risk_reward': 1.2  # 【V8.4.7】从1.5降到1.2（更接近实际）
         }
         # 绝对边界
         bounds = {
             'atr_tp_multiplier': (2.0, 5.0),      # 不允许>5.0（防止6.0这样的极端值）
             'atr_stop_multiplier': (1.0, 2.5),
             'max_holding_hours': (36, 96),
-            'min_risk_reward': (0.8, 3.0)
+            'min_risk_reward': (0.5, 3.0)  # 【V8.4.7】下限从0.8降到0.5
         }
     
     # 【V8.4.4】如果提供了baseline_params，用它作为搜索中心（但仍受边界限制）
