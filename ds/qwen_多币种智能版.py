@@ -6042,9 +6042,9 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         sampling_range = historical_sampling_range
     else:
         sampling_range = {
-            'min_risk_reward': dynamic_rr_range if dynamic_rr_range else [1.4, 2.5],  # 🔧 V8.3.21.8: 降低上限到2.5（避免错过R:R=2.2的高质量机会）
+            'min_risk_reward': dynamic_rr_range if dynamic_rr_range else [1.0, 2.0],  # 🔧 V8.3.21.12: 降低到[1.0, 2.0]以匹配actual_rr
             'min_indicator_consensus': [1, 5],  # 🔧 V8.3.21.7: 从1起步（配合signal_score≥75），到5（高质量共振）
-            'atr_stop_multiplier': [1.4, 1.9],
+            'atr_stop_multiplier': [1.0, 1.5],  # 🔧 V8.3.21.12: 降低到[1.0, 1.5]以提高R:R
             'min_signal_score': [75, 90]  # 🔧 V8.3.21.8: 提高下限到75，上限到90（配合降低的R:R）
         }
     
