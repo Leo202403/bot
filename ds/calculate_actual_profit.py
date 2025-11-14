@@ -55,12 +55,12 @@ def calculate_dynamic_atr_multiplier(
     
     # 根据策略类型设置范围
     if signal_type == 'scalping':
-        # 【V8.4.9.3】超短线：2.0-6.0倍ATR（上限从4.0提高到6.0）
-        min_tp, max_tp = 2.0, 6.0
+        # 【V8.5.1】超短线：2.0-10.0倍ATR（上限从6.0提高到10.0，允许捕获更高利润）
+        min_tp, max_tp = 2.0, 10.0
         sl_multiplier = 1.5  # 固定止损
     else:  # swing
-        # 【V8.4.9.3】波段：3.0-10.0倍ATR（上限从6.0提高到10.0）
-        min_tp, max_tp = 3.0, 10.0
+        # 【V8.5.1】波段：3.0-20.0倍ATR（上限从10.0提高到20.0，允许捕获更高利润）
+        min_tp, max_tp = 3.0, 20.0
         sl_multiplier = 1.5  # 固定止损
     
     # 限制在合理范围内
