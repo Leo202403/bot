@@ -928,55 +928,46 @@ def calculate_v8321_optimization_score(result: Dict) -> float:
     if result['captured_count'] == 0:
         return 0.0
     
-    # 🔧 V8.3.21.15: 暂时放宽硬约束，允许找到"最不差"的配置
-    # 原因：波段所有配置avg_profit<=0导致最优分数=0.000
-    # 策略：如果avg_profit<0，给予很低但非零的基础分（0.01），让优化器能区分"哪个负得少"
+    # 【V8.4.5】改进评分逻辑
     avg_profit = result.get('avg_profit', 0)
     expectancy = result.get('expectancy', 0)
-    
-    if avg_profit <= 0 or expectancy <= 0:
-        # 给负利润配置一个很低的基础分，而不是直接淘汰
-        # 分数与亏损程度成反比：亏得越少，分数越高
-        base_penalty = 0.01  # 最低基础分
-        # 如果avg_profit在-2%到0%之间，给0.01-0.05的分数
-        if avg_profit > -2:
-            return base_penalty + (avg_profit + 2) / 2 * 0.04  # -2% → 0.01, 0% → 0.05
-        else:
-            return base_penalty  # 亏损>2%，给最低分
-    
-    # 1. 平均利润（核心指标，最直观）
-    # 归一化：avg_profit通常0%到20%，映射到0-1
-    avg_profit_score = min(1.0, max(0, avg_profit / 20))  # 0%~20% → 0~1
-    
-    # 2. 期望收益（风险调整后的收益）
-    # = (胜率 × 盈利) + (败率 × 亏损)
-    # 归一化：expectancy通常-5%到+10%，映射到0-1
-    expectancy = result.get('expectancy', 0)
-    expectancy_score = min(1.0, max(0, (expectancy + 5) / 15))  # -5%~+10% → 0~1
-    
-    # 3. 胜率（心理因素，避免低胜率）
-    # 胜率至少50%，理想70%+
     win_rate = result.get('win_rate', 0)
-    win_rate_score = win_rate  # 直接使用胜率（0-1）
+    capture_rate = result.get('capture_rate', 0)
     
-    # 4. 盈亏比（赚多亏少）
-    # 盈亏比通常1.0-5.0，>=2.0为优秀
-    profit_loss_ratio = result.get('profit_loss_ratio', 1.0)
-    plr_score = min(1.0, profit_loss_ratio / 3.0)  # 3.0为满分
+    # 【V8.4.5新增】计算time_exit比例
+    time_exit_count = result.get('time_exit_count', 0)
+    total_count = result.get('captured_count', 1)
+    time_exit_ratio = time_exit_count / total_count if total_count > 0 else 0
     
-    # 5. 最大回撤惩罚（控制风险）
-    # 回撤越大，扣分越多
-    max_drawdown = result.get('max_drawdown', 0)
-    # 回撤10%扣满分，线性惩罚
-    drawdown_penalty = min(1.0, abs(max_drawdown) / 10)
+    # 负利润仍然给低分（保留V8.3.21.15的逻辑）
+    if avg_profit <= 0 or expectancy <= 0:
+        base_penalty = 0.01
+        if avg_profit > -2:
+            return base_penalty + (avg_profit + 2) / 2 * 0.04
+        else:
+            return base_penalty
     
-    # 【V8.3.21.6优化】加权（更贴近实际收益）
+    # 归一化各指标
+    avg_profit_score = min(1.0, max(0, avg_profit / 20))  # 0%~20% → 0~1
+    expectancy_score = min(1.0, max(0, (expectancy + 5) / 15))  # -5%~+10% → 0~1
+    win_rate_score = win_rate  # 0~1
+    capture_rate_score = capture_rate  # 0~1
+    
+    # 【V8.4.5新增】TP/SL触发率（time_exit的反面）
+    tp_sl_trigger_rate = 1 - time_exit_ratio
+    tp_sl_trigger_score = tp_sl_trigger_rate  # 0~1
+    
+    # 【V8.4.5新增】time_exit惩罚：如果比例>50%，给予惩罚
+    time_exit_penalty = max(0, (time_exit_ratio - 0.5) * 0.5)  # 超过50%，每10%扣0.05分
+    
+    # 【V8.4.5】调整权重，提高捕获率重要性
     total_score = (
-        avg_profit_score * 0.40 +       # 平均利润 40%（最直观）
-        expectancy_score * 0.25 +       # 期望收益 25%（风险调整）
-        win_rate_score * 0.15 +         # 胜率 15%（心理因素）
-        plr_score * 0.10 +              # 盈亏比 10%
-        - drawdown_penalty * 0.10       # 回撤惩罚 -10%
+        avg_profit_score * 0.30 +       # 平均利润 30%（从40%降低）
+        expectancy_score * 0.20 +       # 期望收益 20%（从25%降低）
+        win_rate_score * 0.15 +         # 胜率 15%（保持）
+        capture_rate_score * 0.25 +     # 捕获率 25%（从0%提升）⭐
+        tp_sl_trigger_score * 0.10 +    # TP/SL触发率 10%（新增）
+        - time_exit_penalty             # time_exit惩罚（动态）
     )
     
     return max(0, total_score)  # 确保非负
