@@ -2725,6 +2725,52 @@ def save_market_snapshot_v7(market_data_list):
                 ("空头" in trend_15m and "空头" in trend_1h and "空头" in trend_4h):
                 indicator_consensus += 1
             
+            # 【V8.4】计算综合确认度评分（0-100分）
+            try:
+                from consensus_calculator import calculate_consensus_score
+                
+                # 准备数据
+                ema20_val = ma.get("ma7", 0)  # 使用MA7作为EMA20的近似
+                ema50_val = ma.get("ma24", 0)  # 使用MA24作为EMA50的近似
+                
+                # 计算最近20根K线的平均成交量
+                avg_volume_val = 0
+                if kline_list and len(kline_list) >= 20:
+                    recent_volumes = [k.get("volume", 0) for k in kline_list[-20:]]
+                    avg_volume_val = sum(recent_volumes) / len(recent_volumes) if recent_volumes else 0
+                
+                # 获取最近3根K线收盘价（用于K线序列一致性分析）
+                recent_closes = None
+                if kline_list and len(kline_list) >= 3:
+                    recent_closes = [k.get("close", 0) for k in kline_list[-3:]]
+                
+                consensus_score = calculate_consensus_score(
+                    # 指标数据
+                    ema20=ema20_val,
+                    ema50=ema50_val,
+                    macd_histogram=macd_hist,
+                    rsi_14=rsi_14,
+                    volume=data.get("volume", 0),
+                    avg_volume=avg_volume_val,
+                    # 趋势数据
+                    trend_15m=trend_15m,
+                    trend_1h=trend_1h,
+                    trend_4h=trend_4h,
+                    # 形态数据（稍后从components获取）
+                    pin_bar_score=0,  # 稍后更新
+                    engulfing_score=0,
+                    breakout_score=0,
+                    # K线序列
+                    recent_closes=recent_closes,
+                    # 支撑阻力
+                    support=((data.get("support_resistance") or {}).get("nearest_support") or {}).get("price", 0),
+                    resistance=((data.get("support_resistance") or {}).get("nearest_resistance") or {}).get("price", 0),
+                    current_price=data.get("current_price", 0)
+                )
+            except Exception as e:
+                print(f"⚠️ 计算consensus_score失败: {e}")
+                consensus_score = 0
+            
             # 【V8.2】计算信号评分的各个维度（保存"原料"而非"成品"）
             # 初始化signal_type（防止未定义错误）
             signal_type = 'swing'
@@ -2771,6 +2817,27 @@ def save_market_snapshot_v7(market_data_list):
                     'volume_confirmed': False,
                     'volume_confirmed_score': 0
                 }
+            
+            # 【V8.4】更新consensus_score的形态评分部分（使用components中的数据）
+            try:
+                # 获取形态评分
+                pin_bar_score = components.get('pin_bar_score', 0)
+                engulfing_score = components.get('engulfing_score', 0)
+                breakout_score = components.get('breakout_score', 0)
+                
+                # 重新计算consensus_score（加上形态评分）
+                # 简化方式：在原有基础上追加形态得分
+                pattern_score = 0
+                if pin_bar_score > 0:
+                    pattern_score += min(5, pin_bar_score / 2)
+                if engulfing_score > 0:
+                    pattern_score += min(5, engulfing_score / 2)
+                if breakout_score > 0:
+                    pattern_score += min(5, breakout_score / 5)
+                
+                consensus_score = min(100, consensus_score + int(pattern_score))
+            except Exception as e:
+                pass  # 如果失败，使用之前计算的consensus_score
             
             # 【V8.3.21】数据增强：获取K线上下文、市场结构、S/R历史
             # 盲点1：K线序列上下文
@@ -2892,7 +2959,8 @@ def save_market_snapshot_v7(market_data_list):
                 "atr": (data.get("atr") or {}).get("atr_14", 0),
                 "support": ((data.get("support_resistance") or {}).get("nearest_support") or {}).get("price", 0),
                 "resistance": ((data.get("support_resistance") or {}).get("nearest_resistance") or {}).get("price", 0),
-                "indicator_consensus": indicator_consensus,  # 指标共振数（0-5）
+                "indicator_consensus": indicator_consensus,  # 【兼容性】指标共振数（0-5）
+                "consensus_score": consensus_score,  # 【V8.4新增】综合确认度评分（0-100）
                 # V8.2: signal_score已移除，改为保存各个评分维度（见下方的 volume_surge_score 等字段）
                 "risk_reward": risk_reward,  # 【V7.8关键修复】盈亏比
                 
