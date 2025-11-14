@@ -837,31 +837,38 @@ def calculate_v8321_optimization_score(result: Dict) -> float:
     if expectancy <= 0:
         return 0.0  # 直接淘汰负期望配置
     
-    # 1. 期望收益（核心指标）
+    # 1. 平均利润（核心指标，最直观）
+    # 归一化：avg_profit通常0%到20%，映射到0-1
+    avg_profit_score = min(1.0, max(0, avg_profit / 20))  # 0%~20% → 0~1
+    
+    # 2. 期望收益（风险调整后的收益）
     # = (胜率 × 盈利) + (败率 × 亏损)
     # 归一化：expectancy通常-5%到+10%，映射到0-1
     expectancy = result.get('expectancy', 0)
     expectancy_score = min(1.0, max(0, (expectancy + 5) / 15))  # -5%~+10% → 0~1
     
-    # 2. 盈亏比（赚多亏少）
+    # 3. 胜率（心理因素，避免低胜率）
+    # 胜率至少50%，理想70%+
+    win_rate = result.get('win_rate', 0)
+    win_rate_score = win_rate  # 直接使用胜率（0-1）
+    
+    # 4. 盈亏比（赚多亏少）
     # 盈亏比通常1.0-5.0，>=2.0为优秀
     profit_loss_ratio = result.get('profit_loss_ratio', 1.0)
     plr_score = min(1.0, profit_loss_ratio / 3.0)  # 3.0为满分
     
-    # 3. 捕获率（确保不过度保守）
-    capture_score = result['capture_rate']
-    
-    # 4. 最大回撤惩罚（控制风险）
+    # 5. 最大回撤惩罚（控制风险）
     # 回撤越大，扣分越多
     max_drawdown = result.get('max_drawdown', 0)
     # 回撤10%扣满分，线性惩罚
     drawdown_penalty = min(1.0, abs(max_drawdown) / 10)
     
-    # 加权（利润最大+亏损最小）
+    # 【V8.3.21.6优化】加权（更贴近实际收益）
     total_score = (
-        expectancy_score * 0.50 +      # 期望收益 50%（提升）
-        plr_score * 0.25 +              # 盈亏比 25%
-        capture_score * 0.15 +          # 捕获率 15%（降低）
+        avg_profit_score * 0.40 +       # 平均利润 40%（最直观）
+        expectancy_score * 0.25 +       # 期望收益 25%（风险调整）
+        win_rate_score * 0.15 +         # 胜率 15%（心理因素）
+        plr_score * 0.10 +              # 盈亏比 10%
         - drawdown_penalty * 0.10       # 回撤惩罚 -10%
     )
     
