@@ -12597,31 +12597,38 @@ def get_adjusted_params_for_signal(
     }
 
 
-def get_ohlcv_data(symbol):
-    """获取单个币种的K线数据和技术指标（已移除signal.alarm以兼容supervisor）"""
+def get_ohlcv_data(symbol, skip_timing_check=False):
+    """获取单个币种的K线数据和技术指标（已移除signal.alarm以兼容supervisor）
+    
+    Args:
+        symbol: 交易对符号
+        skip_timing_check: 是否跳过时机检查（回测模式使用）
+    """
     try:
         # 【V8.5.2新增】确保获取完整的15分钟K线数据
         # 在每个15分钟周期的第1分钟获取，确保上一个K线已完全形成
-        from datetime import datetime
-        import time
-        
-        current_time = datetime.now()
-        current_minute = current_time.minute
-        
-        # 如果不在正确的时机，等待到下一个正确时机
-        if current_minute % 15 not in [0, 1]:
-            # 计算需要等待的分钟数
-            next_target = ((current_minute // 15) + 1) * 15 + 1
-            if next_target >= 60:
-                next_target = 1
-            wait_minutes = (next_target - current_minute) % 60
+        # 回测模式跳过此检查
+        if not skip_timing_check:
+            from datetime import datetime
+            import time
             
-            print(f"⏰ {symbol}: 当前时间 {current_time.strftime('%H:%M')} 不是最佳获取时机")
-            print(f"   等待 {wait_minutes} 分钟到下一个获取时机...")
+            current_time = datetime.now()
+            current_minute = current_time.minute
             
-            # 等待到正确时机（最多等待15分钟）
-            time.sleep(wait_minutes * 60)
-            print(f"✅ {symbol}: 已到达获取时机，开始获取数据")
+            # 如果不在正确的时机，等待到下一个正确时机
+            if current_minute % 15 not in [0, 1]:
+                # 计算需要等待的分钟数
+                next_target = ((current_minute // 15) + 1) * 15 + 1
+                if next_target >= 60:
+                    next_target = 1
+                wait_minutes = (next_target - current_minute) % 60
+                
+                print(f"⏰ {symbol}: 当前时间 {current_time.strftime('%H:%M')} 不是最佳获取时机")
+                print(f"   等待 {wait_minutes} 分钟到下一个获取时机...")
+                
+                # 等待到正确时机（最多等待15分钟）
+                time.sleep(wait_minutes * 60)
+                print(f"✅ {symbol}: 已到达获取时机，开始获取数据")
         
         # === 15分钟K线数据（短期） ===
         # ccxt自带timeout机制，无需signal.alarm
