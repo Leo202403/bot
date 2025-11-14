@@ -268,7 +268,7 @@ def define_param_grid_v8321(signal_type: str) -> Dict:
             
             # V8.3.21新增：入场过滤参数
             'min_signal_score': [50, 60, 70, 80],  # 🔧 V8.3.21.14: 添加80以测试更高门槛
-            'min_consensus': [1, 2, 3],  # 🔧 V8.3.21.14: 添加1以测试更低共识要求
+            'min_consensus': [0, 1, 2],  # 🔧 V8.3.21.15: 添加0以允许无指标共振但signal_score高的机会
             'min_kline_bullish_ratio': [0.6, 0.7],
             'min_price_chg_pct': [0.5, 1.0, 1.5],
             'allowed_mkt_struct': ['all', 'trend_only'],
@@ -285,7 +285,7 @@ def define_param_grid_v8321(signal_type: str) -> Dict:
             
             # V8.3.21新增：入场过滤参数
             'min_signal_score': [50, 60, 70, 80],  # 🔧 V8.3.21.14: 添加80以测试更高门槛
-            'min_consensus': [1, 2, 3],  # 🔧 V8.3.21.14: 添加1以测试更低共识要求
+            'min_consensus': [0, 1, 2],  # 🔧 V8.3.21.15: 添加0以允许无指标共振但signal_score高的机会
             'min_kline_bullish_ratio': [0.6, 0.7],
             'min_price_chg_pct': [0.5, 1.0, 1.5],
             'allowed_mkt_struct': ['all', 'trend_only'],
@@ -835,15 +835,21 @@ def calculate_v8321_optimization_score(result: Dict) -> float:
     if result['captured_count'] == 0:
         return 0.0
     
-    # 【修复】硬性约束：平均利润必须为正
+    # 🔧 V8.3.21.15: 暂时放宽硬约束，允许找到"最不差"的配置
+    # 原因：波段所有配置avg_profit<=0导致最优分数=0.000
+    # 策略：如果avg_profit<0，给予很低但非零的基础分（0.01），让优化器能区分"哪个负得少"
     avg_profit = result.get('avg_profit', 0)
-    if avg_profit <= 0:
-        return 0.0  # 直接淘汰负利润配置
-    
-    # 【修复】硬性约束：期望收益必须为正
     expectancy = result.get('expectancy', 0)
-    if expectancy <= 0:
-        return 0.0  # 直接淘汰负期望配置
+    
+    if avg_profit <= 0 or expectancy <= 0:
+        # 给负利润配置一个很低的基础分，而不是直接淘汰
+        # 分数与亏损程度成反比：亏得越少，分数越高
+        base_penalty = 0.01  # 最低基础分
+        # 如果avg_profit在-2%到0%之间，给0.01-0.05的分数
+        if avg_profit > -2:
+            return base_penalty + (avg_profit + 2) / 2 * 0.04  # -2% → 0.01, 0% → 0.05
+        else:
+            return base_penalty  # 亏损>2%，给最低分
     
     # 1. 平均利润（核心指标，最直观）
     # 归一化：avg_profit通常0%到20%，映射到0-1
