@@ -17856,6 +17856,17 @@ def trading_bot():
     print("\n" + "=" * 70)
     print(f"🔄 [开始执行] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 70)
+    
+    # 【V8.5.2.4新增】非阻塞时间检查：时间不对就跳过，不阻碍其他任务
+    if TRADE_CONFIG["timeframe"] == "15m":
+        current_minute = datetime.now().minute
+        # 检查是否在合适的时间（1、16、31、46分）
+        valid_minutes = [1, 16, 31, 46]
+        if current_minute not in valid_minutes:
+            print(f"⏭️  当前时间 {datetime.now().strftime('%H:%M')} 不是最佳执行时机")
+            print(f"   最佳执行时间: 每小时的 {valid_minutes} 分")
+            print(f"   跳过本次执行，不阻碍其他任务")
+            return  # 直接返回，不阻塞
 
     try:
         print("⏳ [1/6] 获取市场数据...")
