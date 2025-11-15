@@ -12605,38 +12605,23 @@ def get_ohlcv_data(symbol, skip_timing_check=False):
         skip_timing_check: 是否跳过时机检查（回测模式使用）
     """
     try:
-        # 【V8.5.2新增】确保获取完整的15分钟K线数据
-        # 在每个15分钟周期的第1分钟获取，确保上一个K线已完全形成
-        # 回测模式跳过此检查
-        if not skip_timing_check:
-            from datetime import datetime
-            import time
-            
-            current_time = datetime.now()
-            current_minute = current_time.minute
-            
-            # 如果不在正确的时机，等待到下一个正确时机
-            if current_minute % 15 not in [0, 1]:
-                # 计算需要等待的分钟数
-                next_target = ((current_minute // 15) + 1) * 15 + 1
-                if next_target >= 60:
-                    next_target = 1
-                wait_minutes = (next_target - current_minute) % 60
-                
-                print(f"⏰ {symbol}: 当前时间 {current_time.strftime('%H:%M')} 不是最佳获取时机")
-                print(f"   等待 {wait_minutes} 分钟到下一个获取时机...")
-                
-                # 等待到正确时机（最多等待15分钟）
-                time.sleep(wait_minutes * 60)
-                print(f"✅ {symbol}: 已到达获取时机，开始获取数据")
+        # 【V8.5.2.3新增】确保获取完整的15分钟K线数据
+        # 方法：获取数据后，移除最后一根K线（可能还在形成中）
+        from datetime import datetime
         
         # === 15分钟K线数据（短期） ===
-        # ccxt自带timeout机制，无需signal.alarm
-        limit_15m = 1344  # 14天数据
+        # 多获取1根，然后移除最后一根（可能未完成）
+        limit_15m = 1345  # 14天数据 + 1根（用于移除）
         ohlcv_15m = exchange.fetch_ohlcv(
             symbol, TRADE_CONFIG["timeframe"], limit=limit_15m
         )
-
+        
+        # 【V8.5.2.3关键】移除最后一根K线（可能还在形成中）
+        if len(ohlcv_15m) > 0:
+            last_kline_time = datetime.fromtimestamp(ohlcv_15m[-1][0] / 1000)
+            print(f"📊 {symbol}: 移除最后一根K线 {last_kline_time.strftime('%H:%M')}（可能未完成），确保数据完整")
+            ohlcv_15m = ohlcv_15m[:-1]  # 移除最后一根
+        
         df_15m = pd.DataFrame(
             ohlcv_15m, columns=["timestamp", "open", "high", "low", "close", "volume"]
         )
@@ -12644,7 +12629,10 @@ def get_ohlcv_data(symbol, skip_timing_check=False):
         
         # === 4小时K线数据（长期趋势） ===
         try:
-            ohlcv_4h = exchange.fetch_ohlcv(symbol, "4h", limit=168)  # 约1个月
+            ohlcv_4h = exchange.fetch_ohlcv(symbol, "4h", limit=169)  # 约1个月 + 1根
+            # 【V8.5.2.3】移除最后一根K线（可能未完成）
+            if len(ohlcv_4h) > 0:
+                ohlcv_4h = ohlcv_4h[:-1]
             df_4h = pd.DataFrame(
                 ohlcv_4h,
                 columns=["timestamp", "open", "high", "low", "close", "volume"],
@@ -12665,7 +12653,10 @@ def get_ohlcv_data(symbol, skip_timing_check=False):
         
         # === 1小时K线数据（止损止盈位 + 中期趋势）V6.5 ===
         try:
-            ohlcv_1h = exchange.fetch_ohlcv(symbol, "1h", limit=672)  # 约1个月
+            ohlcv_1h = exchange.fetch_ohlcv(symbol, "1h", limit=673)  # 约1个月 + 1根
+            # 【V8.5.2.3】移除最后一根K线（可能未完成）
+            if len(ohlcv_1h) > 0:
+                ohlcv_1h = ohlcv_1h[:-1]
             df_1h = pd.DataFrame(
                 ohlcv_1h,
                 columns=["timestamp", "open", "high", "low", "close", "volume"],
