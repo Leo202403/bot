@@ -622,11 +622,14 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
                                         break
                                 
                                 # 如果AI没提这个币，说明可能被过滤了
+                                # 🆕 V8.5.1.8: 添加信号分数和共振数，帮助AI分析过滤逻辑是否合理
                                 missed_with_ai_decisions.append({
                                     'coin': opp_coin,
                                     'missed_time': opp_time,
                                     'missed_reason': opp.get('reason', 'unknown'),
                                     'profit_potential': opp.get('profit', 0),
+                                    'signal_score': opp.get('signal_score', 0),  # 🆕 V8.5.1.8
+                                    'consensus': opp.get('consensus', 0),        # 🆕 V8.5.1.8
                                     'ai_decision_time': decision_time_str,
                                     'ai_considered': ai_mentioned_coin,
                                     'ai_thinking': decision.get('思考过程', '')[:100],
@@ -649,6 +652,35 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
         premature_entries = entry_stats.get('premature_entries', 0)
         optimal_entries = entry_stats.get('optimal_entries', entry_stats.get('correct_entries', 0))  # V2用correct_entries
         
+        # 🆕 V8.5.1.8: 计算信号质量统计（对比虚假信号 vs 正确信号）
+        signal_quality_comparison = {}
+        try:
+            if false_signals_summary:
+                false_scores = [f.get('signal_score', 0) for f in false_signals_summary if f.get('signal_score', 0) > 0]
+                false_consensus = [f.get('consensus', 0) for f in false_signals_summary if f.get('consensus', 0) > 0]
+                
+                if false_scores and false_consensus:
+                    signal_quality_comparison['false_signals'] = {
+                        'avg_signal_score': np.mean(false_scores),
+                        'avg_consensus': np.mean(false_consensus),
+                        'count': len(false_scores)
+                    }
+            
+            # 获取正确开仓的数据（如果有）
+            correct_entries_data = entry_analysis.get('correct_entries', [])
+            if correct_entries_data:
+                correct_scores = [c.get('signal_score', 0) for c in correct_entries_data if c.get('signal_score', 0) > 0]
+                correct_consensus = [c.get('consensus', 0) for c in correct_entries_data if c.get('consensus', 0) > 0]
+                
+                if correct_scores and correct_consensus:
+                    signal_quality_comparison['correct_entries'] = {
+                        'avg_signal_score': np.mean(correct_scores),
+                        'avg_consensus': np.mean(correct_consensus),
+                        'count': len(correct_scores)
+                    }
+        except Exception as e:
+            print(f"  ⚠️ 信号质量统计失败: {e}")
+        
         analysis_data = {
             'entry_quality': {
                 'total_entries': total_count,
@@ -663,7 +695,8 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
             'exit_quality': exit_stats_summary,
             'market_context': market_context or {},
             'ai_reasoning_samples': ai_reasoning_samples,  # 🆕 AI决策理由
-            'missed_with_ai': missed_with_ai_decisions  # 🆕 V8.3.25: 错过机会的AI决策
+            'missed_with_ai': missed_with_ai_decisions,  # 🆕 V8.3.25: 错过机会的AI决策
+            'signal_quality_comparison': signal_quality_comparison  # 🆕 V8.5.1.8: 信号质量对比
         }
         
         # 构建AI prompt（纯英文 + 自我反思）
@@ -685,8 +718,14 @@ The AI system has been making decisions with the following reasoning patterns:
 Provide specific critique of the AI's decision-making process."""
         
         # 🆕 V8.3.25: 添加错过机会的AI反思
+        # 🔧 V8.5.1.8: 增强prompt，引导AI分析信号质量与过滤逻辑的关系
         missed_ai_note = ""
         if missed_with_ai_decisions:
+            # 🆕 V8.5.1.8: 计算错过机会的平均信号质量
+            avg_missed_score = np.mean([m.get('signal_score', 0) for m in missed_with_ai_decisions]) if missed_with_ai_decisions else 0
+            avg_missed_consensus = np.mean([m.get('consensus', 0) for m in missed_with_ai_decisions]) if missed_with_ai_decisions else 0
+            high_quality_missed = [m for m in missed_with_ai_decisions if m.get('signal_score', 0) >= 75 and m.get('consensus', 0) >= 3]
+            
             missed_ai_note = f"""
 
 # 🔍 Missed Opportunities with AI Decision Context
@@ -695,20 +734,81 @@ Analysis of why the AI didn't enter these profitable opportunities:
 {json.dumps(missed_with_ai_decisions[:5], indent=2)}
 ```
 
-**CRITICAL**: For each missed opportunity:
-- Did the AI consider this coin at that time? (ai_considered field)
-- If yes, why did it decide NOT to open? Was the logic correct or overly conservative?
-- If no, why was this coin filtered out? Was it a systematic blind spot?
-- Given the profit_potential (actual profit if entered), was the decision justified?
+**CRITICAL SIGNAL QUALITY ANALYSIS** (V8.5.1.8 Enhanced):
+- Average signal_score of missed opportunities: {avg_missed_score:.1f}
+- Average consensus of missed opportunities: {avg_missed_consensus:.1f}
+- High-quality missed (score>=75, consensus>=3): {len(high_quality_missed)} opportunities
 
-Provide specific insights on whether the AI's filtering logic needs adjustment."""
+**KEY QUESTIONS**:
+1. **Signal Quality Check**: 
+   - If avg signal_score > 70 and consensus > 2.5, these were HIGH-QUALITY signals
+   - Why were they filtered? Were thresholds too strict?
+   
+2. **AI Consideration**:
+   - Did the AI consider this coin at that time? (ai_considered field)
+   - If yes, why did it decide NOT to open? Was the logic correct or overly conservative?
+   - If no, why was this coin filtered out? Was it a systematic blind spot?
+   
+3. **Profit vs Quality**:
+   - Given the profit_potential (actual profit if entered) vs signal_score/consensus
+   - Were the filtering criteria appropriate?
 
+**ACTIONABLE OUTPUT REQUIRED**:
+- If high-quality signals (score>=75, consensus>=3) were missed → RECOMMEND lowering thresholds
+- If low-quality signals were correctly filtered → VALIDATE current thresholds
+- Specify exact threshold adjustments: "min_signal_score >= X", "min_consensus >= Y"
+
+Provide specific, quantified insights on whether the AI's filtering logic needs adjustment."""
+
+        # 🆕 V8.5.1.8: 构建信号质量对比摘要（显式展示给AI）
+        quality_comparison_note = ""
+        if signal_quality_comparison:
+            false_sig = signal_quality_comparison.get('false_signals', {})
+            correct_sig = signal_quality_comparison.get('correct_entries', {})
+            
+            if false_sig and correct_sig:
+                score_diff = correct_sig['avg_signal_score'] - false_sig['avg_signal_score']
+                consensus_diff = correct_sig['avg_consensus'] - false_sig['avg_consensus']
+                recommended_score = correct_sig['avg_signal_score'] * 0.95  # 建议阈值：正确信号平均值的95%
+                recommended_consensus = max(2, correct_sig['avg_consensus'] * 0.9)  # 建议阈值：正确信号平均值的90%，最少2
+                
+                quality_comparison_note = f"""
+
+# 📊 Signal Quality Comparison (V8.5.1.8 Enhanced)
+**FALSE SIGNALS** ({false_sig['count']} samples):
+- Average signal_score: {false_sig['avg_signal_score']:.1f}
+- Average consensus: {false_sig['avg_consensus']:.1f}
+
+**CORRECT ENTRIES** ({correct_sig['count']} samples):
+- Average signal_score: {correct_sig['avg_signal_score']:.1f}
+- Average consensus: {correct_sig['avg_consensus']:.1f}
+
+**QUALITY GAP**:
+- Signal score difference: {score_diff:+.1f} points (correct entries are {score_diff:.1f} points higher)
+- Consensus difference: {consensus_diff:+.1f} indicators (correct entries have {consensus_diff:.1f} more)
+
+**RECOMMENDED THRESHOLDS** (based on data):
+- min_signal_score >= {recommended_score:.0f} (95% of correct entries' average)
+- min_consensus >= {recommended_consensus:.0f} (90% of correct entries' average)
+
+→ Use these statistics to calibrate your threshold recommendations!"""
+            elif false_sig:
+                quality_comparison_note = f"""
+
+# 📊 Signal Quality Analysis (V8.5.1.8)
+**FALSE SIGNALS** ({false_sig['count']} samples):
+- Average signal_score: {false_sig['avg_signal_score']:.1f}
+- Average consensus: {false_sig['avg_consensus']:.1f}
+
+→ Consider raising thresholds above these averages to filter false signals."""
+        
         prompt = f"""You are an expert quantitative trading analyst performing AI self-reflection analysis. 
 
 # Entry Quality Data
 ```json
 {json.dumps(analysis_data, indent=2)}
 ```
+{quality_comparison_note}
 {ai_reasoning_note}
 {missed_ai_note}
 
