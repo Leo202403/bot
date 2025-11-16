@@ -3902,30 +3902,367 @@ def check_cash_reserve(total_assets, available_balance, planned_position_usd, cu
         return True, "检查失败，放行", planned_position_usd
 
 
-def check_single_direction_per_coin(symbol, operation, current_positions):
+def update_position_after_adding(symbol, side, new_avg_price, new_total_amount, 
+                                  new_amount, new_price, add_reason, signal_score, 
+                                  price_improvement_pct):
     """
-    检查单币种单方向限制（每个币种只能有一个方向的一个订单）
+    更新CSV记录，追加加仓历史（V8.5.2新增）
+    
+    格式：原始理由 | [加仓N] 时间 +数量@价格 理由:xxx
+    
+    Args:
+        symbol: 交易对
+        side: 方向 (long/short)
+        new_avg_price: 新的平均开仓价
+        new_total_amount: 新的总数量
+        new_amount: 本次加仓数量
+        new_price: 本次加仓价格
+        add_reason: 加仓理由（简短）
+        signal_score: 信号评分
+        price_improvement_pct: 价格改善百分比
+    """
+    import fcntl
+    import shutil
+    
+    coin_name = symbol.split('/')[0]
+    side_cn = "多" if side == "long" else "空"
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        lock_file = None
+        try:
+            # 1. 创建文件锁
+            lock_path = TRADES_FILE.parent / f"{TRADES_FILE.name}.lock"
+            lock_file = open(lock_path, "w")
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            
+            # 2. 创建备份
+            backup_path = TRADES_FILE.parent / f"{TRADES_FILE.name}.backup"
+            if TRADES_FILE.exists():
+                shutil.copy2(TRADES_FILE, backup_path)
+            
+            # 3. 读取现有数据
+            df = pd.read_csv(TRADES_FILE, encoding="utf-8")
+            df.columns = df.columns.str.strip().str.replace("\ufeff", "")
+            
+            # 4. 找到该币种、该方向、未平仓的记录
+            mask = (
+                (df["币种"] == coin_name)
+                & (df["方向"] == side_cn)
+                & (df["平仓时间"].isna())
+            )
+            matching_rows = df[mask]
+            
+            if matching_rows.empty:
+                print(f"  ⚠️ 未找到 {coin_name} {side_cn} 的未平仓记录，无法记录加仓")
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                lock_file.close()
+                return
+            
+            # 5. 更新记录
+            last_idx = matching_rows.index[-1]
+            original_reason = str(df.at[last_idx, "开仓理由"])
+            
+            # 计算是第几次加仓
+            add_count = original_reason.count("[加仓") + 1
+            
+            # 构建加仓记录
+            current_time = datetime.now().strftime("%H:%M")
+            add_entry = (
+                f" | [加仓{add_count}] {current_time} "
+                f"+{new_amount:.3f}@{new_price:.2f} "
+                f"理由:{add_reason}+价格优{abs(price_improvement_pct):.1f}%+信号分{signal_score}"
+            )
+            
+            # 更新字段
+            df.at[last_idx, "开仓价"] = new_avg_price
+            df.at[last_idx, "开仓理由"] = original_reason + add_entry
+            
+            # 6. 保存
+            temp_file = TRADES_FILE.parent / f"{TRADES_FILE.name}.tmp"
+            df.to_csv(temp_file, index=False, encoding="utf-8")
+            temp_file.replace(TRADES_FILE)
+            
+            print(f"  📝 已记录加仓{add_count}: +{new_amount:.3f}@{new_price:.2f}, 新平均价{new_avg_price:.2f}")
+            
+            # 7. 释放锁
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            lock_file.close()
+            break
+            
+        except Exception as e:
+            print(f"  ⚠️ 更新加仓记录失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+            if lock_file:
+                try:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                    lock_file.close()
+                except:
+                    pass
+            
+            if attempt == max_retries - 1:
+                print(f"  ❌ 加仓记录更新失败")
+            else:
+                import time
+                time.sleep(0.5)
+                continue
+
+
+def add_to_position(symbol, side, new_amount, new_price, leverage, existing_position, 
+                    ai_signal, price_improvement_pct, available_balance, current_positions):
+    """
+    加仓到现有持仓（V8.5.2新增）
+    
+    Args:
+        symbol: 交易对
+        side: 方向 (long/short)
+        new_amount: 新增数量
+        new_price: 新增价格
+        leverage: 杠杆
+        existing_position: 现有持仓信息
+        ai_signal: AI信号
+        price_improvement_pct: 价格改善百分比
+        available_balance: 可用余额
+        current_positions: 当前所有持仓
+    
+    Returns:
+        加仓是否成功
+    """
+    try:
+        coin_name = symbol.split('/')[0]
+        side_cn = "多" if side == "long" else "空"
+        
+        # 1. 计算原持仓成本
+        old_amount = existing_position.get('size', 0)
+        old_price = existing_position.get('entry_price', 0)
+        old_cost = old_amount * old_price
+        
+        # 2. 计算新增成本
+        new_cost = new_amount * new_price
+        
+        # 3. 计算合并后的平均价
+        total_amount = old_amount + new_amount
+        avg_price = (old_cost + new_cost) / total_amount
+        
+        print(f"\n🔼 执行加仓: {coin_name} {side_cn}")
+        print(f"  原持仓: {old_amount:.3f}个 @{old_price:.2f}")
+        print(f"  新增: {new_amount:.3f}个 @{new_price:.2f}")
+        print(f"  合并后: {total_amount:.3f}个 @{avg_price:.2f}")
+        
+        # 4. 执行市价单加仓
+        order_side = 'buy' if side == 'long' else 'sell'
+        order = exchange.create_market_order(
+            symbol,
+            order_side,
+            new_amount,
+            params={'tag': 'f1ee03b510d5SUDE'}
+        )
+        print(f"  ✓ 加仓订单已执行")
+        
+        # 5. 更新CSV记录
+        add_reason = ai_signal.get('reason', '金字塔加仓')[:20]  # 简短理由
+        signal_score = ai_signal.get('signal_quality', 0)
+        
+        update_position_after_adding(
+            symbol, side, avg_price, total_amount,
+            new_amount, new_price, add_reason, signal_score,
+            price_improvement_pct
+        )
+        
+        # 6. 重新计算并设置止盈止损
+        try:
+            # 清理旧的止盈止损订单
+            clear_symbol_orders(symbol, verbose=False)
+            
+            # 从AI信号获取新的止盈止损
+            stop_loss = ai_signal.get('stop_loss_price', 0)
+            take_profit = ai_signal.get('take_profit_price', 0)
+            
+            if stop_loss and take_profit:
+                # 基于新平均价重新设置
+                sl_ok, tp_ok = set_tpsl_orders_via_papi(
+                    symbol=symbol,
+                    side=side,
+                    amount=total_amount,
+                    stop_loss=stop_loss,
+                    take_profit=take_profit,
+                    verbose=True
+                )
+                if not (sl_ok or tp_ok):
+                    print(f"  ⚠️ 止盈止损设置失败")
+        except Exception as e:
+            print(f"  ⚠️ 重设止盈止损失败: {e}")
+        
+        # 7. 更新 position_contexts（记录加仓时间和次数）
+        try:
+            model_name = os.getenv("MODEL_NAME", "qwen")
+            context_file = Path("trading_data") / model_name / "position_contexts.json"
+            
+            if context_file.exists():
+                with open(context_file, 'r', encoding='utf-8') as f:
+                    contexts = json.load(f)
+            else:
+                contexts = {}
+            
+            if coin_name in contexts:
+                contexts[coin_name]['last_add_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                contexts[coin_name]['add_count'] = contexts[coin_name].get('add_count', 0) + 1
+                contexts[coin_name]['avg_entry_price'] = avg_price
+                
+                with open(context_file, 'w', encoding='utf-8') as f:
+                    json.dump(contexts, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"  ⚠️ 更新position_contexts失败: {e}")
+        
+        # 8. 发送Bark通知
+        notional_value = total_amount * new_price
+        send_bark_notification(
+            f"[通义千问]{coin_name}加仓✅",
+            f"{side_cn}仓 加仓{new_amount:.3f}个 @{new_price:.2f}\n"
+            f"新平均价: {avg_price:.2f}\n"
+            f"总仓位: {total_amount:.3f}个 ({notional_value:.2f}U)\n"
+            f"理由: {add_reason}+价格优{abs(price_improvement_pct):.1f}%+信号分{signal_score}"
+        )
+        
+        # 9. 刷新持仓快照
+        try:
+            refreshed_positions, _ = get_all_positions()
+            save_positions_snapshot(refreshed_positions, 0)
+            print("  ✓ 持仓快照已更新")
+        except:
+            pass
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ 加仓失败: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # 发送失败通知
+        send_bark_notification(
+            f"[通义千问]{coin_name}加仓失败❌",
+            f"{side_cn}仓 加仓{new_amount:.3f}个失败\n"
+            f"错误: {str(e)[:80]}"
+        )
+        return False
+
+
+def check_add_position_conditions(symbol, existing_position, ai_signal, available_balance):
+    """
+    检查是否满足加仓条件（V8.5.2新增）
+    
+    Args:
+        symbol: 交易对
+        existing_position: 现有持仓信息
+        ai_signal: AI信号信息
+        available_balance: 可用余额
+    
+    Returns:
+        (can_add: bool, reason: str, price_improvement_pct: float)
+    """
+    try:
+        # 1. 检查现有持仓状态（浮亏不超过5%）
+        unrealized_pnl = existing_position.get('unrealized_pnl', 0)
+        notional = abs(existing_position.get('notional', 0))
+        if notional > 0:
+            pnl_pct = unrealized_pnl / notional
+            if pnl_pct < -0.05:
+                return False, f"现有持仓浮亏{pnl_pct*100:.1f}%>5%", 0
+        
+        # 2. 检查信号质量（需要≥原信号90%）
+        new_score = ai_signal.get('signal_quality', 0) if ai_signal else 0
+        
+        # 从position_contexts读取原始信号质量
+        try:
+            model_name = os.getenv("MODEL_NAME", "qwen")
+            context_file = Path("trading_data") / model_name / "position_contexts.json"
+            old_score = 0
+            if context_file.exists():
+                with open(context_file, 'r', encoding='utf-8') as f:
+                    contexts = json.load(f)
+                    coin_name = symbol.split('/')[0]
+                    if coin_name in contexts:
+                        old_score = contexts[coin_name].get('signal_quality', 0)
+            
+            if old_score > 0 and new_score < old_score * 0.9:
+                return False, f"信号质量{new_score}<原信号{old_score}的90%", 0
+        except Exception as e:
+            print(f"  ⚠️ 读取原始信号质量失败: {e}")
+        
+        # 3. 检查价格是否更优（金字塔加仓）
+        entry_price = existing_position.get('entry_price', 0)
+        current_price = ai_signal.get('entry_price', 0) if ai_signal else 0
+        side = existing_position.get('side', '')
+        
+        if entry_price == 0 or current_price == 0:
+            return False, "价格数据缺失", 0
+        
+        # 计算价格改善
+        if side == 'short':
+            price_improvement_pct = ((current_price - entry_price) / entry_price) * 100
+            if price_improvement_pct <= 0.5:  # 空单需价格至少高0.5%
+                return False, f"空单加仓需价格更优（当前{current_price:.2f}仅比开仓价{entry_price:.2f}高{price_improvement_pct:.2f}%<0.5%）", 0
+        else:  # long
+            price_improvement_pct = ((entry_price - current_price) / entry_price) * 100
+            if price_improvement_pct <= 0.5:  # 多单需价格至少低0.5%
+                return False, f"多单加仓需价格更优（当前{current_price:.2f}仅比开仓价{entry_price:.2f}低{price_improvement_pct:.2f}%<0.5%）", 0
+        
+        # 4. 检查加仓后总仓位限制（不超过可用余额的50%）
+        new_position_value = ai_signal.get('position_size_usd', 0) if ai_signal else 0
+        total_after_add = notional + new_position_value
+        
+        if total_after_add > available_balance * 0.5:
+            return False, f"加仓后总仓位{total_after_add:.2f}U>50%限制({available_balance*0.5:.2f}U)", 0
+        
+        # 5. 检查加仓频率（从position_contexts读取最后加仓时间）
+        try:
+            if context_file.exists():
+                with open(context_file, 'r', encoding='utf-8') as f:
+                    contexts = json.load(f)
+                    coin_name = symbol.split('/')[0]
+                    if coin_name in contexts:
+                        last_add_time_str = contexts[coin_name].get('last_add_time', '')
+                        if last_add_time_str:
+                            last_add_time = datetime.strptime(last_add_time_str, "%Y-%m-%d %H:%M:%S")
+                            time_since_last_add = (datetime.now() - last_add_time).total_seconds() / 60
+                            if time_since_last_add < 60:  # 1小时内不允许重复加仓
+                                return False, f"距上次加仓仅{time_since_last_add:.0f}分钟<60分钟", 0
+        except Exception as e:
+            print(f"  ⚠️ 检查加仓频率失败: {e}")
+        
+        # 所有条件满足
+        return True, f"价格优{abs(price_improvement_pct):.1f}%+信号强{new_score}分+仓位可控", price_improvement_pct
+        
+    except Exception as e:
+        print(f"⚠️ 加仓条件检查失败: {e}")
+        return False, f"检查失败: {str(e)[:50]}", 0
+
+
+def check_single_direction_per_coin(symbol, operation, current_positions, ai_signal=None, available_balance=0):
+    """
+    检查单币种单方向限制，支持智能加仓（V8.5.2更新）
     
     规则：
     - 单个币种只能持有一个方向的订单（做多或做空）
     - 不允许同一币种同时做多和做空（对冲）
-    - 不允许同一方向开多单（防止管理混乱）
-    - 可以追加到现有订单，但不能新开第二单
+    - 满足条件时允许加仓到现有订单
     
     Args:
         symbol: 交易对符号
         operation: 操作类型（OPEN_LONG/OPEN_SHORT）
         current_positions: 当前持仓列表
+        ai_signal: AI信号信息（用于判断加仓条件）
+        available_balance: 可用余额
     
     Returns:
-        (allowed: bool, reason: str)
+        (allowed: bool, reason: str, should_add: bool, price_improvement: float)
     """
     try:
         # 检查是否已有该币种的持仓
         existing_positions = [p for p in current_positions if p.get("symbol") == symbol]
         
         if not existing_positions:
-            return True, f"该币种无持仓，可以开仓"
+            return True, f"该币种无持仓，可以开仓", False, 0
         
         # 获取现有订单的方向
         existing_position = existing_positions[0]
@@ -3934,29 +4271,39 @@ def check_single_direction_per_coin(symbol, operation, current_positions):
         # 确定新订单方向
         new_side = "long" if operation == "OPEN_LONG" else "short"
         
-        # 检查是否是相同方向
-        if existing_side == new_side:
-            contracts = abs(existing_position.get("contracts", 0))
-            entry_price = existing_position.get("entry_price", 0)
-            position_value = contracts * entry_price
-            
-            return False, (
-                f"该币种已有{existing_side}仓位（{position_value:.2f}U），"
-                f"不允许同方向开第二单。建议：追加到现有订单或等待平仓后再开"
-            )
-        
         # 检查是否是相反方向（对冲）
         if existing_side != new_side:
             return False, (
                 f"该币种已有{existing_side}仓位，不允许开{new_side}仓（禁止对冲）。"
                 f"建议：先平仓现有订单再开反向单"
-            )
+            ), False, 0
         
-        return True, f"检查通过"
+        # 检查是否是相同方向 - 判断是否可以加仓
+        if existing_side == new_side:
+            # 检查是否满足加仓条件
+            can_add, add_reason, price_improvement = check_add_position_conditions(
+                symbol, existing_position, ai_signal, available_balance
+            )
+            
+            if can_add:
+                # 满足加仓条件
+                return True, f"✅加仓条件: {add_reason}", True, price_improvement
+            else:
+                # 不满足加仓条件，拒绝
+                contracts = abs(existing_position.get("contracts", 0))
+                entry_price = existing_position.get("entry_price", 0)
+                position_value = contracts * entry_price
+                
+                return False, (
+                    f"该币种已有{existing_side}仓位（{position_value:.2f}U），"
+                    f"不满足加仓条件：{add_reason}"
+                ), False, 0
+        
+        return True, f"检查通过", False, 0
     
     except Exception as e:
         print(f"⚠️ 单方向检查失败: {e}")
-        return True, "检查失败，放行"
+        return True, "检查失败，放行", False, 0
 
 
 def ai_optimize_parameters(trading_data_summary, learning_mode="full_optimization", sample_count=0):
@@ -16877,10 +17224,11 @@ def _execute_single_open_action_v55(
     else:
         print(f"✓ {reserve_reason}")
     
-    # 【新增】单币种单方向检查（防止同一币种多单或对冲）
-    direction_ok, direction_reason = check_single_direction_per_coin(
-        symbol, operation, current_positions
+    # 【V8.5.2更新】单币种单方向检查（支持智能加仓）
+    direction_ok, direction_reason, should_add, price_improvement = check_single_direction_per_coin(
+        symbol, operation, current_positions, ai_signal=action, available_balance=available_balance
     )
+    
     if not direction_ok:
         print(f"❌ {direction_reason}")
         send_bark_notification(
@@ -16888,6 +17236,53 @@ def _execute_single_open_action_v55(
             f"{direction_reason}",
         )
         return
+    
+    # 如果应该加仓而非新开
+    if should_add:
+        print(f"🔼 {direction_reason}")
+        
+        # 获取现有持仓
+        existing_positions = [p for p in current_positions if p.get("symbol") == symbol]
+        if not existing_positions:
+            print(f"❌ 检测到加仓标记，但未找到现有持仓")
+            return
+        
+        existing_position = existing_positions[0]
+        side = "long" if operation == "OPEN_LONG" else "short"
+        
+        # 获取当前价格
+        try:
+            ticker = exchange.fetch_ticker(symbol)
+            entry_price = ticker["last"]
+        except Exception as e:
+            print(f"❌ 获取价格失败: {e}")
+            return
+        
+        # 计算加仓数量（使用智能仓位计算的结果）
+        amount = (planned_position * leverage) / entry_price
+        
+        # 执行加仓
+        add_success = add_to_position(
+            symbol=symbol,
+            side=side,
+            new_amount=amount,
+            new_price=entry_price,
+            leverage=leverage,
+            existing_position=existing_position,
+            ai_signal=action,
+            price_improvement_pct=price_improvement,
+            available_balance=available_balance,
+            current_positions=current_positions
+        )
+        
+        if add_success:
+            print(f"✅ 加仓完成")
+        else:
+            print(f"❌ 加仓失败")
+        
+        return  # 加仓流程结束，不执行后续的新开仓逻辑
+    
+    # 正常开仓流程
     print(f"✓ {direction_reason}")
 
     # 3. 获取当前价格和盈亏比
