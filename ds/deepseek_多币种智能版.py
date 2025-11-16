@@ -17453,6 +17453,30 @@ def _execute_single_open_action_v55(
         leverage = min(suggested_leverage, max_leverage_for_type)
         print(f"✓ 使用系统建议杠杆: {leverage}x (上限{max_leverage_for_type}x)")
 
+    # 🆕 V8.5.1.9: 确保仓位满足最小名义价值要求（避免后续开仓失败）
+    try:
+        MIN_NOTIONAL = 5  # 币安最低名义价值要求：5 USDT
+        calculated_notional = planned_position * leverage
+        
+        if calculated_notional < MIN_NOTIONAL:
+            min_position_required = MIN_NOTIONAL / leverage * 1.2  # 1.2倍安全边际
+            
+            # 检查是否在资金允许范围内
+            if min_position_required <= total_assets * 0.8:  # 不超过总资产的80%
+                print(f"   💡 仓位自动调整: ${planned_position:.2f} → ${min_position_required:.2f} (满足最小名义价值${MIN_NOTIONAL})")
+                planned_position = min_position_required
+            else:
+                print(f"❌ 账户资金不足：需${min_position_required:.0f}U (当前仅${total_assets:.0f}U)")
+                send_bark_notification(
+                    f"[{MODEL_DISPLAY_NAME}]{coin_name}账户资金不足❌",
+                    f"最小开仓要求: ${min_position_required:.0f}U ({leverage}x杠杆)\n"
+                    f"账户总额: ${total_assets:.0f}U\n"
+                    f"建议: 充值至${min_position_required:.0f}U以上",
+                )
+                return
+    except Exception as e:
+        print(f"⚠️ 最小名义价值检查失败: {e}")
+
     # 5. 风险预算检查
     stop_loss_pct = (
         abs((entry_price - stop_loss) / entry_price) if entry_price > 0 else 0.015
@@ -17666,7 +17690,8 @@ def _execute_single_open_action_v55(
             amount_precision = market_info.get('precision', {}).get('amount', 3)  # 获取数量精度
             
             # 🆕 V8.5.1.2: 考虑精度限制的最小名义价值检查
-            # 币安要求名义价值 > 100，但需要考虑amount会被向下舍入
+            # 币安要求名义价值 > 5，但需要考虑amount会被向下舍入
+            # 对于BTC等高价币种，精度舍入后可能需要更高的值
             import math
             
             # 计算当前amount（会被舍入）
@@ -17676,7 +17701,15 @@ def _execute_single_open_action_v55(
             
             # 计算舍入后的实际名义价值
             actual_notional = rounded_amount * entry_price
-            min_notional_required = 100  # 币安要求
+            
+            # 动态确定最小名义价值要求
+            # 基础要求5 USDT，但对于高价币种考虑精度影响
+            base_min_notional = 5
+            # 如果精度舍入导致损失超过50%，使用更高的目标
+            if calculated_amount > 0 and rounded_amount / calculated_amount < 0.5:
+                min_notional_required = 100  # 高精度损失币种（如BTC）
+            else:
+                min_notional_required = base_min_notional
             
             needs_adjustment = False
             adjustment_reason = ""
@@ -17687,8 +17720,8 @@ def _execute_single_open_action_v55(
                 adjustment_reason = "名义价值不足（考虑精度舍入）"
                 
                 # 计算满足要求的最小amount（向上取整到精度）
-                # 我们需要 amount * entry_price > 100，添加安全边际1.2倍
-                target_notional = min_notional_required * 1.2  # 120 USDT，确保舍入后仍>100
+                # 添加1.2倍安全边际，确保舍入后仍满足要求
+                target_notional = min_notional_required * 1.2
                 min_amount_needed = target_notional / entry_price
                 suggested_amount = math.ceil(min_amount_needed / amount_step) * amount_step
                 
