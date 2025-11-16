@@ -40,6 +40,9 @@ if not _env_file.exists():
     raise FileNotFoundError(f"❌ 找不到 .env 文件: {_env_file}")
 load_dotenv(_env_file, override=True)
 
+# 🔧 V8.3.32.13: 模型显示名称（用于Bark推送）
+MODEL_DISPLAY_NAME = "DS"  # DS = DeepSeek
+
 # ==================== 【V8.3.16】优化配置开关 ====================
 ENABLE_V770_FULL_OPTIMIZATION = False  # V7.7.0完整优化（7-10分钟）
 ENABLE_V770_QUICK_SEARCH = True        # V7.7.0快速探索（3分钟）- 为V8.3.12提供初始参数
@@ -17155,7 +17158,7 @@ def _execute_single_open_action_v55(
                     ai_reason = ai_decision['reason']
                     ai_reason_short = ai_reason[:60] + "..." if len(ai_reason) > 60 else ai_reason
                     send_bark_notification(
-                        f"[{model_display_name}]{coin_name}仓位智能调整✅",
+                        f"[{MODEL_DISPLAY_NAME}]{coin_name}仓位智能调整✅",
                         f"{'多' if operation=='OPEN_LONG' else '空'}仓 {leverage}x杠杆\n"
                         f"原因: {adjustment_reason}\n"
                         f"调整: ${old_position:.0f}U→${suggested_position:.0f}U (+{adjustment_pct:.0f}%)\n"
@@ -17169,7 +17172,7 @@ def _execute_single_open_action_v55(
                     print(f"理由: {ai_decision['reason']}")
                     
                     send_bark_notification(
-                        f"[{model_display_name}]{coin_name}开仓取消❌",
+                        f"[{MODEL_DISPLAY_NAME}]{coin_name}开仓取消❌",
                         f"方向:{'多' if operation=='OPEN_LONG' else '空'}仓 仓位:{planned_position:.0f}U {leverage}x杠杆\n"
                         f"信号: 得分{signal_score} R:R{risk_reward:.2f}\n"
                         f"原因: {adjustment_reason}且AI拒绝调整\n"
