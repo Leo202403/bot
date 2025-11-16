@@ -17859,14 +17859,17 @@ def _execute_single_open_action_v55(
         )
 
         # 记录开仓（使用标准字段格式，【V7.9】增加signal_type）
+        # 🆕 V8.5.1.8: 从market_data获取indicator_consensus
+        indicator_consensus = market_data.get("indicator_consensus", 0) if market_data else 0
+        
         trade_record = {
             "开仓时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "平仓时间": None,
             "币种": coin_name,
             "方向": "多" if operation == "OPEN_LONG" else "空",
-            "数量": amount,
+                "数量": amount,
             "开仓价格": order.get("average", entry_price) if order else entry_price,
-            "平仓价格": None,
+                "平仓价格": None,
             "仓位(U)": planned_position,  # 标准字段
             "杠杆率": leverage,
             "止损": stop_loss,  # 标准字段
@@ -17875,8 +17878,10 @@ def _execute_single_open_action_v55(
             "盈亏(U)": None,  # 标准字段
             "开仓理由": action.get("reason", "N/A"),
             "平仓理由": None,
+            "信号分数": score,  # 🆕 V8.5.1.8: 信号分数
+            "共振指标数": indicator_consensus,  # 🆕 V8.5.1.8: 共振指标数
             "信号类型": signal_classification.get('signal_type', 'unknown') if signal_classification else 'unknown',  # V7.9
-            "预期持仓(分钟)": signal_classification.get('expected_holding_minutes', 0) if signal_classification else 0,  # V7.9
+                "预期持仓(分钟)": signal_classification.get('expected_holding_minutes', 0) if signal_classification else 0,  # V7.9
         }
 
         # 使用标准保存函数
