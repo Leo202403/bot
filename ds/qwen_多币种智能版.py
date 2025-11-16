@@ -1034,8 +1034,8 @@ def save_open_position(trade_info):
                 continue
 
 
-def update_close_position(coin_name, side, close_time, close_price, pnl, close_reason):
-    """更新平仓记录（找到对应的开仓记录并更新）- 加固版"""
+def update_close_position(coin_name, side, close_time, close_price, pnl, close_reason, close_pct=100):
+    """更新平仓记录（找到对应的开仓记录并更新）- 支持分批平仓"""
     import fcntl
     import shutil
     from pathlib import Path
@@ -1078,12 +1078,35 @@ def update_close_position(coin_name, side, close_time, close_price, pnl, close_r
                 lock_file.close()
                 return
         
-            # 6. 更新最后一条匹配记录
+            # 6. 处理平仓记录
             last_idx = matching_rows.index[-1]
-            df.at[last_idx, "平仓时间"] = close_time
-            df.at[last_idx, "平仓价格"] = close_price
-            df.at[last_idx, "盈亏(U)"] = pnl
-            df.at[last_idx, "平仓理由"] = close_reason
+            original_row = df.loc[last_idx].copy()
+            
+            if close_pct >= 100:
+                # 完全平仓：直接更新记录
+                df.at[last_idx, "平仓时间"] = close_time
+                df.at[last_idx, "平仓价格"] = close_price
+                df.at[last_idx, "盈亏(U)"] = pnl
+                df.at[last_idx, "平仓理由"] = close_reason
+            else:
+                # 分批平仓：创建一条已平仓记录，保留一条未平仓记录
+                # 更新当前记录为已平仓（代表平掉的部分）
+                df.at[last_idx, "平仓时间"] = close_time
+                df.at[last_idx, "平仓价格"] = close_price
+                df.at[last_idx, "盈亏(U)"] = pnl
+                df.at[last_idx, "平仓理由"] = close_reason
+                
+                # 创建新记录代表剩余仓位（复制原记录，清空平仓信息）
+                remaining_row = original_row.copy()
+                remaining_row["平仓时间"] = pd.NA
+                remaining_row["平仓价格"] = pd.NA
+                remaining_row["盈亏(U)"] = pd.NA
+                remaining_row["平仓理由"] = pd.NA
+                remaining_row["开仓理由"] = original_row["开仓理由"] + f" [剩余{100-close_pct:.0f}%]"
+                
+                # 将新记录追加到DataFrame
+                df = pd.concat([df, pd.DataFrame([remaining_row])], ignore_index=True)
+                print(f"  📝 已创建剩余{100-close_pct:.0f}%仓位的新记录")
 
             # 7. 保存到临时文件，然后原子性替换
             temp_file = TRADES_FILE.parent / f"{TRADES_FILE.name}.tmp"
@@ -1372,7 +1395,7 @@ def clear_symbol_orders(symbol, verbose=True):
 
 def set_tpsl_orders_via_papi(symbol: str, side: str, amount: float, stop_loss: float = None, take_profit: float = None, verbose: bool = True):
     """
-    V7.9.3 通过papi端点为仓位设置止盈止损订单
+    V7.9.3 通过papi端点为仓位设置止盈止损订单（V8.5.1.3: 添加精度处理）
     
     Args:
         symbol: 交易对符号（如 BTC/USDT:USDT）
@@ -1393,6 +1416,29 @@ def set_tpsl_orders_via_papi(symbol: str, side: str, amount: float, stop_loss: f
         binance_symbol = symbol.split('/')[0] + symbol.split(':')[0].split('/')[1]
     else:
         binance_symbol = symbol
+    
+    # 🆕 V8.5.1.3: 获取市场精度信息
+    try:
+        markets = exchange.load_markets()
+        market_info = markets.get(symbol, {})
+        amount_precision = market_info.get('precision', {}).get('amount', 3)
+        price_precision = market_info.get('precision', {}).get('price', 2)
+        
+        # 对数量和价格进行精度舍入
+        amount = round(amount, amount_precision)
+        if stop_loss:
+            stop_loss = round(stop_loss, price_precision)
+        if take_profit:
+            take_profit = round(take_profit, price_precision)
+    except Exception as e:
+        if verbose:
+            print(f"  ⚠️ 获取市场精度失败，使用默认值: {e}")
+        # 使用默认精度
+        amount = round(amount, 3)
+        if stop_loss:
+            stop_loss = round(stop_loss, 2)
+        if take_profit:
+            take_profit = round(take_profit, 2)
     
     # 平仓方向（与持仓相反）
     close_side = 'SELL' if side == 'long' else 'BUY'
@@ -16596,6 +16642,7 @@ def _execute_single_close_action(action, current_positions):
             order.get("average", 0) if order else 0,
             pnl,  # 🆕 V7.9: 使用按比例计算的盈亏
             action.get("reason", "N/A") + (f" [分批{close_pct:.0f}%]" if close_pct < 100 else ""),
+            close_pct=close_pct  # 🆕 传入分批平仓比例
                 )
         
         # 🆕 V7.9: 只有完全平仓才清理决策上下文
