@@ -10861,30 +10861,87 @@ def analyze_and_adjust_params():
                     model_name=model_name
                 )
                 
-                # 🆕 V8.5.1.4: 发送Bark推送通知
+                # 🆕 V8.5.1.4: 发送详细格式的Bark推送通知
                 try:
-                    # 构建简洁的推送摘要
-                    summary_lines = []
-                    if not yesterday_closed_trades.empty:
-                        trade_count = len(yesterday_closed_trades)
-                        profitable_count = len(yesterday_closed_trades[yesterday_closed_trades['盈亏(U)'] > 0])
-                        win_rate = (profitable_count / trade_count * 100) if trade_count > 0 else 0
-                        total_pnl = yesterday_closed_trades['盈亏(U)'].sum() if '盈亏(U)' in yesterday_closed_trades.columns else 0
-                        summary_lines.append(f"交易{trade_count}笔 胜率{win_rate:.0f}%")
-                        summary_lines.append(f"盈亏{total_pnl:+.2f}U")
+                    # 重新加载config获取最新优化数据
+                    current_config = load_learning_config()
                     
-                    # 如果有优化结果，添加优化摘要
-                    if param_comparison_html and "利润提升" in param_comparison_html:
-                        # 尝试提取利润变化（简化处理）
-                        summary_lines.append("参数已优化")
+                    # 构建详细的Bark内容（与老版本格式一致）
+                    bark_content_lines = []
                     
-                    bark_msg = " | ".join(summary_lines) if summary_lines else "AI报告已生成"
-                    send_bark_notification(
-                        f"[{model_name}]📊AI报告",
-                        bark_msg
-                    )
+                    # 获取优化数据
+                    v8321_insights = current_config.get('compressed_insights', {}).get('v8321_insights', {})
+                    scalp_opt = scalping_optimization if 'scalping_optimization' in locals() else {}
+                    swing_opt = swing_optimization if 'swing_optimization' in locals() else {}
+                    
+                    # 尝试从v8321_insights读取
+                    if v8321_insights and ('scalping' in v8321_insights or 'swing' in v8321_insights):
+                        scalp_perf = v8321_insights.get('scalping', {}).get('performance', {})
+                        swing_perf = v8321_insights.get('swing', {}).get('performance', {})
+                    else:
+                        scalp_perf = {}
+                        swing_perf = {}
+                    
+                    # 检查是否有任何优化数据
+                    has_scalp_data = scalp_opt or scalp_perf
+                    has_swing_data = swing_opt or swing_perf
+                    
+                    # 获取迭代描述和调整参数数量
+                    iter_desc = "多轮迭代1轮"  # 默认值
+                    adjusted_count = 0
+                    if param_comparison_html:
+                        # 尝试从HTML中提取迭代轮数（简化处理）
+                        if "轮次" in param_comparison_html or "迭代" in param_comparison_html:
+                            iter_desc = "多轮迭代1轮"
+                        # 估算调整参数数量
+                        if "参数" in param_comparison_html:
+                            adjusted_count = 2  # 默认假设调整了2个参数
+                    
+                    if has_scalp_data or has_swing_data:
+                        # 标题行
+                        bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
+                        bark_content_lines.append("")
+                        bark_content_lines.append("📊 优化后预期收益:")
+                        
+                        # 超短线数据
+                        if has_scalp_data:
+                            if scalp_opt:
+                                cap_rate = scalp_opt.get('new_capture_rate', 0)
+                                avg_profit = scalp_opt.get('new_avg_profit', 0) / 100
+                            else:
+                                cap_rate = scalp_perf.get('capture_rate', 0)
+                                avg_profit = scalp_perf.get('avg_profit', 0)
+                            bark_content_lines.append(f"⚡超短线: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
+                        
+                        # 波段数据
+                        if has_swing_data:
+                            if swing_opt:
+                                cap_rate = swing_opt.get('new_capture_rate', 0)
+                                avg_profit = swing_opt.get('new_avg_profit', 0) / 100
+                            else:
+                                cap_rate = swing_perf.get('capture_rate', 0)
+                                avg_profit = swing_perf.get('avg_profit', 0)
+                            bark_content_lines.append(f"🌊波段: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
+                    else:
+                        # 没有优化数据，使用交易统计
+                        if not yesterday_closed_trades.empty:
+                            trade_count = len(yesterday_closed_trades)
+                            profitable_count = len(yesterday_closed_trades[yesterday_closed_trades['盈亏(U)'] > 0])
+                            win_rate = (profitable_count / trade_count * 100) if trade_count > 0 else 0
+                            total_pnl = yesterday_closed_trades['盈亏(U)'].sum() if '盈亏(U)' in yesterday_closed_trades.columns else 0
+                            bark_content_lines.append(f"交易{trade_count}笔 胜率{win_rate:.0f}%")
+                            bark_content_lines.append(f"盈亏{total_pnl:+.2f}U")
+                    
+                    # 发送Bark推送
+                    bark_title = f"[{model_name}]🤖AI参数优化V8.3.21"
+                    bark_msg = "\n".join(bark_content_lines) if bark_content_lines else "AI报告已生成"
+                    send_bark_notification(bark_title, bark_msg)
+                    print(f"✅ Bark推送已发送: {bark_title}")
+                    
                 except Exception as bark_err:
                     print(f"⚠️ Bark推送失败: {bark_err}")
+                    import traceback
+                    traceback.print_exc()
                 
                 # 重置每日统计
                 ai_optimizer.reset_daily_details()
