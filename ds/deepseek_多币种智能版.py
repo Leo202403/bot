@@ -937,6 +937,8 @@ def save_open_position(trade_info):
         "盈亏(U)",
         "开仓理由",
         "平仓理由",
+        "信号分数",
+        "共振指标数",
     ]
 
     max_retries = 3
@@ -10557,6 +10559,7 @@ def analyze_and_adjust_params():
                 try:
                     current_config = load_learning_config()
                     if current_config:
+                        # 🆕 V8.5.1.4: 修复参数读取逻辑
                         # V8.5之后，参数存储在config['scalping_params']和config['swing_params']中
                         scalping_params = current_config.get('scalping_params', {})
                         swing_params = current_config.get('swing_params', {})
@@ -10566,6 +10569,10 @@ def analyze_and_adjust_params():
                             scalping_params = current_config['global'].get('scalping_params', {})
                         if not swing_params and 'global' in current_config:
                             swing_params = current_config['global'].get('swing_params', {})
+                        
+                        # 调试输出
+                        print(f"[参数调试] scalping_params keys: {list(scalping_params.keys()) if scalping_params else 'None'}")
+                        print(f"[参数调试] swing_params keys: {list(swing_params.keys()) if swing_params else 'None'}")
                         
                         if scalping_params and swing_params:
                             type_params_html = """
@@ -10725,9 +10732,18 @@ def analyze_and_adjust_params():
                             entry_time_full = exit_trade.get('entry_time', '')
                             entry_time_display = entry_time_full[11:16] if len(entry_time_full) > 16 else entry_time_full  # 只显示HH:MM
                             
-                            # 提取信号评分和共振数
-                            signal_score = exit_trade.get('signal_score', 0)
-                            consensus = exit_trade.get('consensus', 0)
+                            # 🆕 V8.5.1.4: 从CSV列名读取信号评分和共振数
+                            signal_score = exit_trade.get('信号分数', exit_trade.get('signal_score', 0))
+                            consensus = exit_trade.get('共振指标数', exit_trade.get('consensus', 0))
+                            # 转换为数字类型
+                            try:
+                                signal_score = int(float(signal_score)) if pd.notna(signal_score) else 0
+                            except:
+                                signal_score = 0
+                            try:
+                                consensus = int(float(consensus)) if pd.notna(consensus) else 0
+                            except:
+                                consensus = 0
                             signal_info = f"{signal_score}/{consensus}" if signal_score > 0 else 'N/A'
                             
                             combined_rows.append({
@@ -10846,6 +10862,31 @@ def analyze_and_adjust_params():
                     body_html=email_html,
                     model_name=model_name
                 )
+                
+                # 🆕 V8.5.1.4: 发送Bark推送通知
+                try:
+                    # 构建简洁的推送摘要
+                    summary_lines = []
+                    if not yesterday_closed_trades.empty:
+                        trade_count = len(yesterday_closed_trades)
+                        profitable_count = len(yesterday_closed_trades[yesterday_closed_trades['盈亏(U)'] > 0])
+                        win_rate = (profitable_count / trade_count * 100) if trade_count > 0 else 0
+                        total_pnl = yesterday_closed_trades['盈亏(U)'].sum() if '盈亏(U)' in yesterday_closed_trades.columns else 0
+                        summary_lines.append(f"交易{trade_count}笔 胜率{win_rate:.0f}%")
+                        summary_lines.append(f"盈亏{total_pnl:+.2f}U")
+                    
+                    # 如果有优化结果，添加优化摘要
+                    if param_comparison_html and "利润提升" in param_comparison_html:
+                        # 尝试提取利润变化（简化处理）
+                        summary_lines.append("参数已优化")
+                    
+                    bark_msg = " | ".join(summary_lines) if summary_lines else "AI报告已生成"
+                    send_bark_notification(
+                        f"[{model_name}]📊AI报告",
+                        bark_msg
+                    )
+                except Exception as bark_err:
+                    print(f"⚠️ Bark推送失败: {bark_err}")
                 
                 # 重置每日统计
                 ai_optimizer.reset_daily_details()
