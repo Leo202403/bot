@@ -10600,8 +10600,16 @@ def analyze_and_adjust_params():
                             ]
                             
                             for param_key, param_name, param_format in params_to_show:
-                                scalp_val = scalping_params.get(param_key, 0)
-                                swing_val = swing_params.get(param_key, 0)
+                                # 🔧 V8.5.1.6: 某些参数需要从global层级读取
+                                if param_key in ['base_position_ratio', 'max_leverage', 'max_concurrent_positions']:
+                                    # 从DEFAULT_LEARNING_CONFIG读取默认值
+                                    global_scalp = DEFAULT_LEARNING_CONFIG.get('global', {}).get('scalping_params', {})
+                                    global_swing = DEFAULT_LEARNING_CONFIG.get('global', {}).get('swing_params', {})
+                                    scalp_val = global_scalp.get(param_key, 0)
+                                    swing_val = global_swing.get(param_key, 0)
+                                else:
+                                    scalp_val = scalping_params.get(param_key, 0)
+                                    swing_val = swing_params.get(param_key, 0)
                                 
                                 if param_format == '%':
                                     scalp_display = f"{scalp_val*100:.0f}%"
@@ -10894,15 +10902,21 @@ def analyze_and_adjust_params():
                     has_swing_data = swing_opt or swing_perf
                     
                     # 获取迭代描述和调整参数数量
-                    iter_desc = "多轮迭代1轮"  # 默认值
-                    adjusted_count = 0
-                    if param_comparison_html:
-                        # 尝试从HTML中提取迭代轮数（简化处理）
-                        if "轮次" in param_comparison_html or "迭代" in param_comparison_html:
-                            iter_desc = "多轮迭代1轮"
-                        # 估算调整参数数量
-                        if "参数" in param_comparison_html:
-                            adjusted_count = 2  # 默认假设调整了2个参数
+                    # 🔧 V8.5.1.6: 从_iterative_history获取真实数据
+                    iterative_history = current_config.get('_iterative_history', {})
+                    if iterative_history and 'total_rounds' in iterative_history:
+                        iter_desc = f"多轮迭代{iterative_history['total_rounds']}轮"
+                        # 计算调整参数数量
+                        adjusted_count = 0
+                        if 'phase2' in iterative_history and 'adjustments' in iterative_history['phase2']:
+                            adjustments = iterative_history['phase2']['adjustments']
+                            if 'global' in adjustments:
+                                adjusted_count += len(adjustments['global'])
+                            if 'per_symbol' in adjustments:
+                                adjusted_count += len(adjustments['per_symbol'])
+                    else:
+                        iter_desc = "多轮迭代1轮"  # 默认值
+                        adjusted_count = 2  # 默认假设调整了2个参数
                     
                     if has_scalp_data or has_swing_data:
                         # 标题行
