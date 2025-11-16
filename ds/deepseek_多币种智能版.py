@@ -8187,7 +8187,8 @@ def analyze_and_adjust_params():
         
         # 加载当前配置
         config = load_learning_config()
-        original_config = json.dumps(config, ensure_ascii=False)
+        # 🔧 V8.5.1.5: 修复参数变化检测 - 使用一致的序列化参数
+        original_config = json.dumps(config, ensure_ascii=False, sort_keys=True, default=str)
 
         print(f"📊 全部交易样本: {len(df)}笔 | 学习模式: {learning_mode}")
 
@@ -9244,8 +9245,14 @@ def analyze_and_adjust_params():
                 traceback.print_exc()
 
         # ========== 第5步：保存并通知 ==========
-        current_config = json.dumps(config, ensure_ascii=False, default=str)
+        # 🔧 V8.5.1.5: 修复参数变化检测 - 使用一致的序列化参数（sort_keys确保key顺序一致）
+        current_config = json.dumps(config, ensure_ascii=False, sort_keys=True, default=str)
         config_changed = (current_config != original_config)
+        
+        # 调试输出：显示参数是否变化
+        print(f"\n[参数变化检测] config_changed = {config_changed}")
+        if not config_changed and len(original_config) != len(current_config):
+            print(f"  ⚠️ 警告：参数未变化但JSON长度不同 (原始:{len(original_config)} vs 当前:{len(current_config)})")
         
         # 【V8.3.18.2】手动回测模式：不管参数是否变化都发送通知
         is_manual_backtest = os.getenv("MANUAL_BACKTEST") == "true"
