@@ -17689,27 +17689,38 @@ def _execute_single_open_action_v55(
             min_amount = market_info.get('limits', {}).get('amount', {}).get('min', 0)
             amount_precision = market_info.get('precision', {}).get('amount', 3)  # 获取数量精度
             
-            # 🆕 V8.5.1.2: 考虑精度限制的最小名义价值检查
-            # 币安要求名义价值 > 5，但需要考虑amount会被向下舍入
-            # 对于BTC等高价币种，精度舍入后可能需要更高的值
+            # 🆕 V8.5.1.2 + V8.5.1.9增强: 考虑精度限制的最小名义价值检查
+            # 币安要求名义价值 > 5 USDT
             import math
             
-            # 计算当前amount（会被舍入）
+            # 计算当前amount
             calculated_amount = (planned_position * leverage) / entry_price
-            amount_step = 10 ** (-amount_precision)
-            rounded_amount = math.floor(calculated_amount / amount_step) * amount_step
+            
+            # 🔧 V8.5.1.9改进：安全的精度舍入
+            # 不依赖precision字段，直接根据实际情况判断
+            try:
+                # 尝试使用精度信息
+                if amount_precision and amount_precision > 0:
+                    amount_step = 10 ** (-amount_precision)
+                    rounded_amount = round(calculated_amount / amount_step) * amount_step
+                else:
+                    # 精度信息无效，使用原始值
+                    rounded_amount = calculated_amount
+                
+                # 保护机制：确保舍入后不会变成0或负数
+                if rounded_amount <= 0 or rounded_amount < calculated_amount * 0.1:
+                    print(f"   ⚠️ 精度舍入异常（{calculated_amount:.6f}→{rounded_amount:.6f}），使用原始值")
+                    rounded_amount = calculated_amount
+            except Exception as e:
+                print(f"   ⚠️ 精度计算失败: {e}，使用原始值")
+                rounded_amount = calculated_amount
             
             # 计算舍入后的实际名义价值
             actual_notional = rounded_amount * entry_price
             
-            # 动态确定最小名义价值要求
-            # 基础要求5 USDT，但对于高价币种考虑精度影响
-            base_min_notional = 5
-            # 如果精度舍入导致损失超过50%，使用更高的目标
-            if calculated_amount > 0 and rounded_amount / calculated_amount < 0.5:
-                min_notional_required = 100  # 高精度损失币种（如BTC）
-            else:
-                min_notional_required = base_min_notional
+            # 🆕 简化逻辑：统一使用5 USDT作为最小要求
+            # 对于特殊情况，在AI评估时处理
+            min_notional_required = 5
             
             needs_adjustment = False
             adjustment_reason = ""
