@@ -14066,21 +14066,43 @@ Your core principles:
 
 
 def calculate_risk_reward_ratio(entry_price, stop_loss, take_profit, side="long"):
-    """计算盈亏比"""
+    """计算盈亏比
+    
+    🆕 V8.5.1.2: 添加价格顺序验证
+    """
     try:
+        # 🆕 验证价格顺序是否正确
         if side == "long":
+            if stop_loss >= entry_price:
+                print(f"⚠️ 价格顺序错误：做多时止损(${stop_loss:.2f})应低于入场价(${entry_price:.2f})")
+                return 0
+            if take_profit <= entry_price:
+                print(f"⚠️ 价格顺序错误：做多时止盈(${take_profit:.2f})应高于入场价(${entry_price:.2f})")
+                return 0
             risk = entry_price - stop_loss
             reward = take_profit - entry_price
         else:  # short
+            if stop_loss <= entry_price:
+                print(f"⚠️ 价格顺序错误：做空时止损(${stop_loss:.2f})应高于入场价(${entry_price:.2f})")
+                return 0
+            if take_profit >= entry_price:
+                print(f"⚠️ 价格顺序错误：做空时止盈(${take_profit:.2f})应低于入场价(${entry_price:.2f})")
+                return 0
             risk = stop_loss - entry_price
             reward = entry_price - take_profit
         
         if risk <= 0:
+            print(f"⚠️ 风险值异常：risk={risk:.2f} (止损距离过小或为负)")
+            return 0
+        
+        if reward <= 0:
+            print(f"⚠️ 收益值异常：reward={reward:.2f} (止盈距离过小或为负)")
             return 0
         
         ratio = reward / risk
         return ratio
-    except:
+    except Exception as e:
+        print(f"⚠️ 计算盈亏比异常：{e}")
         return 0
 
 
@@ -17093,22 +17115,43 @@ def _execute_single_open_action_v55(
             markets = exchange.load_markets()
             market_info = markets.get(symbol, {})
             min_amount = market_info.get('limits', {}).get('amount', {}).get('min', 0)
+            amount_precision = market_info.get('precision', {}).get('amount', 3)  # 获取数量精度
             
-            # 🆕 V8.3.32.12: 检查最小名义价值（币安要求）
-            notional_value = planned_position * leverage
-            min_notional = 120  # 币安USDT合约最小名义价值（BTC/ETH等主流币种需要120U）
+            # 🆕 V8.5.1.2: 考虑精度限制的最小名义价值检查
+            # 币安要求名义价值 > 100，但需要考虑amount会被向下舍入
+            import math
+            
+            # 计算当前amount（会被舍入）
+            calculated_amount = (planned_position * leverage) / entry_price
+            amount_step = 10 ** (-amount_precision)
+            rounded_amount = math.floor(calculated_amount / amount_step) * amount_step
+            
+            # 计算舍入后的实际名义价值
+            actual_notional = rounded_amount * entry_price
+            min_notional_required = 100  # 币安要求
+            
             needs_adjustment = False
             adjustment_reason = ""
             suggested_position = planned_position
             
-            if notional_value < min_notional:
+            if actual_notional <= min_notional_required:
                 needs_adjustment = True
-                adjustment_reason = "名义价值不足"
-                suggested_position = min_notional / leverage
+                adjustment_reason = "名义价值不足（考虑精度舍入）"
                 
-                print(f"\n⚠️ 名义价值不足")
-                print(f"当前名义价值: ${notional_value:.2f} (${planned_position:.2f} × {leverage}x)")
-                print(f"最小要求: ${min_notional:.2f}")
+                # 计算满足要求的最小amount（向上取整到精度）
+                # 我们需要 amount * entry_price > 100，添加安全边际1.2倍
+                target_notional = min_notional_required * 1.2  # 120 USDT，确保舍入后仍>100
+                min_amount_needed = target_notional / entry_price
+                suggested_amount = math.ceil(min_amount_needed / amount_step) * amount_step
+                
+                # 根据建议的amount计算仓位
+                suggested_position = (suggested_amount * entry_price) / leverage
+                
+                print(f"\n⚠️ 名义价值不足（考虑精度舍入）")
+                print(f"计算数量: {calculated_amount:.6f} → 舍入后: {rounded_amount:.6f}")
+                print(f"舍入后名义价值: ${actual_notional:.2f}")
+                print(f"最小要求: >${min_notional_required:.2f}")
+                print(f"建议数量: {suggested_amount:.6f} (精度{amount_precision}位)")
                 print(f"建议仓位: ${suggested_position:.2f}U")
             
             elif min_amount and amount < min_amount:
