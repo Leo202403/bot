@@ -10590,47 +10590,31 @@ def analyze_and_adjust_params():
                 <th style="padding:10px; border:1px solid #ddd;">🌊波段</th>
             </tr>
 """
+                            # 🔧 V8.5.1.7: 只显示优化后的参数，移除固定配置
                             params_to_show = [
                                 ('min_risk_reward', '最小盈亏比', ':.1f'),
                                 ('min_signal_score', '最低信号分数', ':.0f'),
                                 ('max_holding_hours', '最长持仓(小时)', ':.1f'),
-                                ('base_position_ratio', '基础仓位比例', '%'),
-                                ('max_leverage', '最大杠杆', 'x'),
-                                ('max_concurrent_positions', '最大持仓数', '个'),
+                                ('atr_tp_multiplier', '止盈ATR倍数', ':.1f'),
+                                ('atr_stop_multiplier', '止损ATR倍数', ':.1f'),
+                                ('min_consensus', '最小共振指标数', ':.0f'),
                             ]
                             
                             for param_key, param_name, param_format in params_to_show:
-                                # 🔧 V8.5.1.6: 某些参数需要从global层级读取
-                                if param_key in ['base_position_ratio', 'max_leverage', 'max_concurrent_positions']:
-                                    # 从DEFAULT_LEARNING_CONFIG读取默认值
-                                    global_scalp = DEFAULT_LEARNING_CONFIG.get('global', {}).get('scalping_params', {})
-                                    global_swing = DEFAULT_LEARNING_CONFIG.get('global', {}).get('swing_params', {})
-                                    scalp_val = global_scalp.get(param_key, 0)
-                                    swing_val = global_swing.get(param_key, 0)
-                                else:
-                                    scalp_val = scalping_params.get(param_key, 0)
-                                    swing_val = swing_params.get(param_key, 0)
+                                # 🔧 V8.5.1.7: 所有参数都从优化后的config读取
+                                scalp_val = scalping_params.get(param_key, 0)
+                                swing_val = swing_params.get(param_key, 0)
                                 
-                                if param_format == '%':
-                                    scalp_display = f"{scalp_val*100:.0f}%"
-                                    swing_display = f"{swing_val*100:.0f}%"
-                                elif param_format == 'x':
-                                    scalp_display = f"{scalp_val}x"
-                                    swing_display = f"{swing_val}x"
-                                elif param_format == '个':
-                                    scalp_display = f"{scalp_val}个"
-                                    swing_display = f"{swing_val}个"
+                                # 所有参数都是数字格式，直接使用format
+                                if isinstance(scalp_val, (int, float)):
+                                    scalp_display = ('{' + param_format + '}').format(scalp_val)
                                 else:
-                                    # 修复format错误：使用.format()方法
-                                    if isinstance(scalp_val, (int, float)):
-                                        scalp_display = ('{' + param_format + '}').format(scalp_val)
-                                    else:
-                                        scalp_display = str(scalp_val)
-                                    
-                                    if isinstance(swing_val, (int, float)):
-                                        swing_display = ('{' + param_format + '}').format(swing_val)
-                                    else:
-                                        swing_display = str(swing_val)
+                                    scalp_display = str(scalp_val)
+                                
+                                if isinstance(swing_val, (int, float)):
+                                    swing_display = ('{' + param_format + '}').format(swing_val)
+                                else:
+                                    swing_display = str(swing_val)
                                 
                                 type_params_html += f"""
             <tr>
