@@ -14452,7 +14452,8 @@ that SL may move towards profit direction during the trade.
 
 === PRIORITY HIERARCHY ===
 
-1. YTC (S/R≥4) > 4H Trend | 2. PA @ Key Level > Indicators | 3. 4H Trend > 15m | 4. Reversal PA > TP | 5. In Profit + Counter Signal → Exit
+1. YTC (S/R≥4) > 4H Trend | 2. PA @ Key Level > Indicators | 3. 4H Trend > 15m | 4. Reversal PA > TP
+**Note**: V8.5.2 removed "In Profit + Counter Signal → Exit" rule to prevent premature exits
 
 === SL/TP LOGIC (1H Based) ===
 
