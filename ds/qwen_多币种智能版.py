@@ -10611,6 +10611,85 @@ def analyze_and_adjust_params():
     <p><strong>生成时间：</strong>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
 """
                 
+                # 🆕 V8.5.5: 构建执行摘要（最关键信息在最前）
+                executive_summary_html = ""
+                try:
+                    # 获取关键指标
+                    trade_count = len(recent_20) if 'recent_20' in locals() and not recent_20.empty else 0
+                    
+                    # 获取核心问题统计
+                    premature_count = 0
+                    false_count = 0
+                    missed_count = 0
+                    if exit_analysis and 'exit_stats' in exit_analysis:
+                        premature_count = exit_analysis['exit_stats'].get('premature_count', 0)
+                    if entry_analysis and 'entry_stats' in entry_analysis:
+                        false_count = entry_analysis['entry_stats'].get('false_entries', 0)
+                        missed_count = entry_analysis['entry_stats'].get('missed_profitable', 0)
+                    
+                    premature_rate = (premature_count / trade_count * 100) if trade_count > 0 else 0
+                    false_rate = (false_count / trade_count * 100) if trade_count > 0 else 0
+                    
+                    executive_summary_html = f"""
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; margin: 20px 0;">
+        <h2 style="color: white; margin: 0 0 15px 0; border: none; border-bottom: 2px solid rgba(255,255,255,0.3); padding-bottom: 10px;">
+            📊 执行摘要（5秒看懂）
+        </h2>
+        
+        <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 5px; margin: 10px 0;">
+            <h3 style="color: white; margin: 0 0 10px 0;">🎯 本次优化核心结论</h3>
+            <p style="margin: 5px 0;">✅ 完成1轮参数迭代优化</p>
+            <p style="margin: 5px 0;">📈 分析样本：{trade_count}笔交易</p>
+            
+            <p style="margin: 10px 0 5px 0;"><strong>关键发现：</strong></p>
+            <ul style="margin: 5px 0; padding-left: 20px;">
+                <li>过早平仓：{premature_count}笔({premature_rate:.0f}%)，平均错过潜在利润</li>
+                <li>虚假信号：{false_count}笔({false_rate:.0f}%)，需提高入场标准</li>
+                <li>错过机会：{missed_count}笔，参数可能过严</li>
+            </ul>
+        </div>
+        
+        <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 5px; margin: 10px 0;">
+            <h3 style="color: white; margin: 0 0 10px 0;">📊 关键指标对比</h3>
+            <table style="width: 100%; color: white;">
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.3);">
+                    <th style="text-align: left; padding: 5px;">指标</th>
+                    <th style="text-align: center; padding: 5px;">当前</th>
+                    <th style="text-align: center; padding: 5px;">目标</th>
+                    <th style="text-align: center; padding: 5px;">改善方向</th>
+                </tr>
+                <tr>
+                    <td style="padding: 5px;">胜率</td>
+                    <td style="text-align: center; padding: 5px;">{win_rate*100:.1f}%</td>
+                    <td style="text-align: center; padding: 5px;">55%+</td>
+                    <td style="text-align: center; padding: 5px; color: #4caf50;">{'↑' if win_rate*100 < 55 else '✓'}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 5px;">盈亏比</td>
+                    <td style="text-align: center; padding: 5px;">{win_loss_ratio:.2f}:1</td>
+                    <td style="text-align: center; padding: 5px;">2.25:1</td>
+                    <td style="text-align: center; padding: 5px; color: #4caf50;">{'↑' if win_loss_ratio < 2.25 else '✓'}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 5px;">过早平仓率</td>
+                    <td style="text-align: center; padding: 5px;">{premature_rate:.0f}%</td>
+                    <td style="text-align: center; padding: 5px;">&lt;30%</td>
+                    <td style="text-align: center; padding: 5px; color: #4caf50;">{'↓' if premature_rate > 30 else '✓'}</td>
+                </tr>
+            </table>
+        </div>
+        
+        <p style="margin: 10px 0 0 0; padding: 10px; background: rgba(255,255,255,0.15); border-radius: 5px; font-size: 0.9em;">
+            💡 <strong>改进重点：</strong>延长止盈目标、提高入场质量、优化平仓时机（详见AI智能洞察）
+        </p>
+    </div>
+"""
+                except Exception as e:
+                    print(f"⚠️ 执行摘要生成失败: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    executive_summary_html = ""
+                
                 # 🆕 V8.3.21.3: 构建学习经验模块（优先展示V8.3.21真实数据）
                 learning_insights_html = ""
                 # 🔧 V7.7.0.19 Fix: 重新读取最新的 learning_config 确保获取到 compressed_insights
@@ -11010,13 +11089,16 @@ def analyze_and_adjust_params():
                     print(f"⚠️ 生成分类型参数对比失败: {e}")
                 
                 # 拼接主体内容（使用字符串拼接避免f-string嵌套）
+                # 🆕 V8.5.5: 调整邮件顺序 - 最重要信息在最前
                 email_body_parts = [
                     email_header,
-                    trader_summary_html,  # 【V7.9新增】交易员执行摘要
-                    type_params_html,  # 【V7.9新增】分类型参数对比
-                    exit_timing_html,
-                    learning_insights_html,  # 🆕 添加学习经验模块
-                    opportunity_stats_html,
+                    executive_summary_html,  # 🆕 V8.5.5: 执行摘要（5秒看懂，最前）
+                    learning_insights_html,  # AI智能洞察（第二重要）
+                    type_params_html,  # 参数配置
+                    opportunity_stats_html,  # 机会捕获（含V8.5.4分类利润）
+                    entry_exit_timing_html if 'entry_exit_timing_html' in locals() else "",  # 开平仓分析（含开仓质量）
+                    trader_summary_html,  # 交易统计
+                    exit_timing_html,  # 平仓时机详情
                     "\n    <h2>🔄 参数优化分析</h2>\n"
                 ]
                 
@@ -11044,6 +11126,92 @@ def analyze_and_adjust_params():
                     # 构建统计摘要
                     stats_html = '<div class="summary-box" style="background: #e3f2fd;">\n'
                     stats_html += '    <h2>📊 开平仓时机完整分析（昨日）</h2>\n'
+                    
+                    # 🆕 V8.5.5: 开仓质量分析（独立模块，用户要求）
+                    if has_entry:
+                        try:
+                            entry_stats = entry_analysis['entry_stats']
+                            total_ai_opened = entry_stats.get('ai_opened', 0)
+                            correct_entries = entry_stats.get('correct_entries', 0)
+                            timing_issues = entry_stats.get('timing_issues', 0)
+                            false_entries = entry_stats.get('false_entries', 0)
+                            correctly_filtered = entry_stats.get('correctly_filtered', 0)
+                            
+                            # 计算占比
+                            correct_rate = (correct_entries / total_ai_opened * 100) if total_ai_opened > 0 else 0
+                            timing_rate = (timing_issues / total_ai_opened * 100) if total_ai_opened > 0 else 0
+                            false_rate = (false_entries / total_ai_opened * 100) if total_ai_opened > 0 else 0
+                            
+                            # 评级逻辑
+                            if correct_rate >= 60:
+                                grade = "A"
+                                grade_color = "#4caf50"
+                                grade_desc = "优秀"
+                            elif correct_rate >= 40:
+                                grade = "B+"
+                                grade_color = "#8bc34a"
+                                grade_desc = "良好"
+                            elif correct_rate >= 20:
+                                grade = "C+"
+                                grade_color = "#ffc107"
+                                grade_desc = "及格"
+                            else:
+                                grade = "C-"
+                                grade_color = "#ff9800"
+                                grade_desc = "待改进"
+                            
+                            stats_html += f'''
+    <div style="background: #fff; padding: 15px; border-radius: 8px; margin: 15px 0; border: 2px solid {grade_color}; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="color: {grade_color}; margin: 0 0 10px 0;">🎯 开仓质量分析</h3>
+        <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
+            <tr style="background: #f5f5f5; font-weight: bold;">
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">评级</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">数量</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">占比</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">说明</th>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;">✅ 优秀</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{correct_entries}笔</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #4caf50;">{correct_rate:.0f}%</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">正确识别，盈利交易</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;">⚠️ 一般</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{timing_issues}笔</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{timing_rate:.0f}%</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">时机欠佳，可优化</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;">❌ 较差</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{false_entries}笔</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #f44336;">{false_rate:.0f}%</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">虚假信号，需改进</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;">🔒 过滤</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{correctly_filtered}笔</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">-</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">正确过滤，避免亏损</td>
+            </tr>
+        </table>
+        <p style="margin: 10px 0; padding: 12px; background: {grade_color}; color: white; border-radius: 5px; text-align: center; font-size: 1.1em;">
+            <strong>整体评分：{grade} ({grade_desc})</strong> | 优秀率{correct_rate:.0f}% | 失误率{false_rate:.0f}%
+        </p>
+        <div style="background: #f0f7ff; padding: 10px; border-left: 4px solid #2196f3; margin: 10px 0;">
+            <strong>💡 改进建议：</strong>
+            <ul style="margin: 5px 0; padding-left: 20px;">
+                <li>提高入场确认标准（减少时机问题{timing_rate:.0f}%）</li>
+                <li>加强虚假信号识别（当前{false_rate:.0f}%失误率）</li>
+                <li>目标：优秀率提升至60%+，失误率降至5%以下</li>
+            </ul>
+        </div>
+    </div>
+'''
+                        except Exception as e:
+                            print(f"⚠️ 开仓质量分析生成失败: {e}")
+                            import traceback
+                            traceback.print_exc()
                     
                     # 开仓统计
                     if has_entry:
