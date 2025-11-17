@@ -1092,10 +1092,10 @@ def update_close_position(coin_name, side, close_time, close_price, pnl, close_r
             else:
                 # 分批平仓：创建一条已平仓记录，保留一条未平仓记录
                 # 更新当前记录为已平仓（代表平掉的部分）
-                df.at[last_idx, "平仓时间"] = close_time
-                df.at[last_idx, "平仓价格"] = close_price
-                df.at[last_idx, "盈亏(U)"] = pnl
-                df.at[last_idx, "平仓理由"] = close_reason
+            df.at[last_idx, "平仓时间"] = close_time
+            df.at[last_idx, "平仓价格"] = close_price
+            df.at[last_idx, "盈亏(U)"] = pnl
+            df.at[last_idx, "平仓理由"] = close_reason
                 
                 # 创建新记录代表剩余仓位（复制原记录，清空平仓信息）
                 remaining_row = original_row.copy()
@@ -4443,12 +4443,12 @@ def check_single_direction_per_coin(symbol, operation, current_positions, ai_sig
                 return True, f"✅加仓条件: {add_reason}", True, price_improvement
             else:
                 # 不满足加仓条件，拒绝
-                contracts = abs(existing_position.get("contracts", 0))
-                entry_price = existing_position.get("entry_price", 0)
-                position_value = contracts * entry_price
-                
-                return False, (
-                    f"该币种已有{existing_side}仓位（{position_value:.2f}U），"
+            contracts = abs(existing_position.get("contracts", 0))
+            entry_price = existing_position.get("entry_price", 0)
+            position_value = contracts * entry_price
+            
+            return False, (
+                f"该币种已有{existing_side}仓位（{position_value:.2f}U），"
                     f"不满足加仓条件：{add_reason}"
                 ), False, 0
         
@@ -10061,12 +10061,12 @@ def analyze_and_adjust_params():
 """
                     else:
                         # Fallback到旧版总利润对比
-                        old_total_profit = stats['old_captured_count'] * stats['avg_old_captured_profit'] / 100
-                        new_total_profit = stats['new_captured_count'] * stats['avg_new_captured_profit'] / 100
-                        profit_diff = new_total_profit - old_total_profit
-                        profit_diff_pct = ((new_total_profit / old_total_profit - 1) * 100) if old_total_profit != 0 else (float('inf') if new_total_profit > 0 else 0)
-                        
-                        opportunity_stats_html += f"""
+                    old_total_profit = stats['old_captured_count'] * stats['avg_old_captured_profit'] / 100
+                    new_total_profit = stats['new_captured_count'] * stats['avg_new_captured_profit'] / 100
+                    profit_diff = new_total_profit - old_total_profit
+                    profit_diff_pct = ((new_total_profit / old_total_profit - 1) * 100) if old_total_profit != 0 else (float('inf') if new_total_profit > 0 else 0)
+                    
+                    opportunity_stats_html += f"""
         <div style="margin: 15px 0; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; color: white;">
             <h3 style="margin: 0 0 10px 0; color: white; border-bottom: 2px solid rgba(255,255,255,0.3); padding-bottom: 8px;">
                 💰 总利润对比分析
@@ -10418,9 +10418,10 @@ def analyze_and_adjust_params():
     </div>
 """
                 
-                # 🆕 V7.7.0.15: 构建平仓时机分析HTML块（独立变量避免嵌套f-string问题）
+                # 🗑️ V8.5.5.4: 删除独立的平仓时机分析模块（用户反馈：与平仓质量分析重复）
+                # exit_timing_html已废弃，不再生成
                 exit_timing_html = ""
-                if exit_analysis:
+                if False and exit_analysis:
                     tp_exits = exit_analysis['exit_stats']['tp_exits']
                     sl_exits = exit_analysis['exit_stats']['sl_exits']
                     manual_exits = exit_analysis['exit_stats']['manual_exits']
@@ -11077,15 +11078,15 @@ def analyze_and_adjust_params():
                                 swing_val = swing_params.get(param_key, 0)
                                 
                                 # 所有参数都是数字格式，直接使用format
-                                if isinstance(scalp_val, (int, float)):
-                                    scalp_display = ('{' + param_format + '}').format(scalp_val)
-                                else:
-                                    scalp_display = str(scalp_val)
-                                
-                                if isinstance(swing_val, (int, float)):
-                                    swing_display = ('{' + param_format + '}').format(swing_val)
-                                else:
-                                    swing_display = str(swing_val)
+                                    if isinstance(scalp_val, (int, float)):
+                                        scalp_display = ('{' + param_format + '}').format(scalp_val)
+                                    else:
+                                        scalp_display = str(scalp_val)
+                                    
+                                    if isinstance(swing_val, (int, float)):
+                                        swing_display = ('{' + param_format + '}').format(swing_val)
+                                    else:
+                                        swing_display = str(swing_val)
                                 
                                 type_params_html += f"""
             <tr>
@@ -11112,9 +11113,9 @@ def analyze_and_adjust_params():
                     learning_insights_html,  # AI智能洞察（第二重要）
                     type_params_html,  # 参数配置
                     opportunity_stats_html,  # 机会捕获（含V8.5.4分类利润）
-                    entry_exit_timing_html if 'entry_exit_timing_html' in locals() else "",  # 开平仓分析（含开仓质量）
+                    entry_exit_timing_html if 'entry_exit_timing_html' in locals() else "",  # 开平仓分析（含开仓+平仓质量）
                     trader_summary_html,  # 交易统计
-                    exit_timing_html,  # 平仓时机详情
+                    # 🗑️ V8.5.5.4: exit_timing_html已删除（与平仓质量分析重复）
                     "\n    <h2>🔄 参数优化分析</h2>\n"
                 ]
                 
@@ -11229,8 +11230,91 @@ def analyze_and_adjust_params():
                             import traceback
                             traceback.print_exc()
                     
-                    # 开仓统计
-                    if has_entry:
+                    # 🆕 V8.5.5.4: 平仓质量分析（类似开仓质量分析格式）
+                    if has_exit:
+                        try:
+                            exit_stats = exit_analysis['exit_stats']
+                            total_exits = exit_stats.get('total_exits', 0)
+                            optimal_exits = exit_stats.get('optimal_exits', 0)
+                            premature_exits = exit_stats.get('premature_exits', 0)
+                            delayed_exits = exit_stats.get('delayed_exits', 0)
+                            avg_missed_profit = exit_stats.get('avg_missed_profit_pct', 0)
+                            
+                            # 计算占比
+                            optimal_rate = (optimal_exits / total_exits * 100) if total_exits > 0 else 0
+                            premature_rate = (premature_exits / total_exits * 100) if total_exits > 0 else 0
+                            delayed_rate = (delayed_exits / total_exits * 100) if total_exits > 0 else 0
+                            
+                            # 评级逻辑（基于最优平仓率）
+                            if optimal_rate >= 70:
+                                grade = "A"
+                                grade_color = "#4caf50"
+                                grade_desc = "优秀"
+                            elif optimal_rate >= 50:
+                                grade = "B+"
+                                grade_color = "#8bc34a"
+                                grade_desc = "良好"
+                            elif optimal_rate >= 30:
+                                grade = "C+"
+                                grade_color = "#ffc107"
+                                grade_desc = "及格"
+                            else:
+                                grade = "C-"
+                                grade_color = "#ff9800"
+                                grade_desc = "待改进"
+                            
+                            stats_html += f'''
+    <div style="background: #fff; padding: 15px; border-radius: 8px; margin: 15px 0; border: 2px solid {grade_color}; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="color: {grade_color}; margin: 0 0 10px 0;">🎯 平仓质量分析</h3>
+        <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
+            <tr style="background: #f5f5f5; font-weight: bold;">
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">评级</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">数量</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">占比</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">说明</th>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;">✅ 优秀</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{optimal_exits}笔</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #4caf50;">{optimal_rate:.0f}%</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">最佳时机平仓</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;">⚠️ 过早</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{premature_exits}笔</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #ff9800;">{premature_rate:.0f}%</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">提前平仓，平均错过{avg_missed_profit:.1f}%利润</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;">❌ 延迟</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{delayed_exits}笔</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #f44336;">{delayed_rate:.0f}%</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">平仓延迟，盈利回吐</td>
+            </tr>
+        </table>
+        <p style="margin: 10px 0; padding: 12px; background: {grade_color}; color: white; border-radius: 5px; text-align: center; font-size: 1.1em;">
+            <strong>整体评分：{grade} ({grade_desc})</strong> | 最优率{optimal_rate:.0f}% | 过早{premature_rate:.0f}% | 延迟{delayed_rate:.0f}%
+        </p>
+        <div style="background: #fff3e0; padding: 10px; border-left: 4px solid #ff9800; margin: 10px 0;">
+            <strong>💡 改进建议：</strong>
+            <ul style="margin: 5px 0; padding-left: 20px;">
+                <li>减少过早平仓（当前{premature_rate:.0f}%，平均错过{avg_missed_profit:.1f}%利润）</li>
+                <li>优化止盈止损位置（提高最优率至70%+）</li>
+                <li>加强趋势持续判断（避免延迟平仓{delayed_rate:.0f}%）</li>
+            </ul>
+        </div>
+    </div>
+'''
+                        except Exception as e:
+                            print(f"⚠️ 平仓质量分析生成失败: {e}")
+                            import traceback
+                            traceback.print_exc()
+                    
+                    # 🗑️ V8.5.5.4: 删除开仓统计（用户反馈：与开仓质量分析重复）
+                    # 🗑️ V8.5.5.4: 删除平仓统计（用户反馈：与平仓质量分析重复）
+                    
+                    # 开仓统计（已删除）
+                    if False and has_entry:
                         entry_stats = entry_analysis['entry_stats']
                         stats_html += f'''
     <div style="background: #fff; padding: 10px; border-radius: 5px; margin: 10px 0;">
@@ -11246,8 +11330,8 @@ def analyze_and_adjust_params():
     </div>
 '''
                     
-                    # 平仓统计
-                    if has_exit:
+                    # 平仓统计（已删除）
+                    if False and has_exit:
                         exit_stats = exit_analysis['exit_stats']
                         stats_html += f'''
     <div style="background: #fff; padding: 10px; border-radius: 5px; margin: 10px 0;">
@@ -18419,7 +18503,7 @@ def _execute_single_open_action_v55(
             try:
                 # 尝试使用精度信息
                 if amount_precision and amount_precision > 0:
-                    amount_step = 10 ** (-amount_precision)
+            amount_step = 10 ** (-amount_precision)
                     rounded_amount = round(calculated_amount / amount_step) * amount_step
                 else:
                     # 精度信息无效，使用原始值
@@ -18632,9 +18716,9 @@ def _execute_single_open_action_v55(
             "平仓时间": None,
             "币种": coin_name,
             "方向": "多" if operation == "OPEN_LONG" else "空",
-                "数量": amount,
+            "数量": amount,
             "开仓价格": order.get("average", entry_price) if order else entry_price,
-                "平仓价格": None,
+            "平仓价格": None,
             "仓位(U)": planned_position,  # 标准字段
             "杠杆率": leverage,
             "止损": stop_loss,  # 标准字段
@@ -18646,7 +18730,7 @@ def _execute_single_open_action_v55(
             "信号分数": score,  # 🆕 V8.5.1.8: 信号分数
             "共振指标数": indicator_consensus,  # 🆕 V8.5.1.8: 共振指标数
             "信号类型": signal_classification.get('signal_type', 'unknown') if signal_classification else 'unknown',  # V7.9
-                "预期持仓(分钟)": signal_classification.get('expected_holding_minutes', 0) if signal_classification else 0,  # V7.9
+            "预期持仓(分钟)": signal_classification.get('expected_holding_minutes', 0) if signal_classification else 0,  # V7.9
         }
 
         # 使用标准保存函数
@@ -19113,7 +19197,7 @@ def execute_portfolio_actions(
                         "方向": "多",
                         "数量": amount,
                         "开仓价格": order.get("average", price) if order else price,
-                            "平仓价格": None,
+                        "平仓价格": None,
                         "仓位(U)": position_usd,
                         "杠杆率": leverage,
                         "止损": action.get("stop_loss_price", 0),
@@ -19207,7 +19291,7 @@ def execute_portfolio_actions(
                         "方向": "空",
                         "数量": amount,
                         "开仓价格": order.get("average", price) if order else price,
-                            "平仓价格": None,
+                        "平仓价格": None,
                         "仓位(U)": position_usd,
                         "杠杆率": leverage,
                         "止损": action.get("stop_loss_price", 0),
