@@ -18093,14 +18093,24 @@ def _execute_single_open_action_v55(
                 markets = exchange.load_markets()
                 market_info = markets.get(symbol, {})
                 amount_precision = market_info.get('precision', {}).get('amount')
-                # 确保精度是有效的正整数
-                if amount_precision is None or amount_precision < 0:
+                
+                # 处理精度值：可能是整数（小数位数）或浮点数（步长）
+                if amount_precision is None:
                     amount_precision = 3  # 默认BTC精度
+                elif isinstance(amount_precision, float):
+                    # 如果是浮点数（如0.001），转换为小数位数（3）
+                    import math
+                    if amount_precision > 0:
+                        amount_precision = -int(math.log10(amount_precision))
+                    else:
+                        amount_precision = 3
+                elif not isinstance(amount_precision, int) or amount_precision < 0:
+                    amount_precision = 3
             except Exception as e:
                 print(f"   ⚠️ 获取精度失败: {e}，使用默认精度3")
                 amount_precision = 3  # 默认BTC精度
             
-            print(f"   [调试] 币种精度: {amount_precision}, 价格: ${entry_price_check:.2f}")
+            print(f"   [调试] 币种精度: {amount_precision}位小数, 价格: ${entry_price_check:.2f}")
             
             # 计算实际下单数量（考虑精度）
             calculated_amount = (planned_position * leverage) / entry_price_check
