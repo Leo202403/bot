@@ -4149,7 +4149,7 @@ def add_to_position(symbol, side, new_amount, new_price, leverage, existing_posi
         return False
 
 
-def check_add_position_conditions(symbol, existing_position, ai_signal, available_balance):
+def check_add_position_conditions(symbol, existing_position, ai_signal, available_balance, current_price=0):
     """
     检查是否满足加仓条件（V8.5.2新增）
     
@@ -4158,6 +4158,7 @@ def check_add_position_conditions(symbol, existing_position, ai_signal, availabl
         existing_position: 现有持仓信息
         ai_signal: AI信号信息
         available_balance: 可用余额
+        current_price: 当前市场价格
     
     Returns:
         (can_add: bool, reason: str, price_improvement_pct: float)
@@ -4193,7 +4194,6 @@ def check_add_position_conditions(symbol, existing_position, ai_signal, availabl
         
         # 3. 检查价格是否更优（金字塔加仓）
         entry_price = existing_position.get('entry_price', 0)
-        current_price = ai_signal.get('entry_price', 0) if ai_signal else 0
         side = existing_position.get('side', '')
         
         if entry_price == 0 or current_price == 0:
@@ -4240,7 +4240,7 @@ def check_add_position_conditions(symbol, existing_position, ai_signal, availabl
         return False, f"检查失败: {str(e)[:50]}", 0
 
 
-def check_single_direction_per_coin(symbol, operation, current_positions, ai_signal=None, available_balance=0):
+def check_single_direction_per_coin(symbol, operation, current_positions, ai_signal=None, available_balance=0, current_price=0):
     """
     检查单币种单方向限制，支持智能加仓（V8.5.2更新）
     
@@ -4255,6 +4255,7 @@ def check_single_direction_per_coin(symbol, operation, current_positions, ai_sig
         current_positions: 当前持仓列表
         ai_signal: AI信号信息（用于判断加仓条件）
         available_balance: 可用余额
+        current_price: 当前市场价格
     
     Returns:
         (allowed: bool, reason: str, should_add: bool, price_improvement: float)
@@ -4284,7 +4285,7 @@ def check_single_direction_per_coin(symbol, operation, current_positions, ai_sig
         if existing_side == new_side:
             # 检查是否满足加仓条件
             can_add, add_reason, price_improvement = check_add_position_conditions(
-                symbol, existing_position, ai_signal, available_balance
+                symbol, existing_position, ai_signal, available_balance, current_price
             )
             
             if can_add:
@@ -17926,8 +17927,9 @@ def _execute_single_open_action_v55(
         print(f"✓ {reserve_reason}")
     
     # 【V8.5.2更新】单币种单方向检查（支持智能加仓）
+    current_price = market_data.get('current_price', 0)
     direction_ok, direction_reason, should_add, price_improvement = check_single_direction_per_coin(
-        symbol, operation, current_positions, ai_signal=action, available_balance=available_balance
+        symbol, operation, current_positions, ai_signal=action, available_balance=available_balance, current_price=current_price
     )
     
     if not direction_ok:
