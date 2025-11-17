@@ -14292,10 +14292,82 @@ Auto-adjustment rules:
 **Entry**: (1) 4H trend align (2) 15m consensus≥{learning_config['global']['min_indicator_consensus']}/5 (3) PA + safe location (support/resistance)  
 **HIGH**: Support/Resistance + Pin/Engulfing + 5/5 consensus
 
-**Exit Levels**:
-- **L1 (Close NOW)**: SL triggered (<1%) | 4H reversal | Loss>2% + L2+L3 reversed
-- **L2 (Early TP)**: TP<10% + reversal PA | Profit>80% TP + MACD shrink + RSI extreme | TP<2%
-- **L3 (HOLD)**: TP>10% normal | Small profit<3% no counter | Single indicator weak
+**🚨 EXIT RULES (V8.5.2 - CRITICAL R:R PROTECTION) 🚨**
+
+**⚠️ HISTORICAL DATA SHOWS: Premature exits caused R:R to collapse from 1.1:1 to 0.01:1!**
+**From 105 trades: Average profit was only 0.014U because AI exited too early.**
+**STRICTLY follow these rules to maintain target R:R:**
+
+**✅ ALLOWED EXIT CONDITIONS (Exit ONLY when ONE of these is met):**
+
+1. **TP Reached**: Price >= TP (for LONG) OR Price <= TP (for SHORT)
+   - This is your PRIMARY exit target
+   - Expected to achieve R:R ≥ {learning_config['global']['min_risk_reward']:.1f}:1
+
+2. **SL Triggered**: Price <= SL (for LONG) OR Price >= SL (for SHORT)
+   - Accept the loss and exit immediately
+   - This protects capital from catastrophic losses
+
+3. **Time Stop**: Holding time > max_holding_hours
+   - Scalping: >{scalping_params.get('max_holding_hours', 12)}h
+   - Swing: >{swing_params.get('max_holding_hours', 72)}h
+   - Exit at market price regardless of P&L
+
+4. **Complete Trend Reversal**: 4H AND 1H AND 15m ALL reversed
+   - Example: Was 4H bear + 1H bear + 15m bear → Now ALL bullish
+   - This is RARE and requires **triple confirmation**
+
+**❌ FORBIDDEN EXIT REASONS (DO NOT EXIT for these):**
+
+1. ❌ Single timeframe reversal (e.g., "15m Bear Exhaustion")
+   - 15m reversal alone is NOT enough
+   - This is normal price action, not a valid exit signal
+
+2. ❌ "In profit + any counter signal"
+   - This old rule caused massive R:R collapse
+   - Even if profitable, WAIT for TP
+
+3. ❌ Subjective judgment
+   - "Feels like it moved enough" ← WRONG
+   - "Worried about profit giveback" ← WRONG
+   - "Saw resistance" ← Already considered at entry
+
+4. ❌ Partial profit taking
+   - "Reached 50% of TP" ← WRONG, wait for 100%
+   - "Lock in some gains" ← WRONG, trust the R:R
+
+**📊 R:R PROTECTION MECHANISM:**
+
+Current minimum R:R: {learning_config['global']['min_risk_reward']:.1f}:1
+- If you exit before TP, actual R:R drops to ~0.01:1
+- Historical data: 105 trades, 57% win rate, but only 1.43U total profit
+- Problem: Average profit per trade was 0.014U (almost nothing!)
+- Solution: WAIT for TP to achieve target 1.0-2.0U per winning trade
+
+**Decision Flow for Each Position:**
+```
+1. Check price >= TP? → YES: EXIT (Target achieved)
+                       → NO: Continue to step 2
+
+2. Check price <= SL? → YES: EXIT (Cut loss)
+                       → NO: Continue to step 3
+
+3. Check holding_time > max_hours? → YES: EXIT (Time stop)
+                                    → NO: Continue to step 4
+
+4. Check 4H+1H+15m all reversed? → YES: EXIT (Complete reversal)
+                                 → NO: HOLD (Continue holding)
+```
+
+**⚠️ If you see "Bear Exhaustion" or "Bull Exhaustion":**
+- This is a 15m signal, NOT a valid exit reason alone
+- Check if 4H and 1H also reversed
+- If not, IGNORE it and HOLD until TP
+
+**Historical Lessons:**
+- Exiting on "any counter signal" caused 46% premature exits
+- Average missed profit: 0.0% per trade (because exits were too early)
+- Result: R:R collapsed from expected 1.1:1 to actual 0.01:1
 
 === ANALYSIS WORKFLOW ===
 
@@ -14380,16 +14452,16 @@ While code executes as single position, AI should plan multi-part management:
   * Apply YTC SCRATCH logic: if momentum stalls >3 candles + no profit growth, exit remaining
       * Let winners run until premise invalidates OR major HTF S/R hit
 
-**KEY REMINDERS V5.5:**
+**KEY REMINDERS V8.5.2:**
 1. **Long & Short Equally**: In 4H bearish, actively seek SHORT, not just long
 2. Price action highest priority, especially at key levels
 3. R:R < {learning_config['global']['min_risk_reward']:.1f} must reject
 4. LONG: Enter at support / SHORT: Enter at resistance
-5. In profit + any counter signal → Close immediately
+5. **❌ DELETED - DO NOT exit on single counter signal! Only exit when TP/SL/Time Stop/Complete Reversal (see EXIT RULES above)**
 6. Analysis must show 3-layer validation (seriously analyze both long/short)
-7. Stop/TP based on S/R, not fixed percentage
+7. Stop/TP based on optimized ATR multipliers (see【V8.5】section above)
 8. Available capital: {max_total_position:.0f}U
-9. Current parameters auto-optimized from history, strictly follow
+9. Current parameters auto-optimized from history, strictly follow EXIT RULES to maintain R:R
 10. **V5.5 Smart Position Sizing**:
     - position_size_usd can be 0, system auto-allocates 15-50% based on signal
     - leverage can be suggested (1-5), system also suggests based on score
