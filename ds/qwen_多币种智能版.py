@@ -20907,6 +20907,8 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     opp_data = {
                         'coin': coin,
                         'timestamp': timestamp,
+                        'time': timestamp,  # 🆕 V8.5.5: 添加time字段（HHMM格式，供邮件显示）
+                        'date': str(current.get('snapshot_date', '')),  # 🆕 V8.5.5: 添加date字段（YYYYMMDD格式，供邮件显示）
                         'entry_price': entry_price,
                         'direction': direction,
                         'consensus': consensus,
