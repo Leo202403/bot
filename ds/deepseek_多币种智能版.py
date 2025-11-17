@@ -9366,11 +9366,14 @@ def analyze_and_adjust_params():
             
             if scalping_optimization and not scalping_optimization.get('_validation_failed'):
                 try:
-                    # 从V8.3.21优化器获取数据
-                    old_count = scalping_optimization.get('old_captured_count', 0)
-                    new_count = scalping_optimization.get('new_captured_count', 0)
-                    old_avg_profit = scalping_optimization.get('old_avg_profit', 0)
-                    new_avg_profit = scalping_optimization.get('new_avg_profit', 0)
+                    # 🔧 V8.5.5.3: 修复数据获取路径（从old_result/new_result获取）
+                    old_result = scalping_optimization.get('old_result', {})
+                    new_result = scalping_optimization.get('new_result', {})
+                    
+                    old_count = old_result.get('captured_count', 0)
+                    new_count = new_result.get('captured_count', 0)
+                    old_avg_profit = old_result.get('avg_profit', 0)
+                    new_avg_profit = new_result.get('avg_profit', 0)
                     
                     # 计算总利润
                     old_total_profit = old_count * old_avg_profit / 100
@@ -9399,11 +9402,14 @@ def analyze_and_adjust_params():
             
             if swing_optimization and not swing_optimization.get('_validation_failed'):
                 try:
-                    # 从V8.3.21优化器获取数据
-                    old_count = swing_optimization.get('old_captured_count', 0)
-                    new_count = swing_optimization.get('new_captured_count', 0)
-                    old_avg_profit = swing_optimization.get('old_avg_profit', 0)
-                    new_avg_profit = swing_optimization.get('new_avg_profit', 0)
+                    # 🔧 V8.5.5.3: 修复数据获取路径（从old_result/new_result获取）
+                    old_result = swing_optimization.get('old_result', {})
+                    new_result = swing_optimization.get('new_result', {})
+                    
+                    old_count = old_result.get('captured_count', 0)
+                    new_count = new_result.get('captured_count', 0)
+                    old_avg_profit = old_result.get('avg_profit', 0)
+                    new_avg_profit = new_result.get('avg_profit', 0)
                     
                     # 计算总利润
                     old_total_profit = old_count * old_avg_profit / 100
