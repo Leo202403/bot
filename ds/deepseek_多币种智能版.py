@@ -17712,7 +17712,7 @@ def _execute_single_open_action_v55(
         leverage = min(suggested_leverage, max_leverage_for_type)
         print(f"✓ 使用系统建议杠杆: {leverage}x (上限{max_leverage_for_type}x)")
 
-    # 🆕 V8.5.1.9 + V8.5.1.9.2: 确保仓位满足最小名义价值要求（根据币种动态判断）
+    # 🆕 V8.5.1.9.3: 确保仓位满足最小名义价值要求（考虑精度舍入）
     try:
         # 🔧 V8.5.1.9.2: BTC需要100 USDT，其他币种5 USDT
         coin_name = symbol.split('/')[0]
@@ -17721,14 +17721,54 @@ def _execute_single_open_action_v55(
         else:
             MIN_NOTIONAL = 5  # 其他币种标准要求
         
-        calculated_notional = planned_position * leverage
+        # 🔧 V8.5.1.9.3: 模拟精度舍入，确保舍入后仍满足要求
+        import math
         
-        if calculated_notional < MIN_NOTIONAL:
-            min_position_required = MIN_NOTIONAL / leverage * 1.2  # 1.2倍安全边际
+        # 获取精度信息（提前获取市场信息）
+        try:
+            markets = exchange.load_markets()
+            market_info = markets.get(symbol, {})
+            amount_precision = market_info.get('precision', {}).get('amount', 3)
+        except:
+            amount_precision = 3  # 默认BTC精度
+        
+        # 计算实际下单数量（考虑精度）
+        calculated_amount = (planned_position * leverage) / entry_price
+        
+        # 模拟精度舍入
+        if amount_precision and amount_precision > 0:
+            amount_step = 10 ** (-amount_precision)
+            # 使用round而不是floor，更接近实际
+            rounded_amount = round(calculated_amount / amount_step) * amount_step
+            
+            # 保护：如果舍入导致严重损失，使用原始值
+            if rounded_amount < calculated_amount * 0.1:
+                rounded_amount = calculated_amount
+        else:
+            rounded_amount = calculated_amount
+        
+        # 计算舍入后的实际名义价值
+        actual_notional = rounded_amount * entry_price
+        
+        if actual_notional < MIN_NOTIONAL:
+            # 计算需要的仓位（考虑精度影响）
+            # 目标：舍入后的名义价值 ≥ MIN_NOTIONAL * 1.2
+            target_notional = MIN_NOTIONAL * 1.2
+            min_amount_needed = target_notional / entry_price
+            
+            # 向上取整到精度
+            if amount_precision and amount_precision > 0:
+                amount_step = 10 ** (-amount_precision)
+                required_amount = math.ceil(min_amount_needed / amount_step) * amount_step
+            else:
+                required_amount = min_amount_needed
+            
+            # 计算对应的仓位
+            min_position_required = (required_amount * entry_price) / leverage
             
             # 检查是否在资金允许范围内
             if min_position_required <= total_assets * 0.8:  # 不超过总资产的80%
-                print(f"   💡 仓位自动调整: ${planned_position:.2f} → ${min_position_required:.2f} (满足最小名义价值${MIN_NOTIONAL})")
+                print(f"   💡 仓位自动调整: ${planned_position:.2f} → ${min_position_required:.2f} (考虑精度后名义价值≥${MIN_NOTIONAL})")
                 planned_position = min_position_required
             else:
                 print(f"❌ 账户资金不足：需${min_position_required:.0f}U (当前仅${total_assets:.0f}U)")
@@ -17741,6 +17781,8 @@ def _execute_single_open_action_v55(
                 return
     except Exception as e:
         print(f"⚠️ 最小名义价值检查失败: {e}")
+        import traceback
+        traceback.print_exc()
 
     # 5. 风险预算检查
     stop_loss_pct = (
