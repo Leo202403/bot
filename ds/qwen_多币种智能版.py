@@ -20480,7 +20480,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         'risk_reward': risk_reward,
                         'atr': atr,
                         'signal_score': signal_score,  # 【V8.3.21】添加signal_score字段
-                        'signal_type': 'scalping',
+                        'signal_type': signal_type,  # 🔧 修复：使用实际的signal_type而非硬编码
                         'signal_name': signal_name,
                         'objective_profit': objective_profit,
                         'future_data': future_summary,  # 【V8.3.21】使用摘要代替完整DataFrame
