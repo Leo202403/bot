@@ -9351,6 +9351,110 @@ def analyze_and_adjust_params():
                 import traceback
                 traceback.print_exc()
         
+        # ========== 【V8.5.4】第4.6.5步：计算分类利润对比（供邮件使用） ==========
+        if scalping_optimization or swing_optimization:
+            print("\n【第4.6.5步：计算分类利润对比（V8.5.4）】")
+            
+            profit_comparison = {
+                'has_data': False,
+                'scalping': {},
+                'swing': {}
+            }
+            
+            if scalping_optimization and not scalping_optimization.get('_validation_failed'):
+                try:
+                    # 从V8.3.21优化器获取数据
+                    old_count = scalping_optimization.get('old_captured_count', 0)
+                    new_count = scalping_optimization.get('new_captured_count', 0)
+                    old_avg_profit = scalping_optimization.get('old_avg_profit', 0)
+                    new_avg_profit = scalping_optimization.get('new_avg_profit', 0)
+                    
+                    # 计算总利润
+                    old_total_profit = old_count * old_avg_profit / 100
+                    new_total_profit = new_count * new_avg_profit / 100
+                    profit_diff = new_total_profit - old_total_profit
+                    
+                    profit_comparison['scalping'] = {
+                        'old_count': old_count,
+                        'new_count': new_count,
+                        'old_avg_profit': old_avg_profit,
+                        'new_avg_profit': new_avg_profit,
+                        'old_total_profit': old_total_profit,
+                        'new_total_profit': new_total_profit,
+                        'profit_diff': profit_diff,
+                        'count_diff': new_count - old_count,
+                        'avg_profit_diff': new_avg_profit - old_avg_profit
+                    }
+                    profit_comparison['has_data'] = True
+                    
+                    print(f"  ⚡ 超短线策略:")
+                    print(f"     捕获数量: {old_count}个 → {new_count}个 ({new_count-old_count:+d})")
+                    print(f"     平均利润: {old_avg_profit:.1f}% → {new_avg_profit:.1f}% ({new_avg_profit-old_avg_profit:+.1f}%)")
+                    print(f"     总利润: +{old_total_profit:.1f}U → +{new_total_profit:.1f}U ({profit_diff:+.1f}U)")
+                except Exception as e:
+                    print(f"  ⚠️  超短线统计失败: {e}")
+            
+            if swing_optimization and not swing_optimization.get('_validation_failed'):
+                try:
+                    # 从V8.3.21优化器获取数据
+                    old_count = swing_optimization.get('old_captured_count', 0)
+                    new_count = swing_optimization.get('new_captured_count', 0)
+                    old_avg_profit = swing_optimization.get('old_avg_profit', 0)
+                    new_avg_profit = swing_optimization.get('new_avg_profit', 0)
+                    
+                    # 计算总利润
+                    old_total_profit = old_count * old_avg_profit / 100
+                    new_total_profit = new_count * new_avg_profit / 100
+                    profit_diff = new_total_profit - old_total_profit
+                    
+                    profit_comparison['swing'] = {
+                        'old_count': old_count,
+                        'new_count': new_count,
+                        'old_avg_profit': old_avg_profit,
+                        'new_avg_profit': new_avg_profit,
+                        'old_total_profit': old_total_profit,
+                        'new_total_profit': new_total_profit,
+                        'profit_diff': profit_diff,
+                        'count_diff': new_count - old_count,
+                        'avg_profit_diff': new_avg_profit - old_avg_profit
+                    }
+                    profit_comparison['has_data'] = True
+                    
+                    print(f"  🌊 波段策略:")
+                    print(f"     捕获数量: {old_count}个 → {new_count}个 ({new_count-old_count:+d})")
+                    print(f"     平均利润: {old_avg_profit:.1f}% → {new_avg_profit:.1f}% ({new_avg_profit-old_avg_profit:+.1f}%)")
+                    print(f"     总利润: +{old_total_profit:.1f}U → +{new_total_profit:.1f}U ({profit_diff:+.1f}U)")
+                except Exception as e:
+                    print(f"  ⚠️  波段统计失败: {e}")
+            
+            # 计算综合总利润
+            if profit_comparison['has_data']:
+                try:
+                    scalp_old = profit_comparison['scalping'].get('old_total_profit', 0)
+                    scalp_new = profit_comparison['scalping'].get('new_total_profit', 0)
+                    swing_old = profit_comparison['swing'].get('old_total_profit', 0)
+                    swing_new = profit_comparison['swing'].get('new_total_profit', 0)
+                    
+                    total_old = scalp_old + swing_old
+                    total_new = scalp_new + swing_new
+                    total_diff = total_new - total_old
+                    total_diff_pct = (total_diff / total_old * 100) if total_old > 0 else 0
+                    
+                    profit_comparison['total'] = {
+                        'old': total_old,
+                        'new': total_new,
+                        'diff': total_diff,
+                        'diff_pct': total_diff_pct
+                    }
+                    
+                    print(f"\n  📊 综合总利润:")
+                    print(f"     +{total_old:.1f}U → +{total_new:.1f}U ({total_diff:+.1f}U / {total_diff_pct:+.1f}%)")
+                except Exception as e:
+                    print(f"  ⚠️  综合统计失败: {e}")
+            
+            # 保存到config供邮件使用
+            config['_v854_profit_comparison'] = profit_comparison
+        
         # ========== 【V8.3.13.3】第4.7步：Per-Symbol优化 ==========
         print("\n【第4.7步：Per-Symbol优化（V8.3.13.3）】")
         per_symbol_optimization = None
@@ -9827,14 +9931,133 @@ def analyze_and_adjust_params():
                     scalp_improvement = scalp_new_rate - scalp_old_rate
                     swing_improvement = swing_new_rate - swing_old_rate
                     
-                    # 【V8.3.17】计算总利润对比
-                    old_total_profit = stats['old_captured_count'] * stats['avg_old_captured_profit'] / 100
-                    new_total_profit = stats['new_captured_count'] * stats['avg_new_captured_profit'] / 100
-                    profit_diff = new_total_profit - old_total_profit
-                    profit_diff_pct = ((new_total_profit / old_total_profit - 1) * 100) if old_total_profit != 0 else (float('inf') if new_total_profit > 0 else 0)
+                    # 【V8.5.4】优先使用分类利润对比数据，fallback到旧逻辑
+                    profit_comparison = config.get('_v854_profit_comparison')
                     
-                    # 添加总利润对比框
-                    opportunity_stats_html += f"""
+                    if profit_comparison and profit_comparison.get('has_data'):
+                        # 【V8.5.4】使用分类利润对比（新版）
+                        scalping_data = profit_comparison.get('scalping', {})
+                        swing_data = profit_comparison.get('swing', {})
+                        total_data = profit_comparison.get('total', {})
+                        
+                        # 构建分类利润对比HTML
+                        opportunity_stats_html += f"""
+        <div style="margin: 15px 0; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; color: white;">
+            <h3 style="margin: 0 0 10px 0; color: white; border-bottom: 2px solid rgba(255,255,255,0.3); padding-bottom: 8px;">
+                💰 分类利润对比分析 <span style="font-size: 0.7em; opacity: 0.8;">(V8.5.4)</span>
+            </h3>
+"""
+                        
+                        # 超短线策略
+                        if scalping_data:
+                            s_old = scalping_data['old_total_profit']
+                            s_new = scalping_data['new_total_profit']
+                            s_diff = scalping_data['profit_diff']
+                            s_emoji = '🟢' if s_diff > 0 else ('🔴' if s_diff < 0 else '⚪')
+                            opportunity_stats_html += f"""
+            <div style="margin: 15px 0; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 6px;">
+                <h4 style="margin: 0 0 8px 0; color: #ffd700;">⚡ 超短线策略</h4>
+                <div style="display: flex; justify-content: space-around; margin: 8px 0;">
+                    <div style="text-align: center; flex: 1;">
+                        <div style="font-size: 0.8em; opacity: 0.8;">捕获数量</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{scalping_data['old_count']}个</div>
+                    </div>
+                    <div style="align-self: center; opacity: 0.5;">→</div>
+                    <div style="text-align: center; flex: 1;">
+                        <div style="font-size: 0.8em; opacity: 0.8;">捕获数量</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{scalping_data['new_count']}个 ({scalping_data['count_diff']:+d})</div>
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: space-around; margin: 8px 0;">
+                    <div style="text-align: center; flex: 1;">
+                        <div style="font-size: 0.8em; opacity: 0.8;">平均利润</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{scalping_data['old_avg_profit']:.1f}%</div>
+                    </div>
+                    <div style="align-self: center; opacity: 0.5;">→</div>
+                    <div style="text-align: center; flex: 1;">
+                        <div style="font-size: 0.8em; opacity: 0.8;">平均利润</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{scalping_data['new_avg_profit']:.1f}% ({scalping_data['avg_profit_diff']:+.1f}%)</div>
+                    </div>
+                </div>
+                <div style="text-align: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2);">
+                    <div style="font-size: 0.8em; opacity: 0.8;">总利润变化</div>
+                    <div style="font-size: 1.5em; font-weight: bold;">+{s_old:.1f}U → +{s_new:.1f}U ({s_diff:+.1f}U) {s_emoji}</div>
+                </div>
+            </div>
+"""
+                        
+                        # 波段策略
+                        if swing_data:
+                            w_old = swing_data['old_total_profit']
+                            w_new = swing_data['new_total_profit']
+                            w_diff = swing_data['profit_diff']
+                            w_emoji = '🟢' if w_diff > 0 else ('🔴' if w_diff < 0 else '⚪')
+                            opportunity_stats_html += f"""
+            <div style="margin: 15px 0; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 6px;">
+                <h4 style="margin: 0 0 8px 0; color: #87ceeb;">🌊 波段策略</h4>
+                <div style="display: flex; justify-content: space-around; margin: 8px 0;">
+                    <div style="text-align: center; flex: 1;">
+                        <div style="font-size: 0.8em; opacity: 0.8;">捕获数量</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{swing_data['old_count']}个</div>
+                    </div>
+                    <div style="align-self: center; opacity: 0.5;">→</div>
+                    <div style="text-align: center; flex: 1;">
+                        <div style="font-size: 0.8em; opacity: 0.8;">捕获数量</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{swing_data['new_count']}个 ({swing_data['count_diff']:+d})</div>
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: space-around; margin: 8px 0;">
+                    <div style="text-align: center; flex: 1;">
+                        <div style="font-size: 0.8em; opacity: 0.8;">平均利润</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{swing_data['old_avg_profit']:.1f}%</div>
+                    </div>
+                    <div style="align-self: center; opacity: 0.5;">→</div>
+                    <div style="text-align: center; flex: 1;">
+                        <div style="font-size: 0.8em; opacity: 0.8;">平均利润</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{swing_data['new_avg_profit']:.1f}% ({swing_data['avg_profit_diff']:+.1f}%)</div>
+                    </div>
+                </div>
+                <div style="text-align: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2);">
+                    <div style="font-size: 0.8em; opacity: 0.8;">总利润变化</div>
+                    <div style="font-size: 1.5em; font-weight: bold;">+{w_old:.1f}U → +{w_new:.1f}U ({w_diff:+.1f}U) {w_emoji}</div>
+                </div>
+            </div>
+"""
+                        
+                        # 综合总利润
+                        if total_data:
+                            t_old = total_data['old']
+                            t_new = total_data['new']
+                            t_diff = total_data['diff']
+                            t_diff_pct = total_data['diff_pct']
+                            t_emoji = '🚀' if t_diff > 5 else ('📈' if t_diff > 0 else ('📉' if t_diff < 0 else '➡️'))
+                            opportunity_stats_html += f"""
+            <div style="margin: 15px 0 0 0; padding: 12px; background: rgba(255,255,255,0.2); border-radius: 6px; text-align: center;">
+                <h4 style="margin: 0 0 8px 0; color: white;">📊 综合总利润</h4>
+                <div style="font-size: 2em; font-weight: bold; margin: 8px 0;">
+                    +{t_old:.1f}U → +{t_new:.1f}U
+                </div>
+                <div style="font-size: 1.8em; font-weight: bold; color: #ffd700;">
+                    {t_diff:+.1f}U ({t_diff_pct:+.1f}%) {t_emoji}
+                </div>
+            </div>
+"""
+                        
+                        opportunity_stats_html += f"""
+            <div style="margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.15); border-radius: 4px; font-size: 0.85em;">
+                💡 <strong>解读：</strong>
+                {'✅ 新参数显著提升盈利能力' if total_data.get('diff', 0) > 5 else ('✅ 新参数小幅改善' if total_data.get('diff', 0) > 0 else ('⚠️ 需要进一步优化参数' if total_data.get('diff', 0) < 0 else '➡️ 利润持平'))}
+            </div>
+        </div>
+"""
+                    else:
+                        # Fallback到旧版总利润对比
+                        old_total_profit = stats['old_captured_count'] * stats['avg_old_captured_profit'] / 100
+                        new_total_profit = stats['new_captured_count'] * stats['avg_new_captured_profit'] / 100
+                        profit_diff = new_total_profit - old_total_profit
+                        profit_diff_pct = ((new_total_profit / old_total_profit - 1) * 100) if old_total_profit != 0 else (float('inf') if new_total_profit > 0 else 0)
+                        
+                        opportunity_stats_html += f"""
         <div style="margin: 15px 0; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; color: white;">
             <h3 style="margin: 0 0 10px 0; color: white; border-bottom: 2px solid rgba(255,255,255,0.3); padding-bottom: 8px;">
                 💰 总利润对比分析
