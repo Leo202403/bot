@@ -1395,158 +1395,6 @@ def clear_symbol_orders(symbol, verbose=True):
     return success_count, fail_count
 
 
-def update_trailing_stop_for_position(position, market_data):
-    """
-    V8.5.3: 移动止损机制
-    
-    当浮盈超过1个ATR时激活，保护70%的浮盈
-    
-    Returns:
-        tuple: (should_update, new_sl, reason)
-    """
-    try:
-        symbol = position.get('symbol')
-        side = position.get('side')
-        entry_price = position.get('entry_price', 0)
-        current_price = market_data.get('price', 0) if market_data else position.get('mark_price', 0)
-        
-        # 获取entry_context
-        entry_context = load_entry_context(symbol)
-        if not entry_context:
-            return (False, None, "No entry context")
-        
-        original_sl = entry_context.get('stop_loss', 0)
-        atr = entry_context.get('atr', 0)
-        
-        if not all([entry_price, current_price, original_sl, atr]):
-            return (False, None, "Missing data")
-        
-        # 计算当前浮盈（以ATR为单位）
-        if side == "long":
-            profit_atr = (current_price - entry_price) / atr
-            is_profitable = current_price > entry_price
-        else:  # short
-            profit_atr = (entry_price - current_price) / atr
-            is_profitable = entry_price > current_price
-        
-        # 激活条件：浮盈 > 1 ATR
-        if profit_atr <= 1.0 or not is_profitable:
-            return (False, None, f"Profit {profit_atr:.2f} ATR <= 1.0 ATR")
-        
-        # 计算移动止损（保护70%的浮盈）
-        protected_profit_atr = profit_atr * 0.70
-        
-        if side == "long":
-            new_sl = entry_price + (protected_profit_atr * atr)
-            # 止损只能向上移动，不能向下
-            if new_sl <= original_sl:
-                return (False, None, f"New SL ${new_sl:.2f} <= Original SL ${original_sl:.2f}")
-            trailing_sl = new_sl
-        else:  # short
-            new_sl = entry_price - (protected_profit_atr * atr)
-            # 止损只能向下移动，不能向上
-            if new_sl >= original_sl:
-                return (False, None, f"New SL ${new_sl:.2f} >= Original SL ${original_sl:.2f}")
-            trailing_sl = new_sl
-        
-        # 检查是否已经更新过（避免重复更新）
-        last_trailing_sl = entry_context.get('trailing_sl', original_sl)
-        if side == "long":
-            if trailing_sl <= last_trailing_sl:
-                return (False, None, f"New SL ${trailing_sl:.2f} <= Last trailing SL ${last_trailing_sl:.2f}")
-        else:
-            if trailing_sl >= last_trailing_sl:
-                return (False, None, f"New SL ${trailing_sl:.2f} >= Last trailing SL ${last_trailing_sl:.2f}")
-        
-        # 计算保护的利润
-        if side == "long":
-            protected_pnl_pct = (trailing_sl - entry_price) / entry_price * 100
-        else:
-            protected_pnl_pct = (entry_price - trailing_sl) / entry_price * 100
-        
-        reason = f"Profit {profit_atr:.2f} ATR → Protect 70% → New SL ${trailing_sl:.2f} (保护{protected_pnl_pct:+.1f}%利润)"
-        
-        return (True, trailing_sl, reason)
-        
-    except Exception as e:
-        return (False, None, f"Error: {e}")
-
-
-def check_and_update_trailing_stops(current_positions, market_data_list):
-    """
-    V8.5.3: 检查并更新所有持仓的移动止损
-    
-    在每次trading_bot执行时调用
-    """
-    if not current_positions:
-        return
-    
-    print("\n" + "=" * 70)
-    print("🎯 [V8.5.3] 移动止损检查")
-    print("=" * 70)
-    
-    updated_count = 0
-    skipped_count = 0
-    
-    for pos in current_positions:
-        symbol = pos.get('symbol')
-        coin_name = symbol.split('/')[0] if symbol else 'N/A'
-        side = pos.get('side')
-        
-        # 找到对应的market_data
-        market_data = None
-        for md in market_data_list:
-            if md and md.get('symbol') == symbol:
-                market_data = md
-                break
-        
-        # 检查是否需要更新
-        should_update, new_sl, reason = update_trailing_stop_for_position(pos, market_data)
-        
-        if should_update:
-            try:
-                # 更新交易所的止损订单
-                amount = pos.get('size', 0)
-                take_profit = load_entry_context(symbol).get('take_profit', None)
-                
-                # 删除旧的止损订单并设置新的
-                set_tpsl_orders_via_papi(
-                    symbol=symbol,
-                    side=side,
-                    amount=amount,
-                    stop_loss=new_sl,
-                    take_profit=take_profit,
-                    verbose=False
-                )
-                
-                # 更新entry_context
-                entry_context = load_entry_context(symbol)
-                entry_context['stop_loss'] = new_sl
-                entry_context['trailing_sl'] = new_sl
-                entry_context['trailing_stop_activated'] = True
-                entry_context['trailing_stop_updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                save_entry_context(symbol, entry_context)
-                
-                print(f"✅ {coin_name} {side}: {reason}")
-                updated_count += 1
-                
-                # 发送Bark通知
-                send_bark_notification(
-                    f"[移动止损]{coin_name}",
-                    f"{side}单止损更新\n{reason}"
-                )
-                
-            except Exception as e:
-                print(f"⚠️ {coin_name}: 更新失败 - {e}")
-                skipped_count += 1
-        else:
-            print(f"⏭️  {coin_name} {side}: {reason}")
-            skipped_count += 1
-    
-    print(f"\n📊 移动止损总结: 更新{updated_count}个, 跳过{skipped_count}个")
-    print("=" * 70 + "\n")
-
-
 def set_tpsl_orders_via_papi(symbol: str, side: str, amount: float, stop_loss: float = None, take_profit: float = None, verbose: bool = True):
     """
     V7.9.3 通过papi端点为仓位设置止盈止损订单（V8.5.1.3: 添加精度处理）
@@ -14907,59 +14755,20 @@ Auto-adjustment rules:
 **Priority**: Exhaustion Exit > Strong Inception > Simple Pullback > Extreme Vol > Others
 **Rules**: (1) Inception beats all; (2) Pullbacks = best R:R; (3) Exhaustion = forced exit; (4) Complex pullback = WAIT; (5) No FOMO after rally
 
-=== 【V8.5.3】TRAILING STOP (CRITICAL - Protect Floating Profits) ===
+=== 【V8.5.4】PROFIT PROTECTION ===
 
-**Why Needed**: Historical data shows positions can go from +8% profit to -5% loss.
-Trailing stop protects your profits and improves actual R:R from 0.01:1 to 1.5:1+.
+**Critical Observation**: Historical data shows positions can go from +8% profit to -5% loss.
 
-**Activation Condition**: When unrealized profit > 1 ATR (approximately 1-2%)
+**Your Responsibility**: Monitor floating profits and consider taking profit when:
+- Significant profit accumulated (>3-5% or >2 ATR)
+- Market shows signs of exhaustion or reversal at key levels
+- Structure breaks against your position
 
-**Trailing Stop Calculation** (Protect 70% of floating profit):
-```
-For LONG position:
-  profit_in_atr = (current_price - entry_price) / atr
-  if profit_in_atr > 1.0:
-      protected_profit = profit_in_atr × 0.70
-      trailing_sl = entry_price + (protected_profit × atr)
-      trailing_sl = max(trailing_sl, original_sl)  # Never move SL away
-
-For SHORT position:
-  profit_in_atr = (entry_price - current_price) / atr
-  if profit_in_atr > 1.0:
-      protected_profit = profit_in_atr × 0.70
-      trailing_sl = entry_price - (protected_profit × atr)
-      trailing_sl = min(trailing_sl, original_sl)  # Never move SL away
-```
-
-**Example** (LONG position, ATR=$5):
-```
-Entry: $100, Original SL: $95, Current: $110
-  → Profit: $10 = 2 ATR
-  → Protected: 2 × 0.70 = 1.4 ATR
-  → Trailing SL: $100 + ($5 × 1.4) = $107
-  → Worst case: Exit at $107 (+7% profit, NOT -5% loss!)
-
-If price rises to $120:
-  → Profit: $20 = 4 ATR
-  → Protected: 4 × 0.70 = 2.8 ATR
-  → Trailing SL: $100 + ($5 × 2.8) = $114
-  → Protected profit: +14%
-```
-
-**Update Rules**:
-1. Check every 15min (not every 1min, avoid overtrading)
-2. Only move SL in profitable direction (never away)
-3. Update exchange SL order when trailing SL changes
-4. Log all updates for verification
-
-**Expected Benefits**:
-- ✅ Protect 70% of floating profits
-- ✅ Turn potential -5% loss into +7% profit
-- ✅ Improve actual R:R from 0.01:1 to 1.5:1+
-- ✅ Reduce "profit-to-loss" rate from 30% to <5%
-
-**Note**: The system will handle trailing stop automatically. You just need to be aware
-that SL may move towards profit direction during the trade.
+**Decision Making**:
+- Use CLOSE action to lock in profits proactively
+- Don't wait until full reversal - protect meaningful gains
+- Balance between "letting winners run" and "securing profits"
+- Consider exiting 50% at first resistance/support, hold rest for TP
 
 === YTC STRUCTURAL SIGNALS ===
 
@@ -15057,12 +14866,12 @@ Current minimum R:R: {learning_config['global']['min_risk_reward']:.1f}:1
 - Problem: Average profit per trade was 0.014U (almost nothing!)
 - Solution: WAIT for TP to achieve target 1.0-2.0U per winning trade
 
-**Decision Flow for Each Position (V8.5.3):**
+**Decision Flow for Each Position (V8.5.4):**
 ```
 1. Check price >= TP? → YES: EXIT (Target achieved)
                        → NO: Continue to step 2
 
-2. Check price <= SL (including trailing SL)? → YES: EXIT (Stop loss)
+2. Check price <= SL? → YES: EXIT (Stop loss)
                        → NO: Continue to step 3
 
 3. Check holding_time > max_hours? → YES: EXIT (Time stop)
@@ -19526,19 +19335,6 @@ def trading_bot():
                     print(f"⚠️ 刷新持仓失败: {e}")
             else:
                 print("✓ 无需主动平仓")
-        
-        # 🆕 V8.5.3: 移动止损检查（保护浮盈）
-        if current_positions:
-            print("⏳ [3.6/6] 移动止损检查...")
-            try:
-                check_and_update_trailing_stops(current_positions, market_data_list)
-                
-                # 如果有止损更新，刷新持仓数据
-                current_positions, total_position_value = get_all_positions()
-            except Exception as e:
-                print(f"⚠️ 移动止损检查失败: {e}")
-                import traceback
-                traceback.print_exc()
         
         print("⏳ [4/6] AI决策分析...")
         # 3. AI决策
