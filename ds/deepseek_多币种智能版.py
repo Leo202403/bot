@@ -4208,12 +4208,21 @@ def check_add_position_conditions(symbol, existing_position, ai_signal, availabl
             if price_improvement_pct <= 0.5:  # 多单需价格至少低0.5%
                 return False, f"多单加仓需价格更优（当前{current_price:.2f}仅比开仓价{entry_price:.2f}低{price_improvement_pct:.2f}%<0.5%）", 0
         
-        # 4. 检查加仓后总仓位限制（不超过可用余额的50%）
-        new_position_value = ai_signal.get('position_size_usd', 0) if ai_signal else 0
-        total_after_add = notional + new_position_value
+        # 4. 检查加仓后总仓位限制（单币种名义价值不超过可用余额）
+        # 获取新仓位的杠杆和保证金
+        new_position_margin = ai_signal.get('position_size_usd', 0) if ai_signal else 0
+        new_leverage = ai_signal.get('leverage', 1) if ai_signal else 1
+        new_notional = new_position_margin * new_leverage
         
-        if total_after_add > available_balance * 0.5:
-            return False, f"加仓后总仓位{total_after_add:.2f}U>50%限制({available_balance*0.5:.2f}U)", 0
+        # 累计名义价值
+        total_notional_after_add = notional + new_notional
+        
+        print(f"   [加仓检查] 现有名义价值: {notional:.2f}U, 新增名义价值: {new_notional:.2f}U (保证金{new_position_margin:.2f}U × {new_leverage}x)")
+        print(f"   [加仓检查] 累计名义价值: {total_notional_after_add:.2f}U, 可用余额: {available_balance:.2f}U")
+        
+        # 限制：单币种累计名义价值不超过可用余额（即最大1x杠杆水平）
+        if total_notional_after_add > available_balance:
+            return False, f"加仓后名义价值{total_notional_after_add:.2f}U>可用余额{available_balance:.2f}U（风险过高）", 0
         
         # 5. 检查加仓频率（从position_contexts读取最后加仓时间）
         try:
@@ -4292,12 +4301,10 @@ def check_single_direction_per_coin(symbol, operation, current_positions, ai_sig
                 return True, f"✅加仓条件: {add_reason}", True, price_improvement
             else:
                 # 不满足加仓条件，拒绝
-                contracts = abs(existing_position.get("contracts", 0))
-                entry_price = existing_position.get("entry_price", 0)
-                position_value = contracts * entry_price
+                position_notional = abs(existing_position.get("notional", 0))
                 
                 return False, (
-                    f"该币种已有{existing_side}仓位（{position_value:.2f}U），"
+                    f"该币种已有{existing_side}仓位（名义价值{position_notional:.2f}U），"
                         f"不满足加仓条件：{add_reason}"
                     ), False, 0
         
