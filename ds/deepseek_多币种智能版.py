@@ -10619,15 +10619,23 @@ def analyze_and_adjust_params():
                     # 获取关键指标
                     trade_count = len(recent_20) if 'recent_20' in locals() and not recent_20.empty else 0
                     
-                    # 获取核心问题统计
+                    # 🔧 V8.5.5.2: 修复数据获取路径
                     premature_count = 0
                     false_count = 0
                     missed_count = 0
+                    
+                    # 从exit_analysis获取过早平仓数据
                     if exit_analysis and 'exit_stats' in exit_analysis:
-                        premature_count = exit_analysis['exit_stats'].get('premature_count', 0)
+                        premature_count = exit_analysis['exit_stats'].get('premature_exits', 0)  # 🔧 修复字段名
+                    
+                    # 从entry_analysis获取入场质量数据
                     if entry_analysis and 'entry_stats' in entry_analysis:
                         false_count = entry_analysis['entry_stats'].get('false_entries', 0)
-                        missed_count = entry_analysis['entry_stats'].get('missed_profitable', 0)
+                        # missed_count应该是错过的机会数
+                        missed_count = entry_analysis['entry_stats'].get('missed_opportunities', 0)
+                        # 如果没有missed_opportunities，尝试其他字段
+                        if missed_count == 0:
+                            missed_count = entry_analysis['entry_stats'].get('total_opportunities', 0) - entry_analysis['entry_stats'].get('ai_opened', 0)
                     
                     premature_rate = (premature_count / trade_count * 100) if trade_count > 0 else 0
                     false_rate = (false_count / trade_count * 100) if trade_count > 0 else 0
@@ -20911,12 +20919,31 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         'data_points': len(later_24h)
                     }
                     
+                    # 🔧 V8.5.5.2: 从timestamp中提取时间和日期
+                    # timestamp格式可能是 "2025-11-15 00:30:00" 或 "0030"
+                    time_str = timestamp
+                    date_str = str(current.get('snapshot_date', ''))
+                    
+                    # 如果timestamp包含空格（完整日期时间格式）
+                    if ' ' in str(timestamp):
+                        try:
+                            parts = str(timestamp).split(' ')
+                            if len(parts) >= 2:
+                                date_part = parts[0].replace('-', '')  # "2025-11-15" -> "20251115"
+                                time_part = parts[1]  # "00:30:00"
+                                # 转换为HHMM格式
+                                time_str = time_part.replace(':', '')[:4]  # "00:30:00" -> "0030"
+                                if not date_str:  # 如果snapshot_date为空，使用timestamp中的日期
+                                    date_str = date_part
+                        except:
+                            pass
+                    
                     # 根据信号类型分类
                     opp_data = {
                         'coin': coin,
                         'timestamp': timestamp,
-                        'time': timestamp,  # 🆕 V8.5.5: 添加time字段（HHMM格式，供邮件显示）
-                        'date': str(current.get('snapshot_date', '')),  # 🆕 V8.5.5: 添加date字段（YYYYMMDD格式，供邮件显示）
+                        'time': time_str,  # 🆕 V8.5.5.2: HHMM格式（如0030）
+                        'date': date_str,  # 🆕 V8.5.5.2: YYYYMMDD格式（如20251115）
                         'entry_price': entry_price,
                         'direction': direction,
                         'consensus': consensus,
