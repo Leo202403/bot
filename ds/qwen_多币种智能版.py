@@ -17451,9 +17451,15 @@ def _execute_single_open_action_v55(
         leverage = min(suggested_leverage, max_leverage_for_type)
         print(f"✓ 使用系统建议杠杆: {leverage}x (上限{max_leverage_for_type}x)")
 
-    # 🆕 V8.5.1.9: 确保仓位满足最小名义价值要求（避免后续开仓失败）
+    # 🆕 V8.5.1.9 + V8.5.1.9.2: 确保仓位满足最小名义价值要求（根据币种动态判断）
     try:
-        MIN_NOTIONAL = 5  # 币安最低名义价值要求：5 USDT
+        # 🔧 V8.5.1.9.2: BTC需要100 USDT，其他币种5 USDT
+        coin_name = symbol.split('/')[0]
+        if coin_name == 'BTC':
+            MIN_NOTIONAL = 100  # BTC特殊要求
+        else:
+            MIN_NOTIONAL = 5  # 其他币种标准要求
+        
         calculated_notional = planned_position * leverage
         
         if calculated_notional < MIN_NOTIONAL:
@@ -17716,9 +17722,12 @@ def _execute_single_open_action_v55(
             # 计算舍入后的实际名义价值
             actual_notional = rounded_amount * entry_price
             
-            # 🆕 简化逻辑：统一使用5 USDT作为最小要求
-            # 对于特殊情况，在AI评估时处理
-            min_notional_required = 5
+            # 🔧 V8.5.1.9.2: 根据币种动态判断最小名义价值
+            coin_name = symbol.split('/')[0]
+            if coin_name == 'BTC':
+                min_notional_required = 100  # BTC特殊要求
+            else:
+                min_notional_required = 5  # 其他币种标准要求
             
             needs_adjustment = False
             adjustment_reason = ""
