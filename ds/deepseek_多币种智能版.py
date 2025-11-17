@@ -4148,7 +4148,7 @@ def add_to_position(symbol, side, new_amount, new_price, leverage, existing_posi
         return False
 
 
-def check_add_position_conditions(symbol, existing_position, ai_signal, available_balance, current_price=0):
+def check_add_position_conditions(symbol, existing_position, ai_signal, available_balance, current_price=0, total_assets=0):
     """
     检查是否满足加仓条件（V8.5.2新增）
     
@@ -4158,6 +4158,7 @@ def check_add_position_conditions(symbol, existing_position, ai_signal, availabl
         ai_signal: AI信号信息
         available_balance: 可用余额
         current_price: 当前市场价格
+        total_assets: 总资产
     
     Returns:
         (can_add: bool, reason: str, price_improvement_pct: float)
@@ -4208,21 +4209,30 @@ def check_add_position_conditions(symbol, existing_position, ai_signal, availabl
             if price_improvement_pct <= 0.5:  # 多单需价格至少低0.5%
                 return False, f"多单加仓需价格更优（当前{current_price:.2f}仅比开仓价{entry_price:.2f}低{price_improvement_pct:.2f}%<0.5%）", 0
         
-        # 4. 检查加仓后总仓位限制（单币种名义价值不超过可用余额）
-        # 获取新仓位的杠杆和保证金
+        # 4. 检查加仓后总保证金是否超过单币种开仓上限
+        # 获取新仓位的保证金
         new_position_margin = ai_signal.get('position_size_usd', 0) if ai_signal else 0
         new_leverage = ai_signal.get('leverage', 1) if ai_signal else 1
-        new_notional = new_position_margin * new_leverage
         
-        # 累计名义价值
-        total_notional_after_add = notional + new_notional
+        # 计算现有持仓的保证金（名义价值 / 杠杆）
+        existing_leverage = existing_position.get('leverage', 1)
+        if existing_leverage <= 0:
+            existing_leverage = 1
+        existing_margin = notional / existing_leverage
         
-        print(f"   [加仓检查] 现有名义价值: {notional:.2f}U, 新增名义价值: {new_notional:.2f}U (保证金{new_position_margin:.2f}U × {new_leverage}x)")
-        print(f"   [加仓检查] 累计名义价值: {total_notional_after_add:.2f}U, 可用余额: {available_balance:.2f}U")
+        # 累计保证金
+        total_margin_after_add = existing_margin + new_position_margin
         
-        # 限制：单币种累计名义价值不超过可用余额（即最大1x杠杆水平）
-        if total_notional_after_add > available_balance:
-            return False, f"加仓后名义价值{total_notional_after_add:.2f}U>可用余额{available_balance:.2f}U（风险过高）", 0
+        # 计算单币种允许的最大保证金（与单次开仓限制一致）
+        MIN_CASH_RESERVE_RATIO = 0.20  # 保留20%现金储备
+        max_single_position = available_balance - (total_assets * MIN_CASH_RESERVE_RATIO) if total_assets > 0 else available_balance * 0.8
+        
+        print(f"   [加仓检查] 现有保证金: {existing_margin:.2f}U, 新增保证金: {new_position_margin:.2f}U")
+        print(f"   [加仓检查] 累计保证金: {total_margin_after_add:.2f}U, 单币种上限: {max_single_position:.2f}U")
+        
+        # 限制：累计保证金不超过单币种开仓上限
+        if total_margin_after_add > max_single_position:
+            return False, f"加仓后总保证金{total_margin_after_add:.2f}U>单币种上限{max_single_position:.2f}U", 0
         
         # 5. 检查加仓频率（从position_contexts读取最后加仓时间）
         try:
@@ -4248,7 +4258,7 @@ def check_add_position_conditions(symbol, existing_position, ai_signal, availabl
         return False, f"检查失败: {str(e)[:50]}", 0
 
 
-def check_single_direction_per_coin(symbol, operation, current_positions, ai_signal=None, available_balance=0, current_price=0):
+def check_single_direction_per_coin(symbol, operation, current_positions, ai_signal=None, available_balance=0, current_price=0, total_assets=0):
     """
     检查单币种单方向限制，支持智能加仓（V8.5.2更新）
     
@@ -4264,6 +4274,7 @@ def check_single_direction_per_coin(symbol, operation, current_positions, ai_sig
         ai_signal: AI信号信息（用于判断加仓条件）
         available_balance: 可用余额
         current_price: 当前市场价格
+        total_assets: 总资产
     
     Returns:
         (allowed: bool, reason: str, should_add: bool, price_improvement: float)
@@ -4293,7 +4304,7 @@ def check_single_direction_per_coin(symbol, operation, current_positions, ai_sig
         if existing_side == new_side:
             # 检查是否满足加仓条件
             can_add, add_reason, price_improvement = check_add_position_conditions(
-                symbol, existing_position, ai_signal, available_balance, current_price
+                symbol, existing_position, ai_signal, available_balance, current_price, total_assets
             )
             
             if can_add:
@@ -17939,7 +17950,7 @@ def _execute_single_open_action_v55(
     # 【V8.5.2更新】单币种单方向检查（支持智能加仓）
     current_price = market_data.get('current_price', 0)
     direction_ok, direction_reason, should_add, price_improvement = check_single_direction_per_coin(
-        symbol, operation, current_positions, ai_signal=action, available_balance=available_balance, current_price=current_price
+        symbol, operation, current_positions, ai_signal=action, available_balance=available_balance, current_price=current_price, total_assets=total_assets
     )
     
     if not direction_ok:
