@@ -10058,12 +10058,12 @@ def analyze_and_adjust_params():
 """
                     else:
                         # Fallback到旧版总利润对比
-                    old_total_profit = stats['old_captured_count'] * stats['avg_old_captured_profit'] / 100
-                    new_total_profit = stats['new_captured_count'] * stats['avg_new_captured_profit'] / 100
-                    profit_diff = new_total_profit - old_total_profit
-                    profit_diff_pct = ((new_total_profit / old_total_profit - 1) * 100) if old_total_profit != 0 else (float('inf') if new_total_profit > 0 else 0)
-                    
-                    opportunity_stats_html += f"""
+                        old_total_profit = stats['old_captured_count'] * stats['avg_old_captured_profit'] / 100
+                        new_total_profit = stats['new_captured_count'] * stats['avg_new_captured_profit'] / 100
+                        profit_diff = new_total_profit - old_total_profit
+                        profit_diff_pct = ((new_total_profit / old_total_profit - 1) * 100) if old_total_profit != 0 else (float('inf') if new_total_profit > 0 else 0)
+                        
+                        opportunity_stats_html += f"""
         <div style="margin: 15px 0; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; color: white;">
             <h3 style="margin: 0 0 10px 0; color: white; border-bottom: 2px solid rgba(255,255,255,0.3); padding-bottom: 8px;">
                 💰 总利润对比分析
@@ -10105,8 +10105,8 @@ def analyze_and_adjust_params():
             </div>
         </div>
 """
-                    
-                    opportunity_stats_html += f"""
+                        
+                        opportunity_stats_html += f"""
         <p style="margin-top: 10px; padding: 10px; background: #f0f7ff; border-left: 4px solid #2196f3;">
             <strong>📊 总结：</strong>昨日识别到<strong>{stats['total_opportunities']}个</strong>客观机会
             （⚡超短线{len(scalping_opps)}个 + 🌊波段{len(swing_opps)}个），
@@ -18500,7 +18500,7 @@ def _execute_single_open_action_v55(
             try:
                 # 尝试使用精度信息
                 if amount_precision and amount_precision > 0:
-            amount_step = 10 ** (-amount_precision)
+                    amount_step = 10 ** (-amount_precision)
                     rounded_amount = round(calculated_amount / amount_step) * amount_step
                 else:
                     # 精度信息无效，使用原始值

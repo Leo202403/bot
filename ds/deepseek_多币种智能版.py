@@ -1092,10 +1092,10 @@ def update_close_position(coin_name, side, close_time, close_price, pnl, close_r
             else:
                 # 分批平仓：创建一条已平仓记录，保留一条未平仓记录
                 # 更新当前记录为已平仓（代表平掉的部分）
-            df.at[last_idx, "平仓时间"] = close_time
-            df.at[last_idx, "平仓价格"] = close_price
-            df.at[last_idx, "盈亏(U)"] = pnl
-            df.at[last_idx, "平仓理由"] = close_reason
+                df.at[last_idx, "平仓时间"] = close_time
+                df.at[last_idx, "平仓价格"] = close_price
+                df.at[last_idx, "盈亏(U)"] = pnl
+                df.at[last_idx, "平仓理由"] = close_reason
                 
                 # 创建新记录代表剩余仓位（复制原记录，清空平仓信息）
                 remaining_row = original_row.copy()
@@ -4443,14 +4443,14 @@ def check_single_direction_per_coin(symbol, operation, current_positions, ai_sig
                 return True, f"✅加仓条件: {add_reason}", True, price_improvement
             else:
                 # 不满足加仓条件，拒绝
-            contracts = abs(existing_position.get("contracts", 0))
-            entry_price = existing_position.get("entry_price", 0)
-            position_value = contracts * entry_price
-            
-            return False, (
-                f"该币种已有{existing_side}仓位（{position_value:.2f}U），"
-                    f"不满足加仓条件：{add_reason}"
-                ), False, 0
+                contracts = abs(existing_position.get("contracts", 0))
+                entry_price = existing_position.get("entry_price", 0)
+                position_value = contracts * entry_price
+                
+                return False, (
+                    f"该币种已有{existing_side}仓位（{position_value:.2f}U），"
+                        f"不满足加仓条件：{add_reason}"
+                    ), False, 0
         
         return True, f"检查通过", False, 0
     
@@ -10061,12 +10061,12 @@ def analyze_and_adjust_params():
 """
                     else:
                         # Fallback到旧版总利润对比
-                    old_total_profit = stats['old_captured_count'] * stats['avg_old_captured_profit'] / 100
-                    new_total_profit = stats['new_captured_count'] * stats['avg_new_captured_profit'] / 100
-                    profit_diff = new_total_profit - old_total_profit
-                    profit_diff_pct = ((new_total_profit / old_total_profit - 1) * 100) if old_total_profit != 0 else (float('inf') if new_total_profit > 0 else 0)
-                    
-                    opportunity_stats_html += f"""
+                        old_total_profit = stats['old_captured_count'] * stats['avg_old_captured_profit'] / 100
+                        new_total_profit = stats['new_captured_count'] * stats['avg_new_captured_profit'] / 100
+                        profit_diff = new_total_profit - old_total_profit
+                        profit_diff_pct = ((new_total_profit / old_total_profit - 1) * 100) if old_total_profit != 0 else (float('inf') if new_total_profit > 0 else 0)
+                        
+                        opportunity_stats_html += f"""
         <div style="margin: 15px 0; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; color: white;">
             <h3 style="margin: 0 0 10px 0; color: white; border-bottom: 2px solid rgba(255,255,255,0.3); padding-bottom: 8px;">
                 💰 总利润对比分析
@@ -10108,8 +10108,8 @@ def analyze_and_adjust_params():
             </div>
         </div>
 """
-                    
-                    opportunity_stats_html += f"""
+                        
+                        opportunity_stats_html += f"""
         <p style="margin-top: 10px; padding: 10px; background: #f0f7ff; border-left: 4px solid #2196f3;">
             <strong>📊 总结：</strong>昨日识别到<strong>{stats['total_opportunities']}个</strong>客观机会
             （⚡超短线{len(scalping_opps)}个 + 🌊波段{len(swing_opps)}个），
@@ -11078,15 +11078,15 @@ def analyze_and_adjust_params():
                                 swing_val = swing_params.get(param_key, 0)
                                 
                                 # 所有参数都是数字格式，直接使用format
-                                    if isinstance(scalp_val, (int, float)):
-                                        scalp_display = ('{' + param_format + '}').format(scalp_val)
-                                    else:
-                                        scalp_display = str(scalp_val)
-                                    
-                                    if isinstance(swing_val, (int, float)):
-                                        swing_display = ('{' + param_format + '}').format(swing_val)
-                                    else:
-                                        swing_display = str(swing_val)
+                                if isinstance(scalp_val, (int, float)):
+                                    scalp_display = ('{' + param_format + '}').format(scalp_val)
+                                else:
+                                    scalp_display = str(scalp_val)
+                                
+                                if isinstance(swing_val, (int, float)):
+                                    swing_display = ('{' + param_format + '}').format(swing_val)
+                                else:
+                                    swing_display = str(swing_val)
                                 
                                 type_params_html += f"""
             <tr>
@@ -18503,7 +18503,7 @@ def _execute_single_open_action_v55(
             try:
                 # 尝试使用精度信息
                 if amount_precision and amount_precision > 0:
-            amount_step = 10 ** (-amount_precision)
+                    amount_step = 10 ** (-amount_precision)
                     rounded_amount = round(calculated_amount / amount_step) * amount_step
                 else:
                     # 精度信息无效，使用原始值
