@@ -18077,12 +18077,19 @@ def _execute_single_open_action_v55(
             try:
                 markets = exchange.load_markets()
                 market_info = markets.get(symbol, {})
-                amount_precision = market_info.get('precision', {}).get('amount', 3)
-            except:
+                amount_precision = market_info.get('precision', {}).get('amount')
+                # 确保精度是有效的正整数
+                if amount_precision is None or amount_precision < 0:
+                    amount_precision = 3  # 默认BTC精度
+            except Exception as e:
+                print(f"   ⚠️ 获取精度失败: {e}，使用默认精度3")
                 amount_precision = 3  # 默认BTC精度
+            
+            print(f"   [调试] 币种精度: {amount_precision}, 价格: ${entry_price_check:.2f}")
             
             # 计算实际下单数量（考虑精度）
             calculated_amount = (planned_position * leverage) / entry_price_check
+            print(f"   [调试] 计划仓位: ${planned_position:.2f} × {leverage}x ÷ ${entry_price_check:.2f} = {calculated_amount:.6f}")
             
             # 模拟精度舍入
             if amount_precision and amount_precision > 0:
@@ -18097,6 +18104,7 @@ def _execute_single_open_action_v55(
             
             # 计算舍入后的实际名义价值
             actual_notional = rounded_amount * entry_price_check
+            print(f"   [调试] 舍入后数量: {rounded_amount:.6f}, 名义价值: ${actual_notional:.2f}")
             
             if actual_notional < MIN_NOTIONAL:
                 # 计算需要的仓位（考虑精度影响）
@@ -18110,20 +18118,28 @@ def _execute_single_open_action_v55(
                 else:
                     required_amount = min_amount_needed
                 
-                # 计算对应的仓位
+                print(f"   [调试] 目标名义价值: ${target_notional:.2f}, 需要数量: {required_amount:.6f}")
+                
+                # 计算对应的仓位（保证金）
                 min_position_required = (required_amount * entry_price_check) / leverage
                 
+                print(f"   [调试] 最小保证金: ${min_position_required:.2f} (可用余额: ${available_balance:.2f})")
+                
                 # 检查是否在资金允许范围内
-                if min_position_required <= total_assets * 0.8:
+                if min_position_required <= available_balance:
                     print(f"   💡 仓位自动调整: ${planned_position:.2f} → ${min_position_required:.2f} (考虑精度后名义价值≥${MIN_NOTIONAL})")
                     planned_position = min_position_required
                 else:
-                    print(f"❌ 账户资金不足：需${min_position_required:.0f}U (当前仅${total_assets:.0f}U)")
+                    print(f"❌ 余额不足以满足最小名义价值要求")
+                    print(f"   需要保证金: ${min_position_required:.2f}U")
+                    print(f"   可用余额: ${available_balance:.2f}U")
+                    print(f"   名义价值要求: {MIN_NOTIONAL}U × 1.2 = {target_notional:.0f}U")
                     send_bark_notification(
-                        f"[{MODEL_DISPLAY_NAME}]{coin_name}账户资金不足❌",
-                        f"最小开仓要求: ${min_position_required:.0f}U ({leverage}x杠杆)\n"
-                        f"账户总额: ${total_assets:.0f}U\n"
-                        f"建议: 充值至${min_position_required:.0f}U以上",
+                        f"[{MODEL_DISPLAY_NAME}]{coin_name}余额不足❌",
+                        f"最小名义价值要求: {MIN_NOTIONAL}U\n"
+                        f"需要保证金: ${min_position_required:.2f}U ({leverage}x杠杆)\n"
+                        f"可用余额: ${available_balance:.2f}U\n"
+                        f"建议: 充值或等待其他持仓平仓",
                     )
                     return
     except Exception as e:
