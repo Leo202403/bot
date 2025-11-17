@@ -18382,6 +18382,15 @@ def execute_portfolio_actions(
                         f"仓位:{position_usd}U 杠杆:{leverage}x\n盈亏比:{risk_reward:.2f} 止损:{action.get('stop_loss_price', 0):.0f}\n理由:{open_reason}",
                     )
                     
+                    # 🆕 V8.5.1.8.1: 获取信号数据
+                    market_data = next((m for m in market_data_list if m["symbol"] == symbol), None) if market_data_list else None
+                    if market_data:
+                        score, _, _, _ = calculate_signal_score(market_data)
+                        indicator_consensus = market_data.get("indicator_consensus", 0)
+                    else:
+                        score = 0
+                        indicator_consensus = 0
+                    
                     # 记录开仓
                     trade_record = {
                         "开仓时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -18399,6 +18408,8 @@ def execute_portfolio_actions(
                         "盈亏(U)": None,
                         "开仓理由": action.get("reason", "N/A"),
                         "平仓理由": None,
+                        "信号分数": score,  # 🆕 V8.5.1.8.1
+                        "共振指标数": indicator_consensus,  # 🆕 V8.5.1.8.1
                     }
                     save_open_position(trade_record)
                     
@@ -18465,6 +18476,15 @@ def execute_portfolio_actions(
                         f"仓位:{position_usd}U 杠杆:{leverage}x\n盈亏比:{risk_reward:.2f} 止损:{action.get('stop_loss_price', 0):.0f}\n理由:{open_reason}",
                     )
                     
+                    # 🆕 V8.5.1.8.1: 获取信号数据
+                    market_data = next((m for m in market_data_list if m["symbol"] == symbol), None) if market_data_list else None
+                    if market_data:
+                        score, _, _, _ = calculate_signal_score(market_data)
+                        indicator_consensus = market_data.get("indicator_consensus", 0)
+                    else:
+                        score = 0
+                        indicator_consensus = 0
+                    
                     # 记录开仓
                     trade_record = {
                         "开仓时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -18482,6 +18502,8 @@ def execute_portfolio_actions(
                         "盈亏(U)": None,
                         "开仓理由": action.get("reason", "N/A"),
                         "平仓理由": None,
+                        "信号分数": score,  # 🆕 V8.5.1.8.1
+                        "共振指标数": indicator_consensus,  # 🆕 V8.5.1.8.1
                     }
                     save_open_position(trade_record)
                     
