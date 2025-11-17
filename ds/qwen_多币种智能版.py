@@ -6631,9 +6631,10 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 if optimization_cache.get('precision_formula'):
                     precision_data = optimization_cache['precision_formula']
                     
+                    # 🔧 V8.5.1.9.2: 统一使用字符串键访问（JSON序列化后所有键都是字符串）
                     # 基于真实数据计算精准率
                     # score维度：找最接近的阈值
-                    score_precision = precision_data['by_score'].get(min_score, 0)
+                    score_precision = precision_data['by_score'].get(str(min_score), 0)
                     if score_precision == 0:
                         # 插值估算（键可能是字符串或整数，统一转换）
                         available_scores = sorted([int(k) for k in precision_data['by_score'].keys() if int(k) <= min_score])
@@ -6644,7 +6645,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                             score_precision = 1.0
                     
                     # consensus维度
-                    consensus_precision = precision_data['by_consensus'].get(min_consensus, 0)
+                    consensus_precision = precision_data['by_consensus'].get(str(min_consensus), 0)
                     if consensus_precision == 0:
                         available_consensus = sorted([int(k) for k in precision_data['by_consensus'].keys() if int(k) <= min_consensus])
                         if available_consensus:
@@ -6654,7 +6655,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                             consensus_precision = 1.0
                     
                     # R:R维度
-                    rr_precision = precision_data['by_rr'].get(min_rr, 0)
+                    rr_precision = precision_data['by_rr'].get(str(min_rr), 0)
                     if rr_precision == 0:
                         # R:R的键也是字符串，需要转换
                         available_rrs = sorted([float(k) for k in precision_data['by_rr'].keys() if float(k) <= min_rr])
