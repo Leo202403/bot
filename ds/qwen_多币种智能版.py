@@ -18316,6 +18316,35 @@ def _execute_single_open_action_v55(
                 if deviation_pct > 0.005:
                     print(f"⚠️ 市价低于数据LWP {deviation_pct*100:.2f}%，降低仓位20%")
                     planned_position *= 0.8
+    
+    # === LWP调整后重新检查最小名义价值 ===
+    if coin_name == 'BTC':
+        MIN_NOTIONAL = 100  # BTC特殊要求
+    else:
+        MIN_NOTIONAL = 5  # 其他币种标准要求
+    
+    # 计算调整后的名义价值
+    adjusted_notional = planned_position * leverage
+    if adjusted_notional < MIN_NOTIONAL * 1.2:  # 需要120U名义价值（100U + 20%缓冲）
+        # 重新计算需要的最小仓位
+        target_notional = MIN_NOTIONAL * 1.2
+        min_position_required = target_notional / leverage
+        
+        if min_position_required <= available_balance:
+            print(f"   💡 LWP降低后重新调整: ${planned_position:.2f} → ${min_position_required:.2f} (确保名义价值≥{MIN_NOTIONAL}U)")
+            planned_position = min_position_required
+        else:
+            print(f"❌ LWP降低后余额不足以满足最小名义价值要求")
+            print(f"   需要保证金: ${min_position_required:.2f}U")
+            print(f"   可用余额: ${available_balance:.2f}U")
+            send_bark_notification(
+                f"[{MODEL_DISPLAY_NAME}]{coin_name}余额不足❌",
+                f"LWP降低后无法满足最小名义价值\n"
+                f"最小名义价值: {MIN_NOTIONAL}U\n"
+                f"需要保证金: ${min_position_required:.2f}U\n"
+                f"可用余额: ${available_balance:.2f}U",
+            )
+            return
 
     # === 执行开仓 ===
     if TRADE_CONFIG["test_mode"]:
