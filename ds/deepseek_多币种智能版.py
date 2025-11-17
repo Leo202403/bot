@@ -10940,14 +10940,11 @@ def analyze_and_adjust_params():
                             bark_content_lines.append(f"交易{trade_count}笔 胜率{win_rate:.0f}%")
                             bark_content_lines.append(f"盈亏{total_pnl:+.2f}U")
                     
-                    # 发送Bark推送
-                    bark_title = f"[{model_name}]🤖AI参数优化V8.3.21"
-                    bark_msg = "\n".join(bark_content_lines) if bark_content_lines else "AI报告已生成"
-                    send_bark_notification(bark_title, bark_msg)
-                    print(f"✅ Bark推送已发送: {bark_title}")
+                    # 🆕 V8.5.1.8.2: 删除重复的Bark推送（已在参数优化完成时发送）
+                    # Bark通知已在 ai_optimize_parameters() 函数中发送，此处不再重复
                     
                 except Exception as bark_err:
-                    print(f"⚠️ Bark推送失败: {bark_err}")
+                    print(f"⚠️ 邮件处理异常: {bark_err}")
                     import traceback
                     traceback.print_exc()
                 
