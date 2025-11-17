@@ -9525,12 +9525,39 @@ def analyze_and_adjust_params():
             # 🔧 V8.3.21.5: 重新加载配置以获取optimize函数保存的V8.3.21洞察
             config = load_learning_config()
 
+            # 🆕 V8.5.6: 区分"测试参数"和"实际调整参数"
+            # adjusted_count统计所有在adjustments中的参数（包括测试过但未改变的）
             adjusted_count = len(adjustments.get("global", {})) + len(
                 adjustments.get("per_symbol", {})
             )
+            
+            # 🆕 V8.5.6: 计算实际改变的参数数量
+            actual_changed_count = 0
+            for param, new_value in adjustments.get("global", {}).items():
+                if not param.startswith("_"):
+                    old_value = old_config.get("global", {}).get(param)
+                    if old_value != new_value:
+                        actual_changed_count += 1
+            
+            for symbol, symbol_adj in adjustments.get("per_symbol", {}).items():
+                for param, new_value in symbol_adj.items():
+                    if not param.startswith("_"):
+                        old_value = old_config.get("per_symbol", {}).get(symbol, {}).get(param)
+                        if old_value != new_value:
+                            actual_changed_count += 1
 
             # 🆕 V8.3.21.3: 发送Bark通知（优先显示V8.3.21真实数据）
-            iter_desc = f"多轮迭代{iterative_result['total_rounds']}轮" if iterative_result else "参数已优化"
+            # 🆕 V8.5.6: 优化iter_desc显示，区分测试和实际调整
+            if iterative_result:
+                rounds = iterative_result['total_rounds']
+                if actual_changed_count > 0:
+                    iter_desc = f"多轮迭代{rounds}轮 ✅调整{actual_changed_count}个参数"
+                elif adjusted_count > 0:
+                    iter_desc = f"多轮迭代{rounds}轮 🔍测试{adjusted_count}个参数 ➡️保持原参数"
+                else:
+                    iter_desc = f"多轮迭代{rounds}轮 ➡️保持原参数"
+            else:
+                iter_desc = "参数已优化"
             
             # 🔄 V8.3.32.10: 重新加载config以获取最新的v8321_insights
             config = load_learning_config()
@@ -11143,6 +11170,7 @@ def analyze_and_adjust_params():
                     stats_html += '    <h2>📊 开平仓时机完整分析（昨日）</h2>\n'
                     
                     # 🆕 V8.5.5: 开仓质量分析（独立模块，用户要求）
+                    # 🆕 V8.5.6: 增加"错过机会"统计
                     if has_entry:
                         try:
                             entry_stats = entry_analysis['entry_stats']
@@ -11152,7 +11180,13 @@ def analyze_and_adjust_params():
                             false_entries = entry_stats.get('false_entries', 0)
                             correctly_filtered = entry_stats.get('correctly_filtered', 0)
                             
-                            # 计算占比
+                            # 🆕 V8.5.6: 获取错过的高质量机会数量
+                            total_opportunities = entry_stats.get('total_opportunities', 0)
+                            missed_profitable = entry_stats.get('missed_profitable', 0)
+                            # 计算错过率（相对于总机会）
+                            missed_rate = (missed_profitable / total_opportunities * 100) if total_opportunities > 0 else 0
+                            
+                            # 计算占比（已开仓的交易）
                             correct_rate = (correct_entries / total_ai_opened * 100) if total_ai_opened > 0 else 0
                             timing_rate = (timing_issues / total_ai_opened * 100) if total_ai_opened > 0 else 0
                             false_rate = (false_entries / total_ai_opened * 100) if total_ai_opened > 0 else 0
@@ -11209,6 +11243,12 @@ def analyze_and_adjust_params():
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">-</td>
                 <td style="padding: 8px; border: 1px solid #ddd;">正确过滤，避免亏损</td>
             </tr>
+            <tr style="background: #fff3e0;">
+                <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">📉 错过</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #ff9800;">{missed_profitable}笔</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #ff9800;">{missed_rate:.1f}%</td>
+                <td style="padding: 8px; border: 1px solid #ddd;"><strong>高质量机会被错过</strong>（总机会{total_opportunities}个）</td>
+            </tr>
         </table>
         <p style="margin: 10px 0; padding: 12px; background: {grade_color}; color: white; border-radius: 5px; text-align: center; font-size: 1.1em;">
             <strong>整体评分：{grade} ({grade_desc})</strong> | 优秀率{correct_rate:.0f}% | 失误率{false_rate:.0f}%
@@ -11218,7 +11258,8 @@ def analyze_and_adjust_params():
             <ul style="margin: 5px 0; padding-left: 20px;">
                 <li>提高入场确认标准（减少时机问题{timing_rate:.0f}%）</li>
                 <li>加强虚假信号识别（当前{false_rate:.0f}%失误率）</li>
-                <li>目标：优秀率提升至60%+，失误率降至5%以下</li>
+                <li><strong>降低参数过滤强度（当前错过{missed_profitable}个高质量机会，{missed_rate:.1f}%）</strong></li>
+                <li>目标：优秀率提升至60%+，失误率降至5%以下，错过率降至20%以下</li>
             </ul>
         </div>
     </div>
