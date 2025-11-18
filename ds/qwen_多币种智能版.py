@@ -9119,10 +9119,15 @@ def analyze_and_adjust_params():
             print(f"  ⚠️  提取AI参数建议失败: {e}")
             ai_suggested_params = None
 
-        # ========== 【V8.3.12→V8.4.5】第4.6步：分离策略优化（带前向验证） ==========
-        print("\n【第4.6步：分离策略优化（V8.3.12→V8.4.5）】")
+        # ========== 【V8.5.2.4.10】第3步：Phase 3风险控制优化 ==========
+        print("\n【第3步：Phase 3风险控制优化】")
         scalping_optimization = None
         swing_optimization = None
+        profit_comparison = {
+            'has_data': False,
+            'scalping': {},
+            'swing': {}
+        }
         
         if kline_snapshots is not None and not kline_snapshots.empty:
             try:
