@@ -21257,69 +21257,40 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     signal_type = str(current.get('signal_type', 'swing')).lower()
                     signal_name = str(current.get('signal_name', ''))
                     
-                    # 获取后续24小时数据（需要先获取才能判断direction）
+                    # 获取后续24小时数据
                     later_24h = coin_data.iloc[idx+1:idx+97].copy()
                     if later_24h.empty:
                         continue
                     
-                    # 【V8.5.2.4.4】模拟真实交易路径判断direction（修复胜率问题）
-                    # 核心改进：不只看终点，而是模拟从entry开始，看先触发TP还是SL
-                    # 这样判断出来的direction才是"可以真实盈利的方向"
-                    max_high = float(later_24h['high'].max())
-                    min_low = float(later_24h['low'].min())
+                    # 【V8.5.2.4.5】回退到11月15日V8.4.10的成功逻辑
+                    # 核心改进：基于趋势指标判断direction（而不是用未来价格"作弊"）
+                    # 11月15日版本表现最佳，使用简单可靠的趋势判断
                     
-                    # 尝试long和short两个方向，看哪个方向更可能盈利
-                    # 先测试long方向
-                    long_tp = entry_price + (atr * 2.5)  # long的止盈（假设2.5倍ATR）
-                    long_sl = entry_price - (atr * 1.5)  # long的止损（假设1.5倍ATR）
-                    long_hit_tp = max_high >= long_tp
-                    long_hit_sl = min_low <= long_sl
+                    # 从snapshot获取趋势信息
+                    trend_4h = str(current.get('trend_4h', ''))
+                    trend_1h = str(current.get('trend_1h', ''))
+                    trend_15m = str(current.get('trend_15m', ''))
                     
-                    # 再测试short方向
-                    short_tp = entry_price - (atr * 2.5)  # short的止盈
-                    short_sl = entry_price + (atr * 1.5)  # short的止损
-                    short_hit_tp = min_low <= short_tp
-                    short_hit_sl = max_high >= short_sl
-                    
-                    # 评估两个方向的"可行性得分"
-                    # 止盈触发=好，止损触发=差
-                    long_score = 0
-                    short_score = 0
-                    
-                    if long_hit_tp:
-                        long_score += 2  # 触发TP，很好
-                    if long_hit_sl:
-                        long_score -= 3  # 触发SL，很差
-                    if not long_hit_tp and not long_hit_sl:
-                        # 未触发任何，看最终收盘利润
-                        final_close = float(later_24h.iloc[-1]['close'])
-                        long_profit = (final_close - entry_price) / entry_price * 100
-                        if long_profit > 0:
-                            long_score += 1
-                    
-                    if short_hit_tp:
-                        short_score += 2
-                    if short_hit_sl:
-                        short_score -= 3
-                    if not short_hit_tp and not short_hit_sl:
-                        final_close = float(later_24h.iloc[-1]['close'])
-                        short_profit = (entry_price - final_close) / entry_price * 100
-                        if short_profit > 0:
-                            short_score += 1
-                    
-                    # 选择得分更高的方向
-                    if long_score > short_score:
+                    # 优先级：4H > 1H > 15M（长周期优先）
+                    if '多头' in trend_4h or 'Bullish' in trend_4h:
                         direction = 'long'
-                    elif short_score > long_score:
+                    elif '空头' in trend_4h or 'Bearish' in trend_4h:
+                        direction = 'short'
+                    elif '多头' in trend_1h or 'Bullish' in trend_1h:
+                        direction = 'long'
+                    elif '空头' in trend_1h or 'Bearish' in trend_1h:
+                        direction = 'short'
+                    elif '多头' in trend_15m or 'Bullish' in trend_15m:
+                        direction = 'long'
+                    elif '空头' in trend_15m or 'Bearish' in trend_15m:
                         direction = 'short'
                     else:
-                        # 得分相同，回退到旧逻辑：看移动幅度
+                        # 回退：趋势不明确时，看价格实际走势
+                        max_high = float(later_24h['high'].max())
+                        min_low = float(later_24h['low'].min())
                         upward_move = (max_high - entry_price) / entry_price * 100
                         downward_move = (entry_price - min_low) / entry_price * 100
-                        if upward_move > downward_move:
-                            direction = 'long'
-                        else:
-                            direction = 'short'
+                        direction = 'long' if upward_move > downward_move else 'short'
                     
                     # 【V8.5.2.4】基于实际价格走势时间来客观分类信号类型
                     # 计算达到不同利润目标所需的时间（单位：15分钟K线数）

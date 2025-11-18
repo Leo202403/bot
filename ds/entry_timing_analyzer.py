@@ -882,6 +882,11 @@ Perform deep self-critical analysis:
         # 解析AI响应
         ai_content = response.choices[0].message.content.strip()
         
+        # 🔧 V8.3.25.26: 调试输出原始响应
+        print(f"[AI Entry Analysis] 📝 原始响应长度: {len(ai_content)} 字符")
+        print(f"[AI Entry Analysis] 📝 响应前500字符:\n{ai_content[:500]}")
+        print(f"[AI Entry Analysis] 📝 响应后200字符:\n{ai_content[-200:]}")
+        
         # 提取JSON（可能被markdown包裹）
         if '```json' in ai_content:
             ai_content = ai_content.split('```json')[1].split('```')[0].strip()
@@ -893,23 +898,47 @@ Perform deep self-critical analysis:
             ai_insights = json.loads(ai_content)
         except json.JSONDecodeError as json_err:
             print(f"[AI Entry Analysis] ⚠️ JSON解析失败: {json_err}")
+            print(f"[AI Entry Analysis] 📝 失败的JSON内容:\n{ai_content}")
             print(f"[AI Entry Analysis] 🔧 尝试修复JSON格式...")
             
-            # 尝试修复常见问题：未闭合的字符串
+            # 🔧 V8.3.25.26: 增强JSON修复逻辑
             try:
-                # 移除可能的不完整JSON尾部
+                # 1. 移除可能的不完整JSON尾部
                 if ai_content.rstrip().endswith(','):
                     ai_content = ai_content.rstrip()[:-1]
                 
-                # 尝试找到最后一个完整的对象
+                # 2. 查找第一个{和最后一个}，提取完整JSON对象
+                first_brace = ai_content.find('{')
                 last_brace = ai_content.rfind('}')
-                if last_brace > 0:
-                    ai_content = ai_content[:last_brace+1]
                 
+                if first_brace >= 0 and last_brace > first_brace:
+                    ai_content = ai_content[first_brace:last_brace+1]
+                    print(f"[AI Entry Analysis] 🔧 提取JSON片段: {first_brace}到{last_brace}")
+                
+                # 3. 修复常见的字符串截断问题
+                # 检查是否有未闭合的引号（在最后一个值处）
+                open_quotes = ai_content.count('"')
+                if open_quotes % 2 != 0:
+                    # 奇数个引号，尝试找到最后一个完整的字段
+                    # 回溯到上一个完整的字段
+                    patterns = [
+                        r',\s*"[^"]+"\s*:\s*"[^"]*$',  # 未闭合的字符串值
+                        r',\s*"[^"]+"\s*:\s*\[[^\]]*$',  # 未闭合的数组
+                    ]
+                    import re
+                    for pattern in patterns:
+                        match = re.search(pattern, ai_content)
+                        if match:
+                            ai_content = ai_content[:match.start()] + '}'
+                            print(f"[AI Entry Analysis] 🔧 修复未闭合字段，截取到位置{match.start()}")
+                            break
+                
+                # 4. 再次尝试解析
                 ai_insights = json.loads(ai_content)
                 print(f"[AI Entry Analysis] ✅ JSON修复成功")
-            except:
-                print(f"[AI Entry Analysis] ❌ JSON修复失败，返回空结果")
+            except Exception as fix_err:
+                print(f"[AI Entry Analysis] ❌ JSON修复失败: {fix_err}")
+                print(f"[AI Entry Analysis] 💡 建议: 增加max_tokens或使用非reasoner模型")
                 return {
                     'diagnosis': 'JSON解析失败，无法提取AI洞察',
                     'learning_insights': [],
