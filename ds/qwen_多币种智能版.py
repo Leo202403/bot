@@ -20321,9 +20321,11 @@ def analyze_opportunities_with_new_params(market_snapshots, actual_trades, new_c
     用新参数重新评估历史机会（V7.9.0 - 完全重构版）【V8.5.2.4：基于时间的客观分类】
     
     核心逻辑（完全修正）：
-    1. 客观识别机会：完全基于价格走势，不依赖任何参数过滤
-       - 超短线：6小时内达到1.5%-3%利润（快进快出，小利润）【V8.5.2.4修复】
-       - 波段：6小时内达到≥3%利润（快速高利润），或需要更长时间（慢趋势）
+    1. 客观识别机会：完全基于价格走势，不依赖任何参数过滤【V8.5.2.4最终修复】
+       - 超短线条件：6小时内达到≥1.5%利润（快进快出）
+       - 波段条件：达到≥3%利润（无论时间）
+       - 同一个机会可以同时满足两个条件，分别加入超短线和波段列表
+       - 开仓时由AI根据实际情况决定用超短线策略还是波段策略
     2. 模拟旧参数交易：真实模拟入场判断、止盈止损触发、计算捕获利润
     3. 模拟新参数交易：同样真实模拟，计算捕获利润
     4. 对比三种利润：
@@ -21273,23 +21275,26 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     if objective_profit < 1.0:  # 至少1%利润
                         continue
                     
-                    # 【V8.5.2.4修复】基于时间和利润客观判断信号类型
-                    # 核心逻辑：结合达到目标的时间和最终利润幅度
-                    # 超短线：6小时内达到1.5%-3%之间的利润（快进快出，小利润）
-                    # 波段：6小时内达到≥3%利润（快速高利润），或需要更长时间（慢趋势）
+                    # 【V8.5.2.4最终修复】独立判断，支持一个机会同时属于超短线和波段
+                    # 核心逻辑：不是互斥分类，而是分别判断是否符合各自条件
+                    # 超短线条件：6小时内达到≥1.5%利润（快进快出）
+                    # 波段条件：达到≥3%利润（无论时间）
+                    # 同一个机会可以同时满足两个条件，开仓时由AI决定用哪个策略
                     
-                    if time_to_reach_3pct is not None and time_to_reach_3pct <= 24:
-                        # 6小时内达到3%利润 → 波段（快速捕捉到高利润）
-                        signal_type_objective = 'swing'
-                        time_to_target = time_to_reach_3pct * 0.25
-                    elif time_to_reach_1_5pct is not None and time_to_reach_1_5pct <= 24 and objective_profit < 3.0:
-                        # 6小时内达到1.5%但最终利润<3% → 超短线（快进快出，小利润）
-                        signal_type_objective = 'scalping'
+                    is_scalping = time_to_reach_1_5pct is not None and time_to_reach_1_5pct <= 24
+                    is_swing = objective_profit >= 3.0  # 达到3%就是波段机会
+                    
+                    # 记录主要类型（用于后续分析，但不强制互斥）
+                    if is_swing:
+                        signal_type_primary = 'swing'
+                        time_to_target = time_to_reach_3pct * 0.25 if time_to_reach_3pct else 24
+                    elif is_scalping:
+                        signal_type_primary = 'scalping'
                         time_to_target = time_to_reach_1_5pct * 0.25
                     else:
-                        # 需要更长时间才能达到任何目标 → 波段（慢趋势）
-                        signal_type_objective = 'swing'
-                        time_to_target = time_to_reach_3pct * 0.25 if time_to_reach_3pct else 24
+                        # 利润在1%-1.5%之间，归为波段（长期持有）
+                        signal_type_primary = 'swing'
+                        time_to_target = 24
                     
                     # 【V8.3.21】创建摘要数据代替完整DataFrame
                     future_summary = {
@@ -21319,8 +21324,8 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         except:
                             pass
                     
-                    # 【V8.5.2.4】根据客观判断的信号类型分类（基于时间）
-                    opp_data = {
+                    # 【V8.5.2.4最终修复】根据独立判断，同一个机会可能同时加入两个列表
+                    opp_data_base = {
                         'coin': coin,
                         'timestamp': timestamp,
                         'time': time_str,  # 🆕 V8.5.5.2: HHMM格式（如0030）
@@ -21331,11 +21336,13 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         'risk_reward': risk_reward,
                         'atr': atr,
                         'signal_score': signal_score,  # 【V8.3.21】添加signal_score字段
-                        'signal_type': signal_type_objective,  # 【V8.5.2.4】使用客观判断的类型（基于时间）
+                        'signal_type_primary': signal_type_primary,  # 【V8.5.2.4】主要类型
                         'signal_type_csv': signal_type,  # 保留CSV中的类型（用于对比分析）
                         'signal_name': signal_name,
                         'objective_profit': objective_profit,
                         'time_to_target': time_to_target,  # 【V8.5.2.4】达到目标的时间（小时）
+                        'is_scalping_eligible': is_scalping,  # 【V8.5.2.4】是否符合超短线条件
+                        'is_swing_eligible': is_swing,  # 【V8.5.2.4】是否符合波段条件
                         'future_data': future_summary,  # 【V8.3.21】使用摘要代替完整DataFrame
                         # 【V8.3.21】添加上下文字段（用于4层过滤）
                         'kline_ctx_bullish_ratio': kline_ctx_bullish_ratio,
@@ -21345,10 +21352,16 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         'sr_hist_avg_reaction': sr_hist_avg_reaction
                     }
                     
-                    if signal_type_objective == 'scalping':
-                        coin_scalping.append(opp_data)
-                    else:  # swing
-                        coin_swing.append(opp_data)
+                    # 【V8.5.2.4最终修复】独立判断，可以同时加入两个列表
+                    if is_scalping:
+                        opp_data_scalping = opp_data_base.copy()
+                        opp_data_scalping['signal_type'] = 'scalping'  # 标记为超短线
+                        coin_scalping.append(opp_data_scalping)
+                    
+                    if is_swing:
+                        opp_data_swing = opp_data_base.copy()
+                        opp_data_swing['signal_type'] = 'swing'  # 标记为波段
+                        coin_swing.append(opp_data_swing)
                 
                 except (ValueError, TypeError, KeyError) as e:
                     continue
