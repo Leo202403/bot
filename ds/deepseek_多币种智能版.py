@@ -6838,6 +6838,43 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     print(f"     最优参数: R:R={best_params['min_risk_reward']}, 共识={best_params['min_indicator_consensus']}, ATR={best_params['atr_stop_multiplier']:.2f}")
     print(f"     盈利状态: {'✅ 找到盈利' if found_profitable else '⚠️ 未找到盈利（使用最优亏损点）'}")
     
+    # 【V8.5.2.4.10】计算Phase 2 baseline（供Phase 3使用）
+    phase2_baseline = None
+    if phase1_baseline and use_confirmed_opps and all_opportunities:
+        # 使用最优参数过滤机会，计算baseline
+        best_captured_opps = [
+            opp for opp in all_opportunities
+            if (opp.get('signal_score', 0) >= best_params.get('min_signal_score', 50) and
+                opp.get('consensus', 0) >= best_params.get('min_indicator_consensus', 2))
+        ]
+        
+        if best_captured_opps:
+            # 重新计算actual_profit（使用best_params的TP/SL）
+            from calculate_actual_profit import calculate_single_actual_profit
+            
+            for opp in best_captured_opps:
+                actual_profit = calculate_single_actual_profit(
+                    opp,
+                    strategy_params=best_params,
+                    use_dynamic_atr=False
+                )
+                opp['_phase2_actual_profit'] = actual_profit
+            
+            phase1_total = phase1_baseline.get('scalping', {}).get('count', 0) + phase1_baseline.get('swing', {}).get('count', 0)
+            phase2_capture_rate = len(best_captured_opps) / phase1_total if phase1_total > 0 else 0
+            phase2_avg_profit = sum(o.get('_phase2_actual_profit', 0) for o in best_captured_opps) / len(best_captured_opps)
+            
+            phase2_baseline = {
+                'captured_count': len(best_captured_opps),
+                'capture_rate': phase2_capture_rate,
+                'avg_profit': phase2_avg_profit,
+                'params': best_params.copy()
+            }
+            
+            print(f"\n  📊 Phase 2 baseline（供Phase 3使用）:")
+            print(f"     捕获: {len(best_captured_opps)}个 ({phase2_capture_rate*100:.1f}%)")
+            print(f"     平均利润: {phase2_avg_profit:.2f}%")
+    
     # 【V8.3.16.3】兼容后续代码：构建iterative_result格式
     return {
         'final_params': best_params,
@@ -6848,7 +6885,8 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         'total_rounds': 1,  # V8.3.16.7: 修复KeyError
         'rounds': [{'round_num': 1, 'improved': True, 'metric': 0.0, 'status': 'COMPLETED'}],  # V8.3.16.7: 修复rounds KeyError
         'quick_search_mode': True,
-        'found_profitable': found_profitable
+        'found_profitable': found_profitable,
+        'phase2_baseline': phase2_baseline  # 🆕 V8.5.2.4.10
     }
 
 
