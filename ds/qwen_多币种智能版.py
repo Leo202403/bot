@@ -2810,7 +2810,10 @@ def save_market_snapshot_v7(market_data_list):
             
             # 【V8.5.2.4.3】添加到data字典中，确保实时传递给AI和订单保存
             data["indicator_consensus"] = indicator_consensus
-            data["indicators"] = {"consensus": indicator_consensus}  # 也添加到indicators子字典
+            # 确保indicators字典存在
+            if "indicators" not in data:
+                data["indicators"] = {}
+            data["indicators"]["consensus"] = indicator_consensus
             
             # 【V8.4】计算综合确认度评分（0-100分）
             try:
@@ -2860,8 +2863,10 @@ def save_market_snapshot_v7(market_data_list):
             
             # 【V8.5.2.4.3】添加consensus_score到data字典
             data["consensus_score"] = consensus_score
-            if "indicators" in data:
-                data["indicators"]["consensus_score"] = consensus_score
+            # indicators字典在上面已经创建，直接添加
+            if "indicators" not in data:
+                data["indicators"] = {}
+            data["indicators"]["consensus_score"] = consensus_score
             
             # 【V8.2】计算信号评分的各个维度（保存"原料"而非"成品"）
             # 初始化signal_type（防止未定义错误）
