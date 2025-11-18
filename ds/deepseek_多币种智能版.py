@@ -22603,14 +22603,17 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
     total_days = 14
     split_point = total_days // 2  # 7天
     
-    # 假设数据按时间排序，分为前7天和后7天
-    # 使用timestamp来分割
-    all_timestamps = sorted(set(o.get('timestamp') for o in full_data if o.get('timestamp')))
-    if len(all_timestamps) < total_days:
-        print(f"  ⚠️  数据不足{total_days}天，无法进行分段测试")
+    # 【V8.5.2.4.21】修复：按样本数量分割，而不是按timestamp数量
+    # 按时间排序
+    sorted_data = sorted(full_data, key=lambda x: x.get('timestamp', '2000-01-01 00:00:00'))
+    
+    if len(sorted_data) < 100:
+        print(f"  ⚠️  样本数不足（{len(sorted_data)}个），无法进行分段测试")
         return None
     
-    split_timestamp = all_timestamps[split_point]
+    # 按样本数量的50%分割（确保前后期样本数相近）
+    data_split_point = len(sorted_data) // 2
+    split_timestamp = sorted_data[data_split_point].get('timestamp')
     
     def test_period(opps, params, period_name):
         """测试特定时期的参数表现"""
@@ -22697,8 +22700,6 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
     print(f"     胜率: {full_win_rate*100:.1f}%")
     
     # 2️⃣ 分段测试
-    print(f"\n  📊 2️⃣ 分段测试（前{split_point}天 vs 后{total_days-split_point}天）...")
-    
     # 前期数据
     early_scalping = [o for o in scalping_opps if o.get('timestamp', '') < split_timestamp]
     early_swing = [o for o in swing_opps if o.get('timestamp', '') < split_timestamp]
@@ -22706,6 +22707,11 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
     # 后期数据
     late_scalping = [o for o in scalping_opps if o.get('timestamp', '') >= split_timestamp]
     late_swing = [o for o in swing_opps if o.get('timestamp', '') >= split_timestamp]
+    
+    # 【V8.5.2.4.21】显示实际样本数
+    early_count = len(early_scalping) + len(early_swing)
+    late_count = len(late_scalping) + len(late_swing)
+    print(f"\n  📊 2️⃣ 分段测试（前{early_count}个样本 vs 后{late_count}个样本）...")
     
     early_scalp_result = test_period(early_scalping, scalping_params, "前期超短线")
     early_swing_result = test_period(early_swing, swing_params, "前期波段")
