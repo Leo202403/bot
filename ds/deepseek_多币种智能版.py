@@ -21271,31 +21271,24 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     signal_type = str(current.get('signal_type', 'swing')).lower()
                     signal_name = str(current.get('signal_name', ''))
                     
-                    # 【V8.5.2.4.2】修正方向判断：优先使用CSV中的ytc_direction
-                    direction = 'long'  # 默认
-                    
-                    # 优先级1：使用ytc_direction（最准确）
-                    if 'ytc_direction' in current:
-                        ytc_dir = str(current.get('ytc_direction', '')).upper()
-                        if ytc_dir == 'SHORT':
-                            direction = 'short'
-                        elif ytc_dir == 'LONG':
-                            direction = 'long'
-                    # 优先级2：使用trend信息判断
-                    elif 'trend_15m' in current:
-                        trend = str(current.get('trend_15m', '')).lower()
-                        if '空头' in trend or '空' in trend or 'bear' in trend:
-                            direction = 'short'
-                    # 优先级3：回退到macd_signal
-                    elif 'macd_signal' in current:
-                        macd_sig = str(current.get('macd_signal', '')).lower()
-                        if 'short' in macd_sig or 'bear' in macd_sig:
-                            direction = 'short'
-                    
-                    # 获取后续24小时数据
+                    # 获取后续24小时数据（需要先获取才能判断direction）
                     later_24h = coin_data.iloc[idx+1:idx+97].copy()
                     if later_24h.empty:
                         continue
+                    
+                    # 【V8.5.2.4.3】根据实际价格走势判断direction（完全客观）
+                    # 逻辑：看后续24小时内，价格上涨幅度大还是下跌幅度大
+                    max_high = float(later_24h['high'].max())
+                    min_low = float(later_24h['low'].min())
+                    
+                    upward_move = (max_high - entry_price) / entry_price * 100
+                    downward_move = (entry_price - min_low) / entry_price * 100
+                    
+                    # 哪个方向走得更远，就说明应该做哪个方向
+                    if upward_move > downward_move:
+                        direction = 'long'  # 价格主要上涨
+                    else:
+                        direction = 'short'  # 价格主要下跌
                     
                     # 【V8.5.2.4】基于实际价格走势时间来客观分类信号类型
                     # 计算达到不同利润目标所需的时间（单位：15分钟K线数）
