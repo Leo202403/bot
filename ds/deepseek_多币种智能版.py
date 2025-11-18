@@ -22690,7 +22690,7 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
     stability_score = max(0, stability_score)
     print(f"     最终稳定性得分: {stability_score:.1f}/100")
     
-    # 5️⃣ 最终判定
+    # 5️⃣ 最终判定（初步）
     print(f"\n  🎯 5️⃣ 最终判定...")
     
     if full_avg_profit <= 0:
@@ -22720,6 +22720,85 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
         print(f"\n  ⚠️  发现的问题:")
         for issue in issues:
             print(f"     • {issue}")
+    
+    # 【V8.5.2.4.13】6️⃣ 异常检测（集成detect_anomalies_local）
+    print(f"\n  🔍 6️⃣ 异常检测（detect_anomalies_local）...")
+    
+    try:
+        from backtest_optimizer_v8321 import detect_anomalies_local
+        
+        # 构建all_results用于异常检测
+        all_results = []
+        
+        if full_scalping_result and full_scalping_result['captured_count'] > 0:
+            all_results.append({
+                'params': scalping_params,
+                'captured_count': full_scalping_result['captured_count'],
+                'win_rate': full_scalping_result['win_rate'],
+                'avg_win': full_scalping_result.get('captured', [{}])[0].get('_test_profit', 0) if full_scalping_result.get('captured') else 0,
+                'avg_loss': 1.0,  # 简化
+                'profit_loss_ratio': full_scalping_result['profit_ratio'],
+                'capture_rate': full_scalping_result['capture_rate'],
+                'avg_profit': full_scalping_result['avg_profit'],
+                'max_drawdown': 0.1  # 简化，假设10%
+            })
+        
+        if full_swing_result and full_swing_result['captured_count'] > 0:
+            all_results.append({
+                'params': swing_params,
+                'captured_count': full_swing_result['captured_count'],
+                'win_rate': full_swing_result['win_rate'],
+                'avg_win': full_swing_result.get('captured', [{}])[0].get('_test_profit', 0) if full_swing_result.get('captured') else 0,
+                'avg_loss': 1.0,  # 简化
+                'profit_loss_ratio': full_swing_result['profit_ratio'],
+                'capture_rate': full_swing_result['capture_rate'],
+                'avg_profit': full_swing_result['avg_profit'],
+                'max_drawdown': 0.1  # 简化，假设10%
+            })
+        
+        # 计算参数敏感度（简化版：基于利润波动）
+        param_sensitivity = {
+            'atr_tp_multiplier': min(1.0, abs(profit_diff) / 10),  # 0-1范围
+            'atr_stop_multiplier': min(1.0, abs(profit_diff) / 10),
+            'min_signal_score': 0.5,  # 中等敏感
+            'min_indicator_consensus': 0.3  # 较低敏感
+        }
+        
+        # 调用异常检测
+        anomalies = detect_anomalies_local(all_results, param_sensitivity)
+        
+        if anomalies:
+            print(f"     发现{len(anomalies)}个异常:")
+            for anomaly in anomalies:
+                anomaly_type = anomaly.get('type', 'Unknown')
+                description = anomaly.get('description', '')
+                print(f"     • [{anomaly_type}] {description}")
+                
+                # 根据异常类型调整过拟合得分
+                if 'Low Win Rate' in anomaly_type:
+                    overfitting_score += 0.5
+                    issues.append(f"异常检测: {description}")
+                elif 'High Sensitivity' in anomaly_type:
+                    overfitting_score += 1.0  # 参数敏感度高是过拟合的强信号
+                    issues.append(f"异常检测: {description}")
+                elif 'Low Capture' in anomaly_type:
+                    # 捕获率过低不增加过拟合分，但记录
+                    issues.append(f"异常检测: {description}")
+                elif 'High Score Low Capture' in anomaly_type:
+                    overfitting_score += 0.5
+                    issues.append(f"异常检测: {description}")
+            
+            # 如果新增了过拟合分数，需要重新判定
+            if overfitting_score >= 2 and status != "OVERFITTED":
+                print(f"\n     ⚠️  异常检测后，过拟合得分升至{overfitting_score:.1f}，更新状态")
+                status = "OVERFITTED"
+                recommendation = "检测到严重过拟合（含异常检测），回退到Phase 2参数"
+        else:
+            print(f"     ✅ 未发现异常")
+            
+    except Exception as e:
+        print(f"     ⚠️  异常检测失败: {e}")
+        # 不影响主流程，继续
     
     return {
         'status': status,
