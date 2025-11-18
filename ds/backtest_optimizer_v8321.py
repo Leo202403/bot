@@ -1002,85 +1002,122 @@ def detect_anomalies_local(all_results: List[Dict], param_sensitivity: Dict) -> 
 
 def calculate_v8321_optimization_score(result: Dict) -> float:
     """
-    【V8.3.21利润最大化+风控】评分函数
+    【V8.5.2升级】多目标优化评分函数 - 平衡胜率、盈亏比、利润、风险
     
-    核心目标：利润最大 + 亏损最小
+    核心目标：找到"胜率-盈亏比-总利润"的最优权衡点
     
-    关键指标：
-    1. 期望收益 = (胜率 × 平均盈利) + (败率 × 平均亏损)
-       - 综合考虑盈利和亏损
-    2. 盈亏比 = 平均盈利 / |平均亏损|
-       - 赚的时候赚多少 vs 亏的时候亏多少
-    3. 最大回撤
-       - 连续亏损的最大幅度（风险指标）
-    4. 捕获率
-       - 确保不过度保守
+    关键改进：
+    1. 期望收益为核心（已包含胜率×盈利+败率×亏损）
+    2. 盈亏比独立评估（避免极端配置）
+    3. 软约束惩罚（而非硬性阈值）
+    4. 回撤控制
     
-    权重设计（对齐"利润最大+亏损最小"）：
-    - 期望收益: 50%（核心，已包含盈亏）【从40%提升到50%】
-    - 盈亏比: 25%（赚多亏少）【从30%降到25%】
-    - 捕获率: 15%（不过度保守）【从20%降到15%】
-    - 回撤惩罚: -10%（控制风险）
+    评分逻辑：
+    - 期望收益 > 0：基础分
+    - 盈亏比 ≥ 1.5：加分，< 1.5：扣分
+    - 胜率 ≥ 30%：正常，< 30%：扣分
+    - 最大回撤 < 20%：正常，> 20%：扣分
+    - 捕获率：适当加分
     
-    示例：
-    - 配置A: 3%期望 + 2.0盈亏比 + 50%捕获 - 5%回撤 = 高分
-    - 配置B: 3%期望 + 1.2盈亏比 + 50%捕获 - 8%回撤 = 低分（亏损大）
+    示例对比：
+    - 高胜率低盈亏比（Qwen型）: 胜率75% + 盈亏比0.8 → 扣分
+    - 低胜率高盈亏比（DeepSeek型）: 胜率30% + 盈亏比0.68 → 扣分
+    - 平衡配置: 胜率50% + 盈亏比2.0 → 高分
     """
     if result['captured_count'] == 0:
         return 0.0
     
-    # 【V8.4.5】改进评分逻辑
+    # 提取核心指标
     avg_profit = result.get('avg_profit', 0)
-    expectancy = result.get('expectancy', 0)
     win_rate = result.get('win_rate', 0)
+    avg_win = result.get('avg_win', 0)
+    avg_loss = result.get('avg_loss', 0)
+    max_drawdown = result.get('max_drawdown', 0)
     capture_rate = result.get('capture_rate', 0)
     
-    # 【V8.4.5新增】计算time_exit比例
-    time_exit_count = result.get('time_exit_count', 0)
-    total_count = result.get('captured_count', 1)
-    time_exit_ratio = time_exit_count / total_count if total_count > 0 else 0
+    # 计算盈亏比
+    profit_loss_ratio = abs(avg_win / avg_loss) if avg_loss != 0 else 999
     
-    # 负利润仍然给低分（保留V8.3.21.15的逻辑）
-    if avg_profit <= 0 or expectancy <= 0:
-        base_penalty = 0.01
-        if avg_profit > -2:
-            return base_penalty + (avg_profit + 2) / 2 * 0.04
-        else:
-            return base_penalty
+    # 计算期望收益
+    expectancy = (win_rate * avg_win) + ((1 - win_rate) * avg_loss)
     
-    # 归一化各指标
-    avg_profit_score = min(1.0, max(0, avg_profit / 20))  # 0%~20% → 0~1
-    expectancy_score = min(1.0, max(0, (expectancy + 5) / 15))  # -5%~+10% → 0~1
-    win_rate_score = win_rate  # 0~1
-    capture_rate_score = capture_rate  # 0~1
+    # ========================================
+    # 【核心评分】期望收益
+    # ========================================
+    if expectancy <= 0:
+        # 负期望，给予极低分
+        return max(0.01, 0.01 + (expectancy + 5) / 5 * 0.04)
     
-    # 【V8.4.5新增】TP/SL触发率（time_exit的反面）
-    tp_sl_trigger_rate = 1 - time_exit_ratio
-    tp_sl_trigger_score = tp_sl_trigger_rate  # 0~1
+    # 期望收益基础分（0-100）
+    expectancy_score = min(100, expectancy * 20)  # 1%期望=20分，5%期望=100分
     
-    # 【V8.4.5新增】time_exit惩罚：如果比例>50%，给予惩罚
-    time_exit_penalty = max(0, (time_exit_ratio - 0.5) * 0.5)  # 超过50%，每10%扣0.05分
+    # ========================================
+    # 【权衡调节】盈亏比
+    # ========================================
+    if profit_loss_ratio < 1.5:
+        # 盈亏比太低，扣分
+        pl_ratio_penalty = (1.5 - profit_loss_ratio) * 20  # 每低0.1扣2分
+    elif profit_loss_ratio >= 2.0:
+        # 盈亏比优秀，加分
+        pl_ratio_bonus = min(20, (profit_loss_ratio - 2.0) * 10)  # 每高0.1加1分，最多+20
+    else:
+        # 盈亏比正常（1.5-2.0），不调整
+        pl_ratio_penalty = 0
+        pl_ratio_bonus = 0
     
-    # 【V8.4.5】调整权重，提高捕获率重要性
+    # ========================================
+    # 【权衡调节】胜率
+    # ========================================
+    if win_rate < 0.30:
+        # 胜率太低，扣分
+        win_rate_penalty = (0.30 - win_rate) * 50  # 每低1%扣0.5分
+    elif win_rate >= 0.60 and profit_loss_ratio < 1.5:
+        # 高胜率但低盈亏比（过早止盈），扣分
+        win_rate_penalty = 10  # 固定扣10分
+    else:
+        win_rate_penalty = 0
+    
+    # ========================================
+    # 【风险控制】最大回撤
+    # ========================================
+    if max_drawdown > 0.20:
+        # 回撤超过20%，扣分
+        drawdown_penalty = (max_drawdown - 0.20) * 100  # 每超1%扣1分
+    else:
+        drawdown_penalty = 0
+    
+    # ========================================
+    # 【捕获率】加分
+    # ========================================
+    capture_bonus = capture_rate * 15  # 100%捕获率+15分
+    
+    # ========================================
+    # 【综合得分】
+    # ========================================
     total_score = (
-        avg_profit_score * 0.30 +       # 平均利润 30%（从40%降低）
-        expectancy_score * 0.20 +       # 期望收益 20%（从25%降低）
-        win_rate_score * 0.15 +         # 胜率 15%（保持）
-        capture_rate_score * 0.25 +     # 捕获率 25%（从0%提升）⭐
-        tp_sl_trigger_score * 0.10 +    # TP/SL触发率 10%（新增）
-        - time_exit_penalty             # time_exit惩罚（动态）
+        expectancy_score +                # 期望收益（核心）
+        pl_ratio_bonus - pl_ratio_penalty +  # 盈亏比调节
+        - win_rate_penalty +              # 胜率惩罚
+        - drawdown_penalty +              # 回撤惩罚
+        capture_bonus                     # 捕获率加分
     )
     
-    return max(0, total_score)  # 确保非负
+    return max(0, total_score / 100)  # 归一化到0-1
 
 
 def extract_key_metrics(result: Dict) -> Dict:
-    """提取关键指标"""
+    """提取关键指标（V8.5.2扩展：包含盈亏比、期望收益等）"""
     return {
         'capture_rate': result.get('capture_rate', 0),
         'avg_profit': result.get('avg_profit', 0),
         'win_rate': result.get('win_rate', 0),
-        'time_exit_rate': result.get('time_exit_rate', 0)
+        'time_exit_rate': result.get('time_exit_rate', 0),
+        # V8.5.2新增：多目标权衡指标
+        'avg_win': result.get('avg_win', 0),
+        'avg_loss': result.get('avg_loss', 0),
+        'profit_loss_ratio': result.get('profit_loss_ratio', 0),
+        'expectancy': result.get('expectancy', 0),
+        'max_drawdown': result.get('max_drawdown', 0)
     }
 
 
@@ -1209,24 +1246,45 @@ def build_ai_optimization_prompt_en(top_10_configs: List[Dict],
                                       anomalies: List[Dict],
                                       signal_type: str) -> str:
     """
-    Build English prompt for AI optimization
+    【V8.5.2升级】Build AI prompt with win rate - P/L ratio trade-off analysis
     
-    English communication is more efficient for AI reasoning
+    展示Top 10配置的权衡关系，让AI选择最优平衡点
     """
     
-    # Format Top 3 configs
+    # 【V8.5.2】Format Top 10 configs with trade-off table
+    top_10_table = "\n| Rank | Score | Win Rate | P/L Ratio | Avg Win | Avg Loss | Expectancy | Capture | Max DD |\n"
+    top_10_table += "|------|-------|----------|-----------|---------|----------|------------|---------|--------|\n"
+    
+    for i, config in enumerate(top_10_configs[:10], 1):
+        m = config['metrics']
+        win_rate = m.get('win_rate', 0) * 100
+        pl_ratio = m.get('profit_loss_ratio', 0)
+        avg_win = m.get('avg_win', 0)
+        avg_loss = m.get('avg_loss', 0)
+        expectancy = m.get('expectancy', 0)
+        capture = m.get('capture_rate', 0) * 100
+        max_dd = m.get('max_drawdown', 0) * 100
+        
+        top_10_table += f"| {i:2d}   | {config['score']:.3f} | {win_rate:5.1f}% | {pl_ratio:5.2f}:1 | {avg_win:+5.2f}% | {avg_loss:5.2f}% | {expectancy:+5.2f}% | {capture:5.1f}% | {max_dd:4.1f}% |\n"
+    
+    # Format Top 3 configs (detail view)
     top_3_str = ""
     for i, config in enumerate(top_10_configs[:3], 1):
         top_3_str += f"\nRank {i}:\n"
         top_3_str += f"  Score: {config['score']:.3f}\n"
-        top_3_str += f"  Capture Rate: {config['metrics']['capture_rate']*100:.0f}%\n"
-        top_3_str += f"  Avg Profit: {config['metrics']['avg_profit']:.1f}%\n"
-        top_3_str += f"  Win Rate: {config['metrics']['win_rate']*100:.0f}%\n"
-        # Show key params
+        m = config['metrics']
+        top_3_str += f"  Win Rate: {m.get('win_rate', 0)*100:.1f}%\n"
+        top_3_str += f"  P/L Ratio: {m.get('profit_loss_ratio', 0):.2f}:1\n"
+        top_3_str += f"  Expectancy: {m.get('expectancy', 0):+.2f}%\n"
+        top_3_str += f"  Capture Rate: {m.get('capture_rate', 0)*100:.0f}%\n"
+        top_3_str += f"  Avg Profit: {m.get('avg_profit', 0):.1f}%\n"
+        # Show key params (including TP/SL)
         params = config['params']
         top_3_str += f"  Key Params: signal≥{params.get('min_signal_score', 60)}, "
         top_3_str += f"consensus≥{params.get('min_consensus', 3)}, "
-        top_3_str += f"RR≥{params.get('min_risk_reward', 2.0):.1f}\n"
+        top_3_str += f"RR≥{params.get('min_risk_reward', 2.0):.1f}, "
+        top_3_str += f"TP={params.get('atr_tp_multiplier', 4.0):.1f}×ATR, "
+        top_3_str += f"SL={params.get('atr_stop_multiplier', 1.5):.1f}×ATR\n"
     
     # Format parameter sensitivity (Top 3)
     sensitivity_str = ""
@@ -1247,49 +1305,70 @@ def build_ai_optimization_prompt_en(top_10_configs: List[Dict],
     for anomaly in anomalies[:2]:
         anomalies_str += f"\n  • {anomaly.get('type', 'unknown')}: {anomaly.get('description', 'N/A')}"
     
-    # Construct prompt (English)
-    prompt = f"""You are an expert in trading parameter optimization. Analyze the Grid Search results and provide iterative improvement suggestions.
+    # 【V8.5.2】Construct enhanced prompt with trade-off analysis
+    prompt = f"""You are an expert in trading parameter optimization. 
+
+Your task: Analyze the trade-off between win rate, profit/loss ratio, and total profit to find the optimal balance.
 
 Signal Type: {signal_type.upper()}
 
-=== Grid Search Results (200 combinations tested) ===
+=== Trade-Off Analysis (Top 10 Configurations) ===
+{top_10_table}
 
-Top 3 Configurations:
+**Key Patterns to Identify:**
+- High win rate + Low P/L ratio → Early exits (leaving money on table)
+- Low win rate + High P/L ratio → Getting stopped out too often
+- Balanced configs → Optimal expectancy
+
+=== Detailed View (Top 3) ===
 {top_3_str}
 
-=== Parameter Sensitivity Analysis ===
+=== Parameter Sensitivity ===
 {sensitivity_str}
 
-=== Market Context Insights ===
+=== Market Context ===
 {insights_str}
 
-=== Detected Anomalies ===
+=== Anomalies ===
 {anomalies_str if anomalies_str else "  None"}
 
 === Your Task ===
 
-Based on the above analysis:
+1. **Identify the optimal trade-off:**
+   - Which rank has the best balance between win rate and P/L ratio?
+   - Is expectancy maximized? (Expectancy = Win Rate × Avg Win + Loss Rate × Avg Loss)
+   - Are there red flags? (e.g., Win Rate > 60% but P/L < 1.5 = early exits)
 
-1. Should we accept Rank 1, or try a different configuration?
-2. Can we make micro-adjustments to improve the score further?
-3. What are the key risks in the current market context?
-4. Any recommendations for next iteration?
+2. **Adjust TP/SL if needed:**
+   - If P/L ratio < 1.5 → Consider increasing TP multiplier
+   - If win rate < 30% → Consider decreasing SL multiplier or increasing TP
+   - If max drawdown > 20% → Consider tighter risk controls
+
+3. **Select the best configuration:**
+   - Rank 1 may not be optimal if it has extreme trade-offs
+   - Consider Rank 2-10 if they have better balance
 
 Please respond in JSON format:
 
 {{
     "needs_adjustment": true/false,
-    "selected_rank": 1,  // 1-3
+    "selected_rank": 1,  // 1-10
     "param_adjustments": {{
         // Only specify params that need adjustment
-        // Example: "min_signal_score": 65
+        // Available: "atr_tp_multiplier", "atr_stop_multiplier", "min_signal_score", etc.
+        // Example: "atr_tp_multiplier": 4.5
     }},
-    "reasoning_en": "Brief explanation why this choice is optimal",
+    "reasoning_en": "Why this configuration achieves the best trade-off between win rate, P/L ratio, and expectancy",
+    "trade_off_analysis": "Explain the trade-off pattern observed (e.g., 'Rank 1 has high win rate but low P/L ratio due to early exits')",
     "key_insights_en": [
-        "Insight 1",
-        "Insight 2"
+        "Insight about win rate pattern",
+        "Insight about P/L ratio optimization"
     ],
-    "risk_warning_en": "Market risk assessment"
+    "expected_improvement": {{
+        "win_rate": "↑/↓/→",
+        "pl_ratio": "↑/↓/→",
+        "expectancy": "+X%"
+    }}
 }}
 
 Respond with ONLY the JSON, no additional text."""

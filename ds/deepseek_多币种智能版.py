@@ -6610,26 +6610,28 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     
     print(f"  📐 测试范围: R:R [{rr_min:.2f}, {rr_max:.2f}], 共识 [{consensus_min}, {consensus_max}], 分数 [{score_min}, {score_max}]")
     
+    # 🔧 V8.5.2: 扩展参数空间 - 添加出场参数（atr_tp_multiplier, max_holding_hours）
+    # 目标：入场参数最大化捕捉机会，出场参数最大化捕捉利润
     test_points = [
-        # 🔧 V8.3.21.8: 宽松组合（高召回）- 低R:R + 低共振 + 高signal_score
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 80, 'name': '极宽松'},  # R:R=1.4, consensus=1, score=80
-        {'min_risk_reward': 1.8, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 80, 'name': '偏宽松'},  # R:R=1.8, consensus=1, score=80
+        # 宽松组合（高召回 + 适中止盈）
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'atr_tp_multiplier': 3.0, 'max_holding_hours': 48, 'min_signal_score': 80, 'name': '极宽松'},
+        {'min_risk_reward': 1.8, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'atr_tp_multiplier': 3.5, 'max_holding_hours': 60, 'min_signal_score': 80, 'name': '偏宽松'},
         
-        # 平衡组合（Precision vs Recall）
-        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 80, 'name': '标准平衡'},  # R:R=2.0, consensus=1, score=80
-        {'min_risk_reward': 2.2, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 82, 'name': '高分低R:R'},  # R:R=2.2, consensus=1, score=82
+        # 平衡组合（Precision vs Recall + 灵活止盈）
+        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'atr_tp_multiplier': 4.0, 'max_holding_hours': 72, 'min_signal_score': 80, 'name': '标准平衡'},
+        {'min_risk_reward': 2.2, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'atr_tp_multiplier': 4.5, 'max_holding_hours': 60, 'min_signal_score': 82, 'name': '高TP平衡'},
         
-        # 严格组合（高精准）- 中R:R + 低共振 + 更高signal_score
-        {'min_risk_reward': 2.3, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'min_signal_score': 85, 'name': '偏严格'},  # R:R=2.3, consensus=1, score=85
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 2, 'atr_stop_multiplier': atr_max, 'min_signal_score': 85, 'name': '严格'},  # R:R=2.5, consensus=2, score=85
+        # 严格组合（高精准 + 高止盈）
+        {'min_risk_reward': 2.3, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'atr_tp_multiplier': 5.0, 'max_holding_hours': 84, 'min_signal_score': 85, 'name': '偏严格'},
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': 2, 'atr_stop_multiplier': atr_max, 'atr_tp_multiplier': 4.5, 'max_holding_hours': 72, 'min_signal_score': 85, 'name': '严格'},
         
-        # 超严格组合（极高精准）- 高R:R + 中共振 + 极高signal_score
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 2, 'atr_stop_multiplier': atr_max, 'min_signal_score': 88, 'name': '超严格'},  # R:R=2.5, consensus=2, score=88
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 90, 'name': '极严格'},  # R:R=2.5, consensus=3, score=90
+        # 超严格组合（极高精准 + 极高止盈）
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': 2, 'atr_stop_multiplier': atr_max, 'atr_tp_multiplier': 5.5, 'max_holding_hours': 96, 'min_signal_score': 88, 'name': '超严格'},
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'atr_tp_multiplier': 6.0, 'max_holding_hours': 96, 'min_signal_score': 90, 'name': '极严格'},
         
-        # 特殊组合（测试不同维度的极端值）
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 2, 'atr_stop_multiplier': atr_max, 'min_signal_score': 85, 'name': '低R:R高共振'},  # 测试：是否共振能补偿R:R
-        {'min_risk_reward': 2.2, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 85, 'name': 'BNB专用'},  # 专门捕获BNB类机会（R:R=2.2, score=82-85）
+        # 特殊组合（测试不同维度）
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 2, 'atr_stop_multiplier': atr_max, 'atr_tp_multiplier': 3.5, 'max_holding_hours': 48, 'min_signal_score': 85, 'name': '低R:R高共振'},
+        {'min_risk_reward': 2.2, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'atr_tp_multiplier': 4.0, 'max_holding_hours': 60, 'min_signal_score': 85, 'name': '快速止盈'},
     ]
     
     # 🔧 V8.3.31.7: use_confirmed_opps 已在函数开始处定义（避免UnboundLocalError）
@@ -6651,11 +6653,14 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     print(f"\n  🔍 测试{len(test_points)}组战略采样（含signal_score优化）...")
     
     for i, test_params in enumerate(test_points):
+        # 🔧 V8.5.2: 扩展config_variant，包含出场参数
         config_variant = {
             'min_risk_reward': test_params['min_risk_reward'],
             'min_indicator_consensus': test_params['min_indicator_consensus'],
             'atr_stop_multiplier': test_params['atr_stop_multiplier'],
-            'min_signal_score': test_params.get('min_signal_score', 50)  # 🔧 V8.3.29: 使用test_params中的动态signal_score
+            'atr_tp_multiplier': test_params.get('atr_tp_multiplier', 4.0),  # 🆕 止盈倍数
+            'max_holding_hours': test_params.get('max_holding_hours', 72),  # 🆕 持仓上限
+            'min_signal_score': test_params.get('min_signal_score', 50)
         }
         
         # 🔧 V8.3.25.23: 优先使用confirmed_opportunities回测
@@ -6670,7 +6675,20 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             ]
             
             if captured_opps:
-                avg_profit = sum(opp.get('objective_profit', 0) for opp in captured_opps) / len(captured_opps)
+                # 🔧 V8.5.2: 使用test_params的TP/SL参数重新计算actual_profit（确保优化与验证逻辑一致）
+                from calculate_actual_profit import calculate_single_actual_profit
+                
+                for opp in captured_opps:
+                    # 使用当前test_params的TP/SL参数计算实际利润
+                    actual_profit = calculate_single_actual_profit(
+                        opp,
+                        strategy_params=config_variant,  # 传入当前test_params
+                        use_dynamic_atr=False  # 禁用动态ATR，确保公平比较
+                    )
+                    opp['_test_actual_profit'] = actual_profit  # 临时存储
+                
+                # 计算平均实际利润
+                avg_profit = sum(opp.get('_test_actual_profit', 0) for opp in captured_opps) / len(captured_opps)
                 capture_rate = len(captured_opps) / len(all_opportunities)
                 
                 # 🔧 V8.3.31: 使用缓存数据计算精准率
@@ -6770,8 +6788,9 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 predicted_total_signals = int(len(captured_opps) / precision_score) if precision_score > 0 else len(captured_opps) * 3
                 predicted_win_rate = (len(captured_opps) / predicted_total_signals) * 100 if predicted_total_signals > 0 else 0
                 
-                # 综合得分 = 预测胜率 × 捕获的盈利机会数
-                total_profit = predicted_win_rate * len(captured_opps)
+                # 🔧 V8.5.2: 修复评分函数 - 使用真实利润而非只看数量
+                # 综合得分 = 捕获机会数 × 平均实际利润（直接反映真实盈利能力）
+                total_profit = len(captured_opps) * avg_profit
                 win_rate = predicted_win_rate
             else:
                 avg_profit = 0
