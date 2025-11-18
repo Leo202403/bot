@@ -9599,11 +9599,17 @@ def analyze_and_adjust_params():
                     print(f"\n  📌 重点关注（错过的TOP3）:")
                     for opp in missed[:3]:
                         reasons = []
-                        if opp.get('signal_score', 0) < config.get('min_signal_score', 50):
-                            reasons.append(f"信号分{opp.get('signal_score', 0):.0f}")
-                        if opp.get('consensus', 0) < config.get('min_indicator_consensus', 2):
-                            reasons.append(f"共识{opp.get('consensus', 0)}")
-                        reason_str = ', '.join(reasons) if reasons else "其他原因"  # 🔧 V8.5.2.4.28: 确保总有原因显示
+                        min_signal = config.get('min_signal_score', 50)
+                        min_consensus = config.get('min_indicator_consensus', 2)
+                        signal_score = opp.get('signal_score', 0)
+                        consensus = opp.get('consensus', 0)
+                        
+                        if signal_score < min_signal:
+                            reasons.append(f"信号分{signal_score:.0f}<{min_signal}")
+                        if consensus < min_consensus:
+                            reasons.append(f"共识{consensus}<{min_consensus}")
+                        
+                        reason_str = ', '.join(reasons) if reasons else "其他原因"  # 🔧 V8.5.2.4.31: 显示具体阈值对比
                         print(f"     • {opp.get('symbol', '?')}: {opp.get('objective_profit', 0):.1f}% | 原因: {reason_str}")
                 
             except Exception as e:
@@ -21521,12 +21527,27 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         direction = 'short'
                         objective_profit = short_max_profit
                     
-                    # 【V8.5.2.4.8】基于选定的direction，计算时间和分类
-                    # 使用objective_profit来判断是否符合超短线/波段条件
+                    # 【V8.5.2.4.31】动态跟踪逻辑：根据市场行为确定持仓时间
+                    # 超短线：达到1.5%后跟踪最多2h（8 bars），1h无新高或回撤>30%退出
+                    # 波段：达到3%后跟踪最多6h（24 bars），2h无新高或回撤>30%退出
+                    # 互斥性：优先波段（如果两者都符合，只归类为波段）
                     
-                    time_to_reach_1_5pct = None
-                    time_to_reach_3pct = None
-                    time_to_reach_max = None  # 🆕 V8.5.2.4.24: 记录达到最大利润的时间
+                    scalping_max_profit = 0
+                    scalping_holding_bars = 0
+                    scalping_reached_target = False
+                    
+                    swing_max_profit = 0
+                    swing_holding_bars = 0
+                    swing_reached_target = False
+                    
+                    # 跟踪变量
+                    scalping_tracking = False
+                    scalping_last_high_bar = 0
+                    scalping_trigger_bar = None
+                    
+                    swing_tracking = False
+                    swing_last_high_bar = 0
+                    swing_trigger_bar = None
                     
                     for bar_idx, future_row in enumerate(later_24h.iterrows()):
                         _, row_data = future_row
@@ -21537,32 +21558,83 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         else:
                             profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
                         
-                        # 记录首次达到1.5%的时间
-                        if time_to_reach_1_5pct is None and profit_pct >= 1.5:
-                            time_to_reach_1_5pct = bar_idx + 1
+                        # === 超短线跟踪 ===
+                        if not scalping_tracking and profit_pct >= 1.5:
+                            # 触发超短线跟踪
+                            scalping_tracking = True
+                            scalping_trigger_bar = bar_idx
+                            scalping_max_profit = profit_pct
+                            scalping_last_high_bar = bar_idx
+                            scalping_reached_target = True
                         
-                        # 记录首次达到3%的时间
-                        if time_to_reach_3pct is None and profit_pct >= 3.0:
-                            time_to_reach_3pct = bar_idx + 1
+                        if scalping_tracking:
+                            # 更新最大利润
+                            if profit_pct > scalping_max_profit:
+                                scalping_max_profit = profit_pct
+                                scalping_last_high_bar = bar_idx
+                            
+                            scalping_holding_bars = bar_idx - scalping_trigger_bar + 1
+                            
+                            # 退出条件检查
+                            bars_since_high = bar_idx - scalping_last_high_bar
+                            pullback_pct = (scalping_max_profit - profit_pct) / scalping_max_profit if scalping_max_profit > 0 else 0
+                            
+                            # 条件1：1小时（4 bars）内无新高
+                            if bars_since_high >= 4:
+                                break
+                            # 条件2：回撤超过30%
+                            if pullback_pct > 0.30:
+                                break
+                            # 条件3：超过最大跟踪时间2小时（8 bars）
+                            if scalping_holding_bars >= 8:
+                                break
                         
-                        # 🆕 V8.5.2.4.24: 记录首次达到90%最大利润的时间（作为合理退出点）
-                        if time_to_reach_max is None and profit_pct >= objective_profit * 0.9:
-                            time_to_reach_max = bar_idx + 1
+                        # === 波段跟踪 ===
+                        if not swing_tracking and profit_pct >= 3.0:
+                            # 触发波段跟踪
+                            swing_tracking = True
+                            swing_trigger_bar = bar_idx
+                            swing_max_profit = profit_pct
+                            swing_last_high_bar = bar_idx
+                            swing_reached_target = True
+                        
+                        if swing_tracking:
+                            # 更新最大利润
+                            if profit_pct > swing_max_profit:
+                                swing_max_profit = profit_pct
+                                swing_last_high_bar = bar_idx
+                            
+                            swing_holding_bars = bar_idx - swing_trigger_bar + 1
+                            
+                            # 退出条件检查
+                            bars_since_high = bar_idx - swing_last_high_bar
+                            pullback_pct = (swing_max_profit - profit_pct) / swing_max_profit if swing_max_profit > 0 else 0
+                            
+                            # 条件1：2小时（8 bars）内无新高
+                            if bars_since_high >= 8:
+                                break
+                            # 条件2：回撤超过30%
+                            if pullback_pct > 0.30:
+                                break
+                            # 条件3：超过最大跟踪时间6小时（24 bars）
+                            if swing_holding_bars >= 24:
+                                break
                     
-                    # 【V8.5.2.4.25】改进：基于波动幅度分类，时长由市场数据决定
-                    # 不再强制规定时间窗口，让市场告诉我们"超短线/波段需要多久"
-                    # 
-                    # scalping条件：达到≥1.5%波动（在24h内，记录实际时长）
-                    is_scalping = (time_to_reach_1_5pct is not None and 
-                                  objective_profit >= 1.5)
-                    
-                    # swing条件：达到≥3%波动（在24h内，记录实际时长）
-                    is_swing = (time_to_reach_3pct is not None and 
-                               objective_profit >= 3.0)
+                    # 【V8.5.2.4.31】互斥性分类：优先波段
+                    is_swing = swing_reached_target
+                    is_scalping = (not is_swing) and scalping_reached_target
                     
                     # 如果两者都不符合，跳过
                     if not is_scalping and not is_swing:
                         continue
+                    
+                    # 根据分类确定最终利润和持仓时间
+                    if is_swing:
+                        final_profit = swing_max_profit
+                        final_holding_bars = swing_holding_bars
+                    else:  # is_scalping
+                        final_profit = scalping_max_profit
+                        final_holding_bars = scalping_holding_bars
                     
                     # 【V8.3.21】创建摘要数据代替完整DataFrame
                     future_summary = {
@@ -21591,18 +21663,17 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         except:
                             pass
                     
-                    # 【V8.5.2.4.8】创建机会数据（纯客观统计）
-                    # 同一个入场点，相同的direction和objective_profit
-                    # 根据时间条件判断是否符合超短线/波段
+                    # 【V8.5.2.4.31】创建机会数据（互斥性分类）
+                    # 一个入场点只能归类为超短线或波段（优先波段）
                     
                     opp_data_base = {
                         'coin': coin,
                         'timestamp': timestamp,
-                        'time': time_str,  # 🆕 V8.5.5.2: HHMM格式（如0030）
-                        'date': date_str,  # 🆕 V8.5.5.2: YYYYMMDD格式（如20251115）
+                        'time': time_str,  # HHMM格式（如0030）
+                        'date': date_str,  # YYYYMMDD格式（如20251115）
                         'entry_price': entry_price,
                         'direction': direction,  # 使用最大利润的方向
-                        'objective_profit': objective_profit,  # 最大潜在利润
+                        'objective_profit': final_profit,  # 🔧 V8.5.2.4.31: 使用动态跟踪的实际最大利润
                         'consensus': consensus,
                         'risk_reward': risk_reward,
                         'atr': atr,
@@ -21618,24 +21689,21 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         'sr_hist_avg_reaction': sr_hist_avg_reaction
                     }
                     
-                    # 同一个机会可以同时加入超短线和波段列表（根据时间条件）
-                    if is_scalping:
-                        opp_data_scalping = opp_data_base.copy()
-                        opp_data_scalping['signal_type'] = 'scalping'
-                        time_hours = time_to_reach_1_5pct * 0.25 if time_to_reach_1_5pct else 6
-                        opp_data_scalping['time_to_target'] = time_hours
-                        # 🔧 V8.5.2.4.24: 使用time_to_reach_max提供更精确的持仓时间
-                        opp_data_scalping['holding_hours'] = time_to_reach_max * 0.25 if time_to_reach_max else time_hours
-                        coin_scalping.append(opp_data_scalping)
+                    # 【V8.5.2.4.31】互斥性分类：每个机会只属于一个类别
+                    final_holding_hours = final_holding_bars * 0.25  # 15分钟 = 0.25小时
                     
                     if is_swing:
                         opp_data_swing = opp_data_base.copy()
                         opp_data_swing['signal_type'] = 'swing'
-                        time_hours = time_to_reach_3pct * 0.25 if time_to_reach_3pct else 24
-                        opp_data_swing['time_to_target'] = time_hours
-                        # 🔧 V8.5.2.4.24: 使用time_to_reach_max提供更精确的持仓时间
-                        opp_data_swing['holding_hours'] = time_to_reach_max * 0.25 if time_to_reach_max else time_hours
+                        opp_data_swing['time_to_target'] = final_holding_hours
+                        opp_data_swing['holding_hours'] = final_holding_hours
                         coin_swing.append(opp_data_swing)
+                    else:  # is_scalping
+                        opp_data_scalping = opp_data_base.copy()
+                        opp_data_scalping['signal_type'] = 'scalping'
+                        opp_data_scalping['time_to_target'] = final_holding_hours
+                        opp_data_scalping['holding_hours'] = final_holding_hours
+                        coin_scalping.append(opp_data_scalping)
                 
                 except (ValueError, TypeError, KeyError) as e:
                     continue
