@@ -8793,6 +8793,9 @@ def analyze_and_adjust_params():
             # 提取final_params作为global_initial_params（兼容后续代码）
             global_initial_params = iterative_result.get('final_params')
             
+            # 【V8.5.2.4.10】提取Phase 2 baseline（供Phase 3使用）
+            phase2_baseline_result = iterative_result.get('phase2_baseline')
+            
         elif ENABLE_V770_FULL_OPTIMIZATION:
             # 完整V7.7.0优化（7-10分钟）
             print(f"  ℹ️  使用完整V7.7.0优化模式")
