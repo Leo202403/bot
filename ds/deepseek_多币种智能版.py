@@ -18910,7 +18910,18 @@ def _execute_single_open_action_v55(
 
         # 记录开仓（使用标准字段格式，【V7.9】增加signal_type）
         # 🆕 V8.5.1.8: 从market_data获取indicator_consensus
-        indicator_consensus = market_data.get("indicator_consensus", 0) if market_data else 0
+        # 【V8.5.2.4.3】修复：优先从market_data的indicators字段获取
+        indicator_consensus = 0
+        if market_data:
+            # 优先从indicators.consensus获取（实时计算的共振数）
+            if 'indicators' in market_data and isinstance(market_data['indicators'], dict):
+                indicator_consensus = market_data['indicators'].get('consensus', 0)
+            # 回退：直接从market_data根级别获取
+            elif 'indicator_consensus' in market_data:
+                indicator_consensus = market_data.get('indicator_consensus', 0)
+            # 回退：从共振字段获取
+            elif 'consensus' in market_data:
+                indicator_consensus = market_data.get('consensus', 0)
         
         trade_record = {
             "开仓时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -19385,7 +19396,14 @@ def execute_portfolio_actions(
                     market_data = next((m for m in market_data_list if m["symbol"] == symbol), None) if market_data_list else None
                     if market_data:
                         score, _, _, _ = calculate_signal_score(market_data)
-                        indicator_consensus = market_data.get("indicator_consensus", 0)
+                        # 【V8.5.2.4.3】修复：多级回退获取consensus
+                        indicator_consensus = 0
+                        if 'indicators' in market_data and isinstance(market_data['indicators'], dict):
+                            indicator_consensus = market_data['indicators'].get('consensus', 0)
+                        elif 'indicator_consensus' in market_data:
+                            indicator_consensus = market_data.get('indicator_consensus', 0)
+                        elif 'consensus' in market_data:
+                            indicator_consensus = market_data.get('consensus', 0)
                     else:
                         score = 0
                         indicator_consensus = 0
@@ -19479,7 +19497,14 @@ def execute_portfolio_actions(
                     market_data = next((m for m in market_data_list if m["symbol"] == symbol), None) if market_data_list else None
                     if market_data:
                         score, _, _, _ = calculate_signal_score(market_data)
-                        indicator_consensus = market_data.get("indicator_consensus", 0)
+                        # 【V8.5.2.4.3】修复：多级回退获取consensus
+                        indicator_consensus = 0
+                        if 'indicators' in market_data and isinstance(market_data['indicators'], dict):
+                            indicator_consensus = market_data['indicators'].get('consensus', 0)
+                        elif 'indicator_consensus' in market_data:
+                            indicator_consensus = market_data.get('indicator_consensus', 0)
+                        elif 'consensus' in market_data:
+                            indicator_consensus = market_data.get('consensus', 0)
                     else:
                         score = 0
                         indicator_consensus = 0
