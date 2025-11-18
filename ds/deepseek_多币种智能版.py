@@ -21264,100 +21264,56 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     if later_24h.empty:
                         continue
                     
-                    # 【V8.5.2.4.7】分离判断：scalping和swing各自独立选择最优方向
-                    # 核心改进：同一入场点可以有不同的direction_scalping和direction_swing
-                    # 目标：Phase 1胜率>=50%, 平均利润>0
+                    # 【V8.5.2.4.8】Phase 1纯客观统计：只记录最大潜在利润
+                    # 目标：统计所有客观机会，不引入任何参数过滤
+                    # 为Phase 2-5提供机会池
                     
                     max_high = float(later_24h['high'].max())
                     min_low = float(later_24h['low'].min())
-                    final_close = float(later_24h.iloc[-1]['close'])
                     
-                    # 定义参数组合（与calculate_single_actual_profit完全一致）
-                    scalping_params = {'atr_tp': 2.0, 'atr_sl': 1.5}
-                    swing_params = {'atr_tp': 6.0, 'atr_sl': 2.5}
+                    # 计算两个方向的最大潜在利润
+                    long_max_profit = (max_high - entry_price) / entry_price * 100
+                    short_max_profit = (entry_price - min_low) / entry_price * 100
                     
-                    # 辅助函数：测试单个方向的得分
-                    def test_direction(direction, params):
-                        if direction == 'long':
-                            tp = entry_price + (atr * params['atr_tp'])
-                            sl = entry_price - (atr * params['atr_sl'])
-                            hit_tp = max_high >= tp
-                            hit_sl = min_low <= sl
-                            profit_pct = (final_close - entry_price) / entry_price * 100
-                        else:  # short
-                            tp = entry_price - (atr * params['atr_tp'])
-                            sl = entry_price + (atr * params['atr_sl'])
-                            hit_tp = min_low <= tp
-                            hit_sl = max_high >= sl
-                            profit_pct = (entry_price - final_close) / entry_price * 100
-                        
-                        # 评分
-                        if hit_tp and not hit_sl:
-                            return 10  # 只触发TP，完美
-                        elif hit_tp and hit_sl:
-                            return 3   # 都触发
-                        elif not hit_tp and not hit_sl:
-                            return 5 if profit_pct > 1.0 else (2 if profit_pct > 0 else -5)
-                        else:  # 只触发SL
-                            return -10
+                    # 选择利润更大的方向（纯客观，不考虑TP/SL）
+                    if long_max_profit > short_max_profit:
+                        direction = 'long'
+                        objective_profit = long_max_profit
+                    else:
+                        direction = 'short'
+                        objective_profit = short_max_profit
                     
-                    # 独立测试scalping最优方向
-                    scalping_long_score = test_direction('long', scalping_params)
-                    scalping_short_score = test_direction('short', scalping_params)
-                    direction_scalping = 'long' if scalping_long_score > scalping_short_score else 'short'
+                    # 【V8.5.2.4.8】基于选定的direction，计算时间和分类
+                    # 使用objective_profit来判断是否符合超短线/波段条件
                     
-                    # 独立测试swing最优方向
-                    swing_long_score = test_direction('long', swing_params)
-                    swing_short_score = test_direction('short', swing_params)
-                    direction_swing = 'long' if swing_long_score > swing_short_score else 'short'
-                    
-                    # 【V8.5.2.4.7】基于实际价格走势时间来客观分类信号类型
-                    # 分别计算scalping和swing方向的利润情况
-                    time_to_reach_1_5pct_scalping = None
-                    time_to_reach_3pct_scalping = None
-                    max_profit_24h_scalping = 0
-                    
-                    time_to_reach_1_5pct_swing = None
-                    time_to_reach_3pct_swing = None
-                    max_profit_24h_swing = 0
+                    time_to_reach_1_5pct = None
+                    time_to_reach_3pct = None
                     
                     for bar_idx, future_row in enumerate(later_24h.iterrows()):
                         _, row_data = future_row
                         
-                        # 计算scalping方向的利润
-                        if direction_scalping == 'long':
-                            profit_pct_scalping = (float(row_data['high']) - entry_price) / entry_price * 100
+                        # 计算该方向的利润进展
+                        if direction == 'long':
+                            profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
                         else:
-                            profit_pct_scalping = (entry_price - float(row_data['low'])) / entry_price * 100
+                            profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
                         
-                        max_profit_24h_scalping = max(max_profit_24h_scalping, profit_pct_scalping)
-                        if time_to_reach_1_5pct_scalping is None and profit_pct_scalping >= 1.5:
-                            time_to_reach_1_5pct_scalping = bar_idx + 1
-                        if time_to_reach_3pct_scalping is None and profit_pct_scalping >= 3.0:
-                            time_to_reach_3pct_scalping = bar_idx + 1
+                        # 记录首次达到1.5%的时间
+                        if time_to_reach_1_5pct is None and profit_pct >= 1.5:
+                            time_to_reach_1_5pct = bar_idx + 1
                         
-                        # 计算swing方向的利润
-                        if direction_swing == 'long':
-                            profit_pct_swing = (float(row_data['high']) - entry_price) / entry_price * 100
-                        else:
-                            profit_pct_swing = (entry_price - float(row_data['low'])) / entry_price * 100
-                        
-                        max_profit_24h_swing = max(max_profit_24h_swing, profit_pct_swing)
-                        if time_to_reach_1_5pct_swing is None and profit_pct_swing >= 1.5:
-                            time_to_reach_1_5pct_swing = bar_idx + 1
-                        if time_to_reach_3pct_swing is None and profit_pct_swing >= 3.0:
-                            time_to_reach_3pct_swing = bar_idx + 1
+                        # 记录首次达到3%的时间
+                        if time_to_reach_3pct is None and profit_pct >= 3.0:
+                            time_to_reach_3pct = bar_idx + 1
                     
-                    # 【V8.5.2.4.7】分别判断scalping和swing是否符合条件
-                    # 使用各自方向计算的利润来判断
-                    
+                    # 判断是否符合超短线/波段条件（基于客观利润和时间）
                     # scalping条件：6小时内达到≥1.5%利润
-                    is_scalping = (time_to_reach_1_5pct_scalping is not None and 
-                                  time_to_reach_1_5pct_scalping <= 24 and 
-                                  max_profit_24h_scalping >= 1.0)  # 至少1%利润
+                    is_scalping = (time_to_reach_1_5pct is not None and 
+                                  time_to_reach_1_5pct <= 24 and  # 6小时=24个15分钟K线
+                                  objective_profit >= 1.5)
                     
-                    # swing条件：达到≥3%利润
-                    is_swing = max_profit_24h_swing >= 3.0
+                    # swing条件：达到≥3%利润（无论时间）
+                    is_swing = objective_profit >= 3.0
                     
                     # 如果两者都不符合，跳过
                     if not is_scalping and not is_swing:
@@ -21390,8 +21346,9 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         except:
                             pass
                     
-                    # 【V8.5.2.4.7】分别创建scalping和swing的机会数据
-                    # 使用各自独立的direction和objective_profit
+                    # 【V8.5.2.4.8】创建机会数据（纯客观统计）
+                    # 同一个入场点，相同的direction和objective_profit
+                    # 根据时间条件判断是否符合超短线/波段
                     
                     opp_data_base = {
                         'coin': coin,
@@ -21399,13 +21356,15 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         'time': time_str,  # 🆕 V8.5.5.2: HHMM格式（如0030）
                         'date': date_str,  # 🆕 V8.5.5.2: YYYYMMDD格式（如20251115）
                         'entry_price': entry_price,
+                        'direction': direction,  # 使用最大利润的方向
+                        'objective_profit': objective_profit,  # 最大潜在利润
                         'consensus': consensus,
                         'risk_reward': risk_reward,
                         'atr': atr,
-                        'signal_score': signal_score,  # 【V8.3.21】添加signal_score字段
-                        'signal_type_csv': signal_type,  # 保留CSV中的类型（用于对比分析）
+                        'signal_score': signal_score,
+                        'signal_type_csv': signal_type,  # 保留CSV中的类型
                         'signal_name': signal_name,
-                        'future_data': future_summary,  # 【V8.3.21】使用摘要代替完整DataFrame
+                        'future_data': future_summary,
                         # 【V8.3.21】添加上下文字段（用于4层过滤）
                         'kline_ctx_bullish_ratio': kline_ctx_bullish_ratio,
                         'kline_ctx_price_chg_pct': kline_ctx_price_chg_pct,
@@ -21414,21 +21373,17 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         'sr_hist_avg_reaction': sr_hist_avg_reaction
                     }
                     
-                    # 【V8.5.2.4.7】独立判断，可以同时加入两个列表，但各自有独立的direction和profit
+                    # 同一个机会可以同时加入超短线和波段列表（根据时间条件）
                     if is_scalping:
                         opp_data_scalping = opp_data_base.copy()
                         opp_data_scalping['signal_type'] = 'scalping'
-                        opp_data_scalping['direction'] = direction_scalping  # 使用scalping最优方向
-                        opp_data_scalping['objective_profit'] = max_profit_24h_scalping  # 使用scalping方向的利润
-                        opp_data_scalping['time_to_target'] = time_to_reach_1_5pct_scalping * 0.25 if time_to_reach_1_5pct_scalping else 6
+                        opp_data_scalping['time_to_target'] = time_to_reach_1_5pct * 0.25 if time_to_reach_1_5pct else 6
                         coin_scalping.append(opp_data_scalping)
                     
                     if is_swing:
                         opp_data_swing = opp_data_base.copy()
                         opp_data_swing['signal_type'] = 'swing'
-                        opp_data_swing['direction'] = direction_swing  # 使用swing最优方向
-                        opp_data_swing['objective_profit'] = max_profit_24h_swing  # 使用swing方向的利润
-                        opp_data_swing['time_to_target'] = time_to_reach_3pct_swing * 0.25 if time_to_reach_3pct_swing else 24
+                        opp_data_swing['time_to_target'] = time_to_reach_3pct * 0.25 if time_to_reach_3pct else 24
                         coin_swing.append(opp_data_swing)
                 
                 except (ValueError, TypeError, KeyError) as e:
@@ -21463,13 +21418,14 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         try:
             from calculate_actual_profit import add_actual_profit_to_opportunities
             
-            # 【V8.4.8+V8.5.1.6】启用动态ATR倍数 + 重新实现模块
+            # 【V8.5.2.4.8】Phase 1纯客观统计模式
             scalping_opps, swing_opps = add_actual_profit_to_opportunities(
                 scalping_opps=scalping_opps,
                 swing_opps=swing_opps,
                 scalping_params=scalping_params,
                 swing_params=swing_params,
-                use_dynamic_atr=True  # 【V8.4.8】动态ATR倍数
+                use_dynamic_atr=True,
+                phase1_mode=True  # 【V8.5.2.4.8】Phase 1只统计objective_profit，不模拟TP/SL
             )
         except Exception as e:
             print(f"\n  ⚠️  实际利润计算失败（将使用理论利润）: {e}")

@@ -202,7 +202,8 @@ def add_actual_profit_to_opportunities(
     swing_opps: List[Dict],
     scalping_params: Dict,
     swing_params: Dict,
-    use_dynamic_atr: bool = True
+    use_dynamic_atr: bool = True,
+    phase1_mode: bool = False
 ) -> tuple:
     """
     为超短线和波段机会分别添加actual_profit_pct字段
@@ -213,10 +214,26 @@ def add_actual_profit_to_opportunities(
         scalping_params: 超短线策略参数
         swing_params: 波段策略参数
         use_dynamic_atr: 是否使用动态ATR
+        phase1_mode: 是否为Phase 1（纯客观统计模式）
     
     Returns:
         (updated_scalping_opps, updated_swing_opps)
     """
+    if phase1_mode:
+        # 【V8.5.2.4.8】Phase 1纯客观统计：只统计objective_profit
+        print(f"\n  📊 Phase 1客观统计（最大潜在利润）...")
+        
+        if scalping_opps:
+            avg_obj_profit = np.mean([o.get('objective_profit', 0) for o in scalping_opps])
+            print(f"     ⚡ 超短线: {len(scalping_opps)}个机会，平均最大利润{avg_obj_profit:.2f}%")
+        
+        if swing_opps:
+            avg_obj_profit = np.mean([o.get('objective_profit', 0) for o in swing_opps])
+            print(f"     🌊 波段: {len(swing_opps)}个机会，平均最大利润{avg_obj_profit:.2f}%")
+        
+        return scalping_opps, swing_opps
+    
+    # Phase 2-5：使用参数模拟实际利润
     print(f"\n  🔄 计算实际利润（基于止盈止损模拟）...")
     
     # 超短线
