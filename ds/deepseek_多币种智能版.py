@@ -18393,6 +18393,9 @@ def _execute_single_open_action_v55(
             )
             return
 
+    # 🔧 V8.5.5: 将调整后的仓位同步到action字典（修复开仓金额不匹配问题）
+    action["position_size_usd"] = planned_position
+
     # === 执行开仓 ===
     if TRADE_CONFIG["test_mode"]:
         print(f"\n✓ 测试模式 - 仅模拟")
