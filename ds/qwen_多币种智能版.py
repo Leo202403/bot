@@ -6612,6 +6612,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         # 【V8.5.2.3】移除降级容错，必须提供confirmed_opportunities
         raise ValueError("【V8.5.2.3】quick_global_search_v8316必须提供confirmed_opportunities，不再支持降级使用market_snapshots")
     
+    # 🔧 V8.5.2.4.16: 修复 - 移到if块外面，确保all_opportunities总是被定义
     print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
     # 合并超短线和波段机会
     all_opportunities = (
@@ -6619,6 +6620,25 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         confirmed_opportunities['swing']['opportunities']
     )
     print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
+    
+    # 【V8.5.2.4.18】前向验证：分割训练集和验证集
+    print(f"\n  📊 【前向验证】数据分割（70%训练/30%验证）...")
+    
+    # 按时间排序（确保前向测试，而非随机分割）
+    all_opportunities_sorted = sorted(
+        all_opportunities,
+        key=lambda x: x.get('timestamp', '2000-01-01 00:00:00')
+    )
+    
+    split_point = int(len(all_opportunities_sorted) * 0.7)
+    train_opportunities = all_opportunities_sorted[:split_point]
+    validation_opportunities = all_opportunities_sorted[split_point:]
+    
+    print(f"     训练集: {len(train_opportunities)}个机会（前70%，用于参数优化）")
+    print(f"     验证集: {len(validation_opportunities)}个机会（后30%，用于过拟合检测）")
+    
+    # 【V8.5.2.4.18】在训练集上进行参数搜索
+    all_opportunities = train_opportunities  # 暂时使用训练集
     
     print(f"\n  🔍 测试{len(test_points)}组战略采样（含signal_score优化）...")
     
@@ -6890,6 +6910,84 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             print(f"\n  📊 Phase 2 baseline（供Phase 3使用）:")
             print(f"     捕获: {len(best_captured_opps)}个 ({phase2_capture_rate*100:.1f}%)")
             print(f"     平均利润: {phase2_avg_profit:.2f}%")
+    
+    # 【V8.5.2.4.18】前向验证：在验证集上测试参数
+    print(f"\n  🔍 【前向验证】在验证集上测试参数...")
+    
+    validation_passed = True
+    validation_warning = ""
+    
+    if validation_opportunities and best_params:
+        # 在验证集上过滤机会
+        val_captured_opps = [
+            opp for opp in validation_opportunities
+            if (opp.get('signal_score', 0) >= best_params.get('min_signal_score', 50) and
+                opp.get('consensus', 0) >= best_params.get('min_indicator_consensus', 2))
+        ]
+        
+        if val_captured_opps:
+            # 计算验证集表现
+            from calculate_actual_profit import calculate_single_actual_profit
+            
+            for opp in val_captured_opps:
+                actual_profit = calculate_single_actual_profit(
+                    opp,
+                    strategy_params=best_params,
+                    use_dynamic_atr=False
+                )
+                opp['_val_actual_profit'] = actual_profit
+            
+            val_avg_profit = sum(o.get('_val_actual_profit', 0) for o in val_captured_opps) / len(val_captured_opps)
+            val_capture_rate = len(val_captured_opps) / len(validation_opportunities)
+            
+            # 与训练集对比（检测过拟合）
+            train_captured_opps = [
+                opp for opp in train_opportunities
+                if (opp.get('signal_score', 0) >= best_params.get('min_signal_score', 50) and
+                    opp.get('consensus', 0) >= best_params.get('min_indicator_consensus', 2))
+            ]
+            
+            if train_captured_opps:
+                train_avg_profit = sum(o.get('_phase2_actual_profit', o.get('_test_actual_profit', 0)) for o in train_captured_opps) / len(train_captured_opps)
+                
+                profit_degradation = (train_avg_profit - val_avg_profit) / train_avg_profit if train_avg_profit > 0 else 0
+                
+                print(f"     训练集表现: 平均利润 {train_avg_profit:.2f}%")
+                print(f"     验证集表现: 平均利润 {val_avg_profit:.2f}%")
+                print(f"     性能衰减: {profit_degradation*100:+.1f}%")
+                
+                # 【V8.5.2.4.18】过拟合判定
+                if profit_degradation > 0.3:
+                    # 验证集利润下降超过30% → 严重过拟合
+                    print(f"     ⚠️  严重过拟合！验证集利润下降{profit_degradation*100:.0f}%")
+                    validation_passed = False
+                    validation_warning = f"验证集利润下降{profit_degradation*100:.0f}%，参数泛化能力差"
+                    
+                    # 建议：使用更保守的参数
+                    print(f"     💡 建议：回退到更保守的参数或增加正则化")
+                    best_params['_overfitting_detected'] = True
+                    best_params['_profit_degradation'] = profit_degradation
+                    
+                elif profit_degradation > 0.15:
+                    # 验证集利润下降15-30% → 轻微过拟合
+                    print(f"     ⚠️  轻微过拟合，验证集利润下降{profit_degradation*100:.1f}%")
+                    validation_warning = f"验证集利润下降{profit_degradation*100:.1f}%，建议监控"
+                    best_params['_overfitting_warning'] = True
+                    best_params['_profit_degradation'] = profit_degradation
+                    
+                elif profit_degradation < -0.1:
+                    # 验证集利润反而提升 → 参数良好
+                    print(f"     ✅ 优秀！验证集利润甚至更好（+{-profit_degradation*100:.1f}%）")
+                    best_params['_validation_bonus'] = True
+                    
+                else:
+                    # 验证集利润下降<15% → 正常范围
+                    print(f"     ✅ 通过前向验证（性能衰减在正常范围）")
+        else:
+            print(f"     ⚠️  验证集无捕获机会（参数可能过严）")
+            validation_warning = "验证集无捕获"
+    else:
+        print(f"     ℹ️  跳过验证（无验证数据或无参数）")
     
     # 【V8.3.16.3】兼容后续代码：构建iterative_result格式
     return {

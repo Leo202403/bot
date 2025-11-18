@@ -76,7 +76,7 @@ def calculate_single_actual_profit(
             take_profit = entry_price - (atr * atr_tp_mult)
         
         # 4. 模拟交易结果
-        # 简化模拟：检查是否触发止盈/止损，假设先触发哪个就按哪个平仓
+        # 【V8.5.2.4.17】改进：使用概率加权方法判断TP/SL触发顺序
         
         if direction == 'long':
             # Long: 止损在下方，止盈在上方
@@ -84,15 +84,32 @@ def calculate_single_actual_profit(
             hit_take_profit = max_high >= take_profit
             
             if hit_stop_loss and hit_take_profit:
-                # 🔧 关键：同时触发，判断哪个先触发
-                # 保守假设：按价格距离比例判断
+                # 🔧 【V8.5.2.4.17】同时触发：使用概率加权方法判断
+                # 原理：基于随机游走理论，价格触及两个边界的概率与距离成反比
                 distance_to_sl = abs(entry_price - stop_loss)
                 distance_to_tp = abs(take_profit - entry_price)
-                # 如果止损更近，假设先触发止损
-                if distance_to_sl < distance_to_tp:
+                
+                # 计算触及概率（距离越近，概率越高）
+                # 使用指数衰减模型（而非线性），更符合实际价格行为
+                prob_hit_sl_first = 1 / (1 + (distance_to_sl / distance_to_tp) ** 2)
+                
+                # 【V8.5.2.4.17】额外考虑：趋势方向修正
+                # 如果max_high和min_low的偏离程度不对称，说明有明显趋势
+                upward_move = (max_high - entry_price) / entry_price
+                downward_move = (entry_price - min_low) / entry_price
+                trend_bias = upward_move - downward_move  # >0表示上涨趋势，<0表示下跌趋势
+                
+                # 调整概率：上涨趋势降低止损概率，下跌趋势增加止损概率
+                prob_hit_sl_first *= (1 + trend_bias * 0.5)  # ±50%调整
+                prob_hit_sl_first = max(0.1, min(0.9, prob_hit_sl_first))  # 限制在10-90%
+                
+                # 概率决策
+                if prob_hit_sl_first > 0.5:
                     exit_price = stop_loss
+                    opportunity['exit_method'] = f'stop_loss_prob_{prob_hit_sl_first:.0%}'
                 else:
                     exit_price = take_profit
+                    opportunity['exit_method'] = f'take_profit_prob_{1-prob_hit_sl_first:.0%}'
             elif hit_stop_loss:
                 exit_price = stop_loss
             elif hit_take_profit:
@@ -109,13 +126,26 @@ def calculate_single_actual_profit(
             hit_take_profit = min_low <= take_profit
             
             if hit_stop_loss and hit_take_profit:
-                # 同时触发，保守判断
+                # 【V8.5.2.4.17】同样使用概率加权
                 distance_to_sl = abs(stop_loss - entry_price)
                 distance_to_tp = abs(entry_price - take_profit)
-                if distance_to_sl < distance_to_tp:
+                
+                prob_hit_sl_first = 1 / (1 + (distance_to_sl / distance_to_tp) ** 2)
+                
+                # 趋势修正（空头）
+                upward_move = (max_high - entry_price) / entry_price
+                downward_move = (entry_price - min_low) / entry_price
+                trend_bias = downward_move - upward_move  # >0表示下跌趋势（对空头有利），<0表示上涨趋势
+                
+                prob_hit_sl_first *= (1 - trend_bias * 0.5)  # 下跌趋势降低止损概率
+                prob_hit_sl_first = max(0.1, min(0.9, prob_hit_sl_first))
+                
+                if prob_hit_sl_first > 0.5:
                     exit_price = stop_loss
+                    opportunity['exit_method'] = f'stop_loss_prob_{prob_hit_sl_first:.0%}'
                 else:
                     exit_price = take_profit
+                    opportunity['exit_method'] = f'take_profit_prob_{1-prob_hit_sl_first:.0%}'
             elif hit_stop_loss:
                 exit_price = stop_loss
             elif hit_take_profit:
