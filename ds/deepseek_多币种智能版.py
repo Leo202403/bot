@@ -6276,10 +6276,11 @@ def iterative_parameter_optimization(data_summary, current_config, original_stat
     return iterative_parameter_optimization_v770(data_summary, current_config, original_stats)
 
 
-def quick_global_search_v8316(data_summary, current_config, confirmed_opportunities=None):
+def quick_global_search_v8316(data_summary, current_config, confirmed_opportunities=None, phase1_baseline=None):
     """
     【V8.3.16】快速全局探索（技术债1修复）
     【V8.3.25.23】修复：使用confirmed_opportunities代替market_snapshots
+    【V8.5.2.4.9】Phase 2目标：最大化捕获Phase 1的机会
     
     目的：为V8.3.12分离策略优化提供高质量的初始参数
     
@@ -6292,6 +6293,10 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         data_summary: 数据摘要（传统参数，保持兼容）
         current_config: 当前配置
         confirmed_opportunities: 【V8.3.25.23新增】确认的盈利机会 {'scalping': {...}, 'swing': {...}}
+        phase1_baseline: 【V8.5.2.4.9新增】Phase 1统计基准 {
+            'scalping': {'count': int, 'avg_objective_profit': float},
+            'swing': {'count': int, 'avg_objective_profit': float}
+        }
     
     返回：
     {
@@ -6310,6 +6315,17 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     print(f"  📊 流程：7组战略采样 → 为V8.3.12提供初始值")
     print(f"  ⏱️  预计：约3分钟")
     print(f"{'='*70}")
+    
+    # 【V8.5.2.4.9】显示Phase 1 baseline
+    if phase1_baseline:
+        scalping_baseline = phase1_baseline.get('scalping', {})
+        swing_baseline = phase1_baseline.get('swing', {})
+        total_count = scalping_baseline.get('count', 0) + swing_baseline.get('count', 0)
+        
+        print(f"\n  📊 Phase 1基准（客观机会）:")
+        print(f"     ⚡ 超短线: {scalping_baseline.get('count', 0)}个机会，平均最大利润{scalping_baseline.get('avg_objective_profit', 0):.2f}%")
+        print(f"     🌊 波段: {swing_baseline.get('count', 0)}个机会，平均最大利润{swing_baseline.get('avg_objective_profit', 0):.2f}%")
+        print(f"     🎯 Phase 2目标: 用参数尽可能捕获这{total_count}个机会")
     
     days = 7
     
@@ -6726,9 +6742,36 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 predicted_total_signals = int(len(captured_opps) / precision_score) if precision_score > 0 else len(captured_opps) * 3
                 predicted_win_rate = (len(captured_opps) / predicted_total_signals) * 100 if predicted_total_signals > 0 else 0
                 
-                # 🔧 V8.5.2: 修复评分函数 - 使用真实利润而非只看数量
-                # 综合得分 = 捕获机会数 × 平均实际利润（直接反映真实盈利能力）
-                total_profit = len(captured_opps) * avg_profit
+                # 【V8.5.2.4.9】Phase 2评分：基于Phase 1 baseline
+                if phase1_baseline:
+                    # 计算Phase 1总机会数和平均利润
+                    scalping_bl = phase1_baseline.get('scalping', {})
+                    swing_bl = phase1_baseline.get('swing', {})
+                    phase1_total_count = scalping_bl.get('count', 0) + swing_bl.get('count', 0)
+                    
+                    if phase1_total_count > 0:
+                        # 加权平均利润
+                        phase1_avg_profit = (
+                            scalping_bl.get('avg_objective_profit', 0) * scalping_bl.get('count', 0) +
+                            swing_bl.get('avg_objective_profit', 0) * swing_bl.get('count', 0)
+                        ) / phase1_total_count
+                        
+                        # 捕获率：捕获的机会数 / Phase 1总机会数
+                        capture_rate_score = len(captured_opps) / phase1_total_count
+                        
+                        # 利润比率：实际平均利润 / Phase 1平均利润
+                        profit_ratio_score = avg_profit / phase1_avg_profit if phase1_avg_profit > 0 else 0
+                        
+                        # 综合得分：捕获率60% + 利润比率40%
+                        # 目标：既要尽可能多捕获机会，又要保证利润不能太低
+                        total_profit = (capture_rate_score * 0.6 + profit_ratio_score * 0.4) * 10000  # 放大便于比较
+                    else:
+                        # 降级：Phase 1无数据
+                        total_profit = len(captured_opps) * avg_profit
+                else:
+                    # 降级：无baseline，使用旧逻辑
+                    total_profit = len(captured_opps) * avg_profit
+                
                 win_rate = predicted_win_rate
             else:
                 avg_profit = 0
@@ -6752,8 +6795,30 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             best_params = test_params.copy()
             if result['total_profit'] > 0:
                 found_profitable = True
-                # 🔧 V8.3.25.25: 显示预测胜率和捕获数
-                if use_confirmed_opps and result.get('predicted_total_signals'):
+                
+                # 【V8.5.2.4.9】显示捕获率和利润比率
+                if phase1_baseline and result.get('total_trades'):
+                    scalping_bl = phase1_baseline.get('scalping', {})
+                    swing_bl = phase1_baseline.get('swing', {})
+                    phase1_total = scalping_bl.get('count', 0) + swing_bl.get('count', 0)
+                    
+                    if phase1_total > 0:
+                        phase1_avg = (
+                            scalping_bl.get('avg_objective_profit', 0) * scalping_bl.get('count', 0) +
+                            swing_bl.get('avg_objective_profit', 0) * swing_bl.get('count', 0)
+                        ) / phase1_total
+                        
+                        capture_pct = result['total_trades'] / phase1_total * 100
+                        profit_ratio_pct = (avg_profit / phase1_avg * 100) if phase1_avg > 0 else 0
+                        
+                        print(f"     ✅ 找到优质配置: R:R={test_params['min_risk_reward']:.1f}, 共识={test_params['min_indicator_consensus']}, 分数≥{test_params.get('min_signal_score', 50)}, ATR={test_params['atr_stop_multiplier']:.2f}")
+                        print(f"        → 捕获: {result['total_trades']}/{phase1_total}个({capture_pct:.1f}%) | 利润: {avg_profit:.2f}%/{phase1_avg:.2f}%({profit_ratio_pct:.1f}%) | 综合得分: {result['total_profit']:.0f}")
+                    else:
+                        # Phase1数据异常
+                        print(f"     ✅ 找到优质配置: R:R={test_params['min_risk_reward']:.1f}, 共识={test_params['min_indicator_consensus']}, 分数≥{test_params.get('min_signal_score', 50)}")
+                        print(f"        → 捕获机会: {result['total_trades']}个 | 综合得分: {result['total_profit']:.0f}")
+                elif use_confirmed_opps and result.get('predicted_total_signals'):
+                    # 降级显示（无baseline）
                     print(f"     ✅ 找到优质配置: R:R={test_params['min_risk_reward']:.1f}, 共识={test_params['min_indicator_consensus']}, 分数≥{test_params.get('min_signal_score', 50)}, ATR={test_params['atr_stop_multiplier']:.2f}")
                     print(f"        → 捕获盈利机会: {result['total_trades']}个 | 预测总开仓: {result['predicted_total_signals']}笔 | 预测胜率: {result['win_rate']:.1f}% | 综合得分: {result['total_profit']:.0f}")
                 else:
@@ -8673,16 +8738,19 @@ def analyze_and_adjust_params():
                         enable_validation=False  # 快速探索不需要验证
                     )
                     quick_search_opportunities = quick_search_result['combined']
+                    quick_search_baseline = quick_search_result.get('phase1_baseline')  # 🆕 V8.5.2.4.9
                     print(f"     ✓ 超短线机会: {len(quick_search_opportunities['scalping']['opportunities'])}个")
                     print(f"     ✓ 波段机会: {len(quick_search_opportunities['swing']['opportunities'])}个")
                 except Exception as e:
                     print(f"     ⚠️  生成机会失败: {e}，将降级使用market_snapshots")
                     quick_search_opportunities = None
+                    quick_search_baseline = None  # 🆕 V8.5.2.4.9
             
             iterative_result = quick_global_search_v8316(
                 data_summary=data_summary,
                 current_config=config,
-                confirmed_opportunities=quick_search_opportunities  # 🔧 V8.3.25.23: 传入确认机会
+                confirmed_opportunities=quick_search_opportunities,  # 🔧 V8.3.25.23: 传入确认机会
+                phase1_baseline=quick_search_baseline  # 🆕 V8.5.2.4.9: 传入Phase 1 baseline
             )
             # 提取final_params作为global_initial_params（兼容后续代码）
             global_initial_params = iterative_result.get('final_params')
@@ -21453,12 +21521,25 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             'opportunities': swing_opps
         }
         
+        # 【V8.5.2.4.9】Phase 1 baseline统计（供Phase 2使用）
+        phase1_baseline = {
+            'scalping': {
+                'count': len(scalping_opps),
+                'avg_objective_profit': np.mean([o.get('objective_profit', 0) for o in scalping_opps]) if scalping_opps else 0
+            },
+            'swing': {
+                'count': len(swing_opps),
+                'avg_objective_profit': np.mean([o.get('objective_profit', 0) for o in swing_opps]) if swing_opps else 0
+            }
+        }
+        
         # 【V8.3.21】最后释放内存
         gc.collect()
         
         return {
             'scalping': scalping_analysis,
-            'swing': swing_analysis
+            'swing': swing_analysis,
+            'phase1_baseline': phase1_baseline  # 🆕 V8.5.2.4.9
         }
     
     except Exception as e:
