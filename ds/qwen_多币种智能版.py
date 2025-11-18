@@ -9237,23 +9237,41 @@ def analyze_and_adjust_params():
                             print(f"       平均利润: {val_avg_profit:.2f}%")
                             print(f"       捕获率: {val_capture_rate*100:.1f}%")
                             
-                            # 决策：如果验证期表现太差，回退到保守参数
-                            if val_avg_profit < -1.0:  # 亏损超过1%
+                            # 【V8.5.2.4.1】改进回退逻辑：对比训练期baseline，避免采用更差的参数
+                            train_baseline_profit = separated_analysis['scalping'].get('avg_profit', 0)
+                            improvement = scalping_optimization.get('new_avg_profit', 0) - train_baseline_profit
+                            
+                            print(f"       📊 对比训练期baseline: {train_baseline_profit:.2f}% → 优化后{scalping_optimization.get('new_avg_profit', 0):.2f}% (变化{improvement:+.2f}%)")
+                            
+                            # 决策：综合考虑验证期表现和训练期对比
+                            if val_avg_profit < -1.0:  # 验证期亏损严重
                                 print(f"       ⚠️  验证期亏损严重，回退到保守参数")
                                 config['scalping_params'] = {
-                                    'atr_tp_multiplier': 2.0,
+                                    'atr_tp_multiplier': 1.5,  # 【V8.5.2.4.1】使用新的基准参数
                                     'atr_stop_multiplier': 1.5,
-                                    'max_holding_hours': 12,
+                                    'max_holding_hours': 2,
                                     'min_risk_reward': 1.5,
-                                    'min_signal_score': 50,
-                                    '_validation_rollback': True  # 【V8.4.5】标记已回退
+                                    'min_signal_score': 60,
+                                    '_validation_rollback': True
                                 }
-                                # 标记scalping_optimization为无效
                                 scalping_optimization['_validation_failed'] = True
+                            elif improvement < -2.0:  # 【V8.5.2.4.1】训练期退步超过2%
+                                print(f"       ⚠️  优化后比baseline退步{-improvement:.1f}%，回退到保守参数")
+                                config['scalping_params'] = {
+                                    'atr_tp_multiplier': 1.5,
+                                    'atr_stop_multiplier': 1.5,
+                                    'max_holding_hours': 2,
+                                    'min_risk_reward': 1.5,
+                                    'min_signal_score': 60,
+                                    '_validation_rollback': True
+                                }
+                                scalping_optimization['_validation_failed'] = True
+                            elif val_avg_profit > 0 and improvement > 0:
+                                print(f"       ✅ 验证期盈利且训练期改进{improvement:.2f}%，使用优化后的参数")
                             elif val_avg_profit > 0:
-                                print(f"       ✅ 验证期表现良好，使用优化后的参数")
+                                print(f"       🟡 验证期盈利但训练期持平/退步，谨慎使用优化后的参数")
                             else:
-                                print(f"       🟡 验证期表现一般，保留优化后的参数")
+                                print(f"       🟡 验证期持平/亏损但未达回退阈值，保留优化后的参数")
                         else:
                             print(f"     ⚠️  超短线验证期机会不足（{len(val_scalping_opps)}个），跳过验证")
                     
@@ -9274,23 +9292,41 @@ def analyze_and_adjust_params():
                             print(f"       平均利润: {val_avg_profit:.2f}%")
                             print(f"       捕获率: {val_capture_rate*100:.1f}%")
                             
-                            # 决策：如果验证期表现太差，回退到保守参数
-                            if val_avg_profit < -1.0:  # 亏损超过1%
+                            # 【V8.5.2.4.1】改进回退逻辑：对比训练期baseline
+                            train_baseline_profit = separated_analysis['swing'].get('avg_profit', 0)
+                            improvement = swing_optimization.get('new_avg_profit', 0) - train_baseline_profit
+                            
+                            print(f"       📊 对比训练期baseline: {train_baseline_profit:.2f}% → 优化后{swing_optimization.get('new_avg_profit', 0):.2f}% (变化{improvement:+.2f}%)")
+                            
+                            # 决策：综合考虑验证期表现和训练期对比
+                            if val_avg_profit < -1.0:  # 验证期亏损严重
                                 print(f"       ⚠️  验证期亏损严重，回退到保守参数")
                                 config['swing_params'] = {
-                                    'atr_tp_multiplier': 3.0,
-                                    'atr_stop_multiplier': 1.5,
+                                    'atr_tp_multiplier': 4.0,
+                                    'atr_stop_multiplier': 2.0,
                                     'max_holding_hours': 72,
                                     'min_risk_reward': 1.5,
-                                    'min_signal_score': 50,
-                                    '_validation_rollback': True  # 【V8.4.5】标记已回退
+                                    'min_signal_score': 60,
+                                    '_validation_rollback': True
                                 }
-                                # 标记swing_optimization为无效
                                 swing_optimization['_validation_failed'] = True
+                            elif improvement < -2.0:  # 【V8.5.2.4.1】训练期退步超过2%
+                                print(f"       ⚠️  优化后比baseline退步{-improvement:.1f}%，回退到保守参数")
+                                config['swing_params'] = {
+                                    'atr_tp_multiplier': 4.0,
+                                    'atr_stop_multiplier': 2.0,
+                                    'max_holding_hours': 72,
+                                    'min_risk_reward': 1.5,
+                                    'min_signal_score': 60,
+                                    '_validation_rollback': True
+                                }
+                                swing_optimization['_validation_failed'] = True
+                            elif val_avg_profit > 0 and improvement > 0:
+                                print(f"       ✅ 验证期盈利且训练期改进{improvement:.2f}%，使用优化后的参数")
                             elif val_avg_profit > 0:
-                                print(f"       ✅ 验证期表现良好，使用优化后的参数")
+                                print(f"       🟡 验证期盈利但训练期持平/退步，谨慎使用优化后的参数")
                             else:
-                                print(f"       🟡 验证期表现一般，保留优化后的参数")
+                                print(f"       🟡 验证期持平/亏损但未达回退阈值，保留优化后的参数")
                         else:
                             print(f"     ⚠️  波段验证期机会不足（{len(val_swing_opps)}个），跳过验证")
                 
@@ -21132,11 +21168,11 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         
         # 【V8.4.4修复→V8.4.6优化】使用固定的基准参数，确保阶段2的客观性
         # 不再依赖old_config，避免上一次优化失败的参数影响本次回测
-        # 【V8.4.6】提高ATR倍数，让actual_profit更接近理论值
+        # 【V8.5.2.4.1】重新调整超短线参数：更激进，真正的快进快出
         scalping_params = {
-            'atr_tp_multiplier': 3.0,    # 【V8.5.2.1】从5.0降到3.0（符合超短线快进快出本质）
-            'atr_stop_multiplier': 2.0,  # 【V8.5.2】从1.5放宽到2.0（适应加密货币波动）
-            'max_holding_hours': 6       # 【V8.5.2.1】从12降到6（真正的超短线）
+            'atr_tp_multiplier': 1.5,    # 【V8.5.2.4.1】从3.0降到1.5（快速止盈，符合超短线本质）
+            'atr_stop_multiplier': 1.5,  # 【V8.5.2.4.1】从2.0降到1.5（控制风险，快速止损）
+            'max_holding_hours': 2       # 【V8.5.2.4.1】从6降到2（真正的超短线：1-2小时）
         }
         
         swing_params = {
@@ -21146,7 +21182,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         }
         
         print(f"  🎯 使用差异化基准参数计算actual_profit（超短线vs波段）")
-        print(f"     超短线: atr_tp=3.0, atr_sl=2.0, 持仓≤6h  【V8.5.2.1：降低TP，符合快进快出】")
+        print(f"     超短线: atr_tp=1.5, atr_sl=1.5, 持仓≤2h  【V8.5.2.4.1：快速止盈，真正的超短线】")
         print(f"     波段: atr_tp=6.0, atr_sl=2.5, 持仓≤72h  【V8.5.2：捕捉完整趋势】")
         
         print(f"  📊 分析历史快照: {len(market_snapshots)}条记录")
