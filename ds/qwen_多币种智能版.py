@@ -9379,10 +9379,10 @@ def analyze_and_adjust_params():
                     
                 # 应用超短线优化结果
                 if scalping_optimization:
-                            if 'scalping_params' not in config:
-                                config['scalping_params'] = {}
-                            config['scalping_params'].update(scalping_optimization['optimized_params'])
-                            
+                    if 'scalping_params' not in config:
+                        config['scalping_params'] = {}
+                    config['scalping_params'].update(scalping_optimization['optimized_params'])
+                    
                     # 更新profit_comparison数据
                     profit_comparison['scalping'] = {
                         'name': scalping_optimization.get('name', ''),
@@ -9401,14 +9401,14 @@ def analyze_and_adjust_params():
                     phase1_baseline=phase1_baseline_for_phase3,
                     phase2_baseline=phase2_baseline_result,
                     ai_suggested_params=ai_suggested_params
-                    )
-                    
+                )
+                
                 # 应用波段优化结果
                 if swing_optimization:
-                            if 'swing_params' not in config:
-                                config['swing_params'] = {}
-                            config['swing_params'].update(swing_optimization['optimized_params'])
-                            
+                    if 'swing_params' not in config:
+                        config['swing_params'] = {}
+                    config['swing_params'].update(swing_optimization['optimized_params'])
+                    
                     # 更新profit_comparison数据
                     profit_comparison['swing'] = {
                         'name': swing_optimization.get('name', ''),
@@ -21395,17 +21395,17 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         
                         # 计算该方向的利润进展
                     if direction == 'long':
-                            profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
+                        profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
                     else:
-                            profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
-                        
-                        # 记录首次达到1.5%的时间
-                        if time_to_reach_1_5pct is None and profit_pct >= 1.5:
-                            time_to_reach_1_5pct = bar_idx + 1
-                        
-                        # 记录首次达到3%的时间
-                        if time_to_reach_3pct is None and profit_pct >= 3.0:
-                            time_to_reach_3pct = bar_idx + 1
+                        profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
+                    
+                    # 记录首次达到1.5%的时间
+                    if time_to_reach_1_5pct is None and profit_pct >= 1.5:
+                        time_to_reach_1_5pct = bar_idx + 1
+                    
+                    # 记录首次达到3%的时间
+                    if time_to_reach_3pct is None and profit_pct >= 3.0:
+                        time_to_reach_3pct = bar_idx + 1
                     
                     # 判断是否符合超短线/波段条件（基于客观利润和时间）
                     # scalping条件：6小时内达到≥1.5%利润
