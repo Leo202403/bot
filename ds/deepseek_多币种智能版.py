@@ -4737,13 +4737,20 @@ def backtest_parameters(config_variant, days=7, verbose=False):
         print(f"  💾 内存优化: 分批处理 + 及时释放")
         
         # 【V7.8修复】确保 config_variant 包含 min_signal_score
-        # 如果没有提供，从全局配置中获取，否则使用默认值50
+        # 【V8.5.2.3升级】加载learning_config用于动态计算signal_score
+        learning_config = None
         if 'min_signal_score' not in config_variant:
             try:
                 learning_config = load_learning_config()
                 config_variant['min_signal_score'] = learning_config.get('global', {}).get('min_signal_score', 55)
             except:
                 config_variant['min_signal_score'] = 55  # 默认55分
+        else:
+            # 即使已有min_signal_score，也要加载learning_config用于动态评分
+            try:
+                learning_config = load_learning_config()
+            except:
+                pass
         
         # 模拟交易决策（按天处理，便于加权）
         simulated_trades = []
@@ -4775,7 +4782,14 @@ def backtest_parameters(config_variant, days=7, verbose=False):
                 for idx, row in coin_data.iterrows():
                     # 模拟信号质量检查
                     indicator_consensus = row.get('indicator_consensus', 3)
-                    signal_score = row.get('signal_score', 60)
+                    
+                    # 【V8.5.2.3】动态计算signal_score（不再依赖CSV中的值）
+                    # 先推断信号类型（基于趋势强度和分数）
+                    strong_trend = row.get('trend_4h') or row.get('trend_1h')
+                    inferred_signal_type_for_score = 'swing' if strong_trend else 'scalping'
+                    
+                    # 调用recalculate_signal_score_from_snapshot动态计算
+                    signal_score = recalculate_signal_score_from_snapshot(row, inferred_signal_type_for_score, learning_config)
                     
                     # 🆕 V7.6.3.8: 超宽松标准 - 只要价格波动超过1%就算潜在机会
                     # 目的：让AI看到所有实际的市场波动，更准确判断参数是否过严
@@ -6637,19 +6651,17 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     
     # 🔧 V8.3.31.7: use_confirmed_opps 已在函数开始处定义（避免UnboundLocalError）
     
-    if use_confirmed_opps:
-        print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
-        # 合并超短线和波段机会
-        all_opportunities = (
-            confirmed_opportunities['scalping']['opportunities'] + 
-            confirmed_opportunities['swing']['opportunities']
-        )
-        print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
-    else:
-        print(f"  ⚠️  未提供confirmed_opportunities，降级使用market_snapshots")
-        print(f"  ⏱️  预计：约3分钟")
-        all_opportunities = None
-        all_market_snapshots = None
+    if not use_confirmed_opps:
+        # 【V8.5.2.3】移除降级容错，必须提供confirmed_opportunities
+        raise ValueError("【V8.5.2.3】quick_global_search_v8316必须提供confirmed_opportunities，不再支持降级使用market_snapshots")
+    
+    print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
+    # 合并超短线和波段机会
+    all_opportunities = (
+        confirmed_opportunities['scalping']['opportunities'] + 
+        confirmed_opportunities['swing']['opportunities']
+    )
+    print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
     
     print(f"\n  🔍 测试{len(test_points)}组战略采样（含signal_score优化）...")
     
@@ -6808,9 +6820,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 'capture_rate': capture_rate,
                 'predicted_total_signals': predicted_total_signals  # 新增：预测实际开仓数
             }
-        else:
-            # 降级：使用market_snapshots
-            result = backtest_parameters(config_variant, days=days, verbose=False)
+        # 【V8.5.2.3】已移除降级逻辑，上方会在函数开头直接抛出异常
         
         if result['total_profit'] > best_profit:
             best_profit = result['total_profit']
