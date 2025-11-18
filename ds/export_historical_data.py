@@ -643,11 +643,10 @@ def export_date(date_str, output_dirs):
                 "trend_15m": row.trend_15m,
             }
             
-            # 【V8.5.2.2修复】直接计算signal_score（不再依赖复杂的导入函数）
-            # 核心改进：避免复杂依赖，直接基于快照已有字段计算
+            # 【V8.5.2.3】只保存原始维度数据（不计算total_score）
+            # 核心改进：避免预判分类错误，实时/回测时动态计算评分
             try:
-                # 1. 信号分类（简化版）
-                # 基于持仓时间和波动判断是scalping还是swing
+                # 计算原始维度值
                 momentum = abs((row.close - row.open) / row.open) if row.open > 0 else 0
                 vol_ratio = 0
                 if actual_position >= 20:
@@ -655,140 +654,61 @@ def export_date(date_str, output_dirs):
                     if recent_avg_vol > 0:
                         vol_ratio = row.volume / recent_avg_vol
                 
-                # 判断信号类型：高波动+放量 = scalping，否则 = swing
-                is_scalping = (momentum > 0.01 or vol_ratio > 1.8 or pin_bar_data or engulfing_data or breakout_data)
-                signal_type = 'scalping' if is_scalping else 'swing'
-                
-                # 2. 计算总分（基础分50）
-                total_score = 50
-                
-                # 【动量评分】20分
-                if momentum > 0.015:
-                    total_score += 20
-                elif momentum > 0.01:
-                    total_score += 15
-                elif momentum > 0.005:
-                    total_score += 10
-                
-                # 【成交量评分】35分
-                if vol_ratio > 2.0:
-                    total_score += 35
-                elif vol_ratio > 1.5:
-                    total_score += 20
-                elif vol_ratio > 1.2:
-                    total_score += 10
-                
-                # 【突破评分】25分
-                if breakout_data:
-                    total_score += 25
-                
-                # 【Pin Bar / 吞没评分】12分
-                if pin_bar_data:
-                    total_score += 12
-                if engulfing_data:
-                    total_score += 12
-                
-                # 【趋势对齐评分】10-35分
+                # 趋势对齐统计
                 trends = [row.trend_4h, row.trend_1h, row.trend_15m]
                 bull_count = sum(1 for t in trends if pd.notna(t) and '多头' in str(t))
                 bear_count = sum(1 for t in trends if pd.notna(t) and '空头' in str(t))
                 aligned_count = max(bull_count, bear_count)
                 
-                if signal_type == 'scalping':
-                    if aligned_count >= 2:
-                        total_score += 10
-                else:  # swing
-                    if aligned_count >= 3:
-                        total_score += 35
-                    elif aligned_count >= 2:
-                        total_score += 20
+                # EMA发散度
+                ema_divergence_pct = round(abs(ema20 - ema50) / ema50 * 100, 2) if (ema20 > 0 and ema50 > 0) else 0
                 
-                # 【波段专用：EMA发散】15分
-                if signal_type == 'swing' and ema20 > 0 and ema50 > 0:
-                    ema_divergence = abs(ema20 - ema50) / ema50 * 100
-                    if ema_divergence >= 5.0:
-                        total_score += 15
-                    elif ema_divergence >= 3.0:
-                        total_score += 10
-                
-                # 【波段专用：4H趋势强度】25分
-                if signal_type == 'swing':
-                    trend_4h_str = str(row.trend_4h) if pd.notna(row.trend_4h) else ''
-                    if "强势多头" in trend_4h_str or "强势空头" in trend_4h_str:
-                        total_score += 25
-                    elif "多头" in trend_4h_str or "空头" in trend_4h_str:
-                        total_score += 15
-                
-                # 【减分项：RSI极端】
-                rsi_14_val = row.rsi_14 if pd.notna(row.rsi_14) else 50
-                if rsi_14_val > 80 or rsi_14_val < 20:
-                    total_score -= 5 if signal_type == 'scalping' else 10
-                
-                # 限制范围
-                total_score = min(100, max(0, int(total_score)))
-                
-                # 构建components字典（保持CSV格式兼容）
+                # 构建原始维度字典（不包含total_score和signal_type）
                 components = {
-                    'signal_type': signal_type,
-                    'total_score': total_score,
-                    # 维度分数（用于调试和分析）
-                    'volume_surge_type': 'extreme' if vol_ratio > 2.0 else ('strong' if vol_ratio > 1.5 else ''),
-                    'volume_surge_score': 35 if vol_ratio > 2.0 else (20 if vol_ratio > 1.5 else (10 if vol_ratio > 1.2 else 0)),
-                    'has_breakout': bool(breakout_data),
-                    'breakout_score': 25 if breakout_data else 0,
+                    # ❌ 不保存预判的类型和总分
+                    # 'signal_type': '...',
+                    # 'total_score': 0,
+                    
+                    # ✅ 只保存原始维度（客观事实）
                     'momentum_value': round(momentum, 4),
-                    'momentum_score': 20 if momentum > 0.015 else (15 if momentum > 0.01 else (10 if momentum > 0.005 else 0)),
+                    'volume_ratio': round(vol_ratio, 2),
+                    'has_breakout': bool(breakout_data),
+                    'has_pin_bar': bool(pin_bar_data),
+                    'has_engulfing': bool(engulfing_data),
                     'consecutive_candles': consecutive_data.get('candles', 0) if consecutive_data else 0,
-                    'consecutive_score': 15 if (consecutive_data and consecutive_data.get('candles', 0) >= 3) else 0,
-                    'pin_bar': pin_bar_data if pin_bar_data else '',
-                    'pin_bar_score': 12 if pin_bar_data else 0,
-                    'engulfing': engulfing_data if engulfing_data else '',
-                    'engulfing_score': 12 if engulfing_data else 0,
-                    'trend_alignment': aligned_count,
-                    'trend_alignment_score': (35 if aligned_count >= 3 else (20 if aligned_count >= 2 else 0)) if signal_type == 'swing' else (10 if aligned_count >= 2 else 0),
+                    'trend_alignment_count': aligned_count,
+                    'ema_divergence_pct': ema_divergence_pct,
                     'trend_initiation_strength': trend_initiation_data.get('strength', '') if trend_initiation_data else '',
-                    'trend_initiation_score': 40 if (trend_initiation_data and trend_initiation_data.get('strength') == 'strong') else 0,
+                    
+                    # 保留这些字段用于兼容性（但实时计算时会用原始维度重新计算）
+                    'volume_surge_type': 'extreme' if vol_ratio > 2.0 else ('strong' if vol_ratio > 1.5 else ''),
+                    'pin_bar': pin_bar_data if pin_bar_data else '',
+                    'engulfing': engulfing_data if engulfing_data else '',
                     'trend_4h_strength': 'strong' if ("强势" in str(row.trend_4h)) else ('normal' if ("多头" in str(row.trend_4h) or "空头" in str(row.trend_4h)) else 'weak'),
-                    'trend_4h_strength_score': 25 if ("强势" in str(row.trend_4h)) else (15 if ("多头" in str(row.trend_4h) or "空头" in str(row.trend_4h)) else 0),
-                    'ema_divergence_pct': round(abs(ema20 - ema50) / ema50 * 100, 2) if (ema20 > 0 and ema50 > 0) else 0,
-                    'ema_divergence_score': 0,  # 已在总分中计算
                     'pullback_type': '',
-                    'pullback_score': 0,
                     'volume_confirmed': vol_ratio >= 1.2,
-                    'volume_confirmed_score': 5 if vol_ratio >= 1.2 else 0
                 }
                 
             except Exception as e:
-                print(f"⚠️ 【V8.5.2.2】计算评分失败: {e}")
+                print(f"⚠️ 【V8.5.2.3】提取原始维度失败: {e}")
                 import traceback
                 traceback.print_exc()
                 components = {
-                    'signal_type': 'swing',
-                    'total_score': 50,
-                    'volume_surge_type': '',
-                    'volume_surge_score': 0,
-                    'has_breakout': False,
-                    'breakout_score': 0,
                     'momentum_value': 0,
-                    'momentum_score': 0,
+                    'volume_ratio': 0,
+                    'has_breakout': False,
+                    'has_pin_bar': False,
+                    'has_engulfing': False,
                     'consecutive_candles': 0,
-                    'consecutive_score': 0,
-                    'pin_bar': '',
-                    'pin_bar_score': 0,
-                    'engulfing': '',
-                    'engulfing_score': 0,
-                    'trend_alignment': 0,
-                    'trend_alignment_score': 0,
-                    'trend_initiation_strength': '',
-                    'trend_initiation_score': 0,
-                    'trend_4h_strength': '',
-                    'trend_4h_strength_score': 0,
+                    'trend_alignment_count': 0,
                     'ema_divergence_pct': 0,
-                    'ema_divergence_score': 0,
+                    'trend_initiation_strength': '',
+                    'volume_surge_type': '',
+                    'pin_bar': '',
+                    'engulfing': '',
+                    'trend_4h_strength': '',
                     'pullback_type': '',
-                    'pullback_score': 0,
                     'volume_confirmed': False,
-                    'volume_confirmed_score': 0
                 }
             
             # 【V8.4】计算综合确认度评分（0-100分）

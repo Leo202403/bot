@@ -15293,6 +15293,155 @@ def calculate_risk_reward_ratio(entry_price, stop_loss, take_profit, side="long"
         return 0
 
 
+def calculate_realtime_signal_score(market_data, learning_config=None):
+    """
+    【V8.5.2.3新增】实时计算信号评分（用learning_config权重）
+    
+    核心思路：
+    1. 基于信号特征判断类型（scalping/swing）
+    2. 从learning_config读取对应权重配置
+    3. 用权重动态计算评分
+    
+    Args:
+        market_data: 市场数据字典
+        learning_config: 学习配置（包含权重配置）
+    
+    Returns:
+        (signal_score, signal_type): 评分和类型
+    """
+    try:
+        # 1. 判断信号类型
+        signal_classification = classify_signal_type(market_data)
+        signal_type = signal_classification.get('signal_type', 'swing')
+        
+        # 2. 获取权重配置（默认权重）
+        DEFAULT_SCALPING_WEIGHTS = {
+            'momentum': 20,
+            'volume': 35,
+            'breakout': 25,
+            'pattern': 12,  # Pin Bar / 吞没
+            'trend_align': 10
+        }
+        
+        DEFAULT_SWING_WEIGHTS = {
+            'momentum': 20,
+            'volume': 35,
+            'breakout': 25,
+            'trend_align': 35,
+            'ema_divergence': 15,
+            'trend_4h_strength': 25
+        }
+        
+        # 从learning_config读取权重（如果有）
+        if learning_config and isinstance(learning_config, dict):
+            if signal_type == 'scalping':
+                weights = learning_config.get('scalping_score_weights', DEFAULT_SCALPING_WEIGHTS)
+            else:
+                weights = learning_config.get('swing_score_weights', DEFAULT_SWING_WEIGHTS)
+        else:
+            weights = DEFAULT_SCALPING_WEIGHTS if signal_type == 'scalping' else DEFAULT_SWING_WEIGHTS
+        
+        # 3. 计算评分（基础分50）
+        score = 50
+        
+        # 获取原始数据
+        pa = market_data.get("price_action", {})
+        ma = market_data.get("moving_averages", {})
+        lt = market_data.get("long_term", {})
+        
+        # 【动量】
+        momentum = abs(pa.get("momentum_slope", 0))
+        if momentum > 0.015:
+            score += weights.get('momentum', 20)
+        elif momentum > 0.01:
+            score += weights.get('momentum', 20) * 0.75
+        elif momentum > 0.005:
+            score += weights.get('momentum', 20) * 0.5
+        
+        # 【成交量】
+        vol_surge = pa.get("volume_surge")
+        if vol_surge and isinstance(vol_surge, dict):
+            if vol_surge.get("type") == "extreme_surge":
+                score += weights.get('volume', 35)
+            elif vol_surge.get("ratio", 0) > 1.5:
+                score += weights.get('volume', 35) * 0.6
+            elif vol_surge.get("ratio", 0) > 1.2:
+                score += weights.get('volume', 35) * 0.3
+        
+        # 【突破】
+        if pa.get("breakout"):
+            score += weights.get('breakout', 25)
+        
+        # 【形态】（scalping有，swing可能没有此权重）
+        if signal_type == 'scalping':
+            if pa.get("pin_bar") in ["bullish_pin", "bearish_pin"]:
+                score += weights.get('pattern', 12)
+            if pa.get("engulfing") in ["bullish_engulfing", "bearish_engulfing"]:
+                score += weights.get('pattern', 12)
+        
+        # 【趋势对齐】
+        trends = [
+            market_data.get("trend_4h", ''),
+            market_data.get("trend_1h", ''),
+            market_data.get("trend_15m", '')
+        ]
+        bull_count = sum(1 for t in trends if '多头' in str(t))
+        bear_count = sum(1 for t in trends if '空头' in str(t))
+        aligned_count = max(bull_count, bear_count)
+        
+        if signal_type == 'scalping':
+            if aligned_count >= 2:
+                score += weights.get('trend_align', 10)
+        else:  # swing
+            if aligned_count >= 3:
+                score += weights.get('trend_align', 35)
+            elif aligned_count >= 2:
+                score += weights.get('trend_align', 35) * 0.6
+        
+        # 【波段专用：EMA发散】
+        if signal_type == 'swing':
+            ema20 = ma.get("ema20", 0)
+            ema50 = ma.get("ema50", 0)
+            if ema20 > 0 and ema50 > 0:
+                ema_divergence = abs(ema20 - ema50) / ema50 * 100
+                if ema_divergence >= 5.0:
+                    score += weights.get('ema_divergence', 15)
+                elif ema_divergence >= 3.0:
+                    score += weights.get('ema_divergence', 15) * 0.67
+        
+        # 【波段专用：4H趋势强度】
+        if signal_type == 'swing':
+            lt_trend = lt.get("trend", "")
+            if "强势多头" in lt_trend or "强势空头" in lt_trend:
+                score += weights.get('trend_4h_strength', 25)
+            elif "多头" in lt_trend or "空头" in lt_trend:
+                score += weights.get('trend_4h_strength', 25) * 0.6
+        
+        # 【减分项：RSI极端】
+        rsi_data = market_data.get("rsi", {})
+        rsi = rsi_data.get("rsi_14", 50)
+        if rsi > 80 or rsi < 20:
+            score -= 5 if signal_type == 'scalping' else 10
+        
+        # 限制范围
+        score = min(100, max(0, int(score)))
+        
+        return score, signal_type
+        
+    except Exception as e:
+        print(f"⚠️ 【V8.5.2.3】实时评分失败: {e}")
+        import traceback
+        traceback.print_exc()
+        # 返回默认值
+        signal_type = 'swing'
+        try:
+            signal_classification = classify_signal_type(market_data)
+            signal_type = signal_classification.get('signal_type', 'swing')
+        except:
+            pass
+        return 50, signal_type
+
+
 def classify_signal_type(market_data):
     """
     【V7.9新增】信号分类：Scalping超短线 vs Swing波段
