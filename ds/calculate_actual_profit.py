@@ -23,7 +23,8 @@ from typing import Dict, List
 def calculate_single_actual_profit(
     opportunity: Dict,
     strategy_params: Dict,
-    use_dynamic_atr: bool = True
+    use_dynamic_atr: bool = True,
+    include_trading_costs: bool = True
 ) -> float:
     """
     计算单个机会的实际利润
@@ -32,9 +33,16 @@ def calculate_single_actual_profit(
         opportunity: 机会数据，包含entry_price, direction, atr, future_data等
         strategy_params: 策略参数，包含atr_stop_multiplier, atr_tp_multiplier等
         use_dynamic_atr: 是否使用动态ATR倍数（V8.4.8特性）
+        include_trading_costs: 是否包含交易成本（V8.5.2.4.19新增）
     
     Returns:
         actual_profit_pct: 实际利润百分比（正数=盈利，负数=亏损，0=超时平仓无盈亏）
+        
+    交易成本组成（include_trading_costs=True时）：
+        - 开仓手续费（Taker）：0.05%
+        - 平仓手续费（Taker）：0.05%
+        - 滑点损耗：0.02%（单边）× 2 = 0.04%
+        - 总成本：0.14%（往返）
     """
     try:
         # 1. 提取基础数据
@@ -181,6 +189,17 @@ def calculate_single_actual_profit(
             else:
                 opportunity['exit_reason'] = 'time_exit'
         
+        # 7. 【V8.5.2.4.19】扣除交易成本
+        if include_trading_costs:
+            # 交易成本组成：
+            # - 开仓手续费（Taker）：0.05%
+            # - 平仓手续费（Taker）：0.05%
+            # - 滑点损耗：0.02%（单边）× 2 = 0.04%
+            # - 总成本：0.14%（相对于仓位价值）
+            TRADING_COST_PCT = 0.14
+            profit_pct -= TRADING_COST_PCT
+            opportunity['trading_cost_deducted'] = True
+        
         return profit_pct
     
     except Exception as e:
@@ -194,7 +213,8 @@ def calculate_actual_profit_batch(
     opportunities: List[Dict],
     strategy_params: Dict,
     batch_size: int = 100,
-    use_dynamic_atr: bool = True
+    use_dynamic_atr: bool = True,
+    include_trading_costs: bool = True
 ) -> List[Dict]:
     """
     批量计算实际利润（带进度提示）
@@ -204,6 +224,7 @@ def calculate_actual_profit_batch(
         strategy_params: 策略参数
         batch_size: 批处理大小（每100个打印一次进度）
         use_dynamic_atr: 是否使用动态ATR
+        include_trading_costs: 是否包含交易成本（V8.5.2.4.19新增）
     
     Returns:
         更新后的机会列表（添加了actual_profit_pct字段）
@@ -215,7 +236,8 @@ def calculate_actual_profit_batch(
         actual_profit = calculate_single_actual_profit(
             opp, 
             strategy_params, 
-            use_dynamic_atr
+            use_dynamic_atr,
+            include_trading_costs
         )
         opp['actual_profit_pct'] = actual_profit
         
@@ -233,7 +255,8 @@ def add_actual_profit_to_opportunities(
     scalping_params: Dict,
     swing_params: Dict,
     use_dynamic_atr: bool = True,
-    phase1_mode: bool = False
+    phase1_mode: bool = False,
+    include_trading_costs: bool = True
 ) -> tuple:
     """
     为超短线和波段机会分别添加actual_profit_pct字段
@@ -245,6 +268,7 @@ def add_actual_profit_to_opportunities(
         swing_params: 波段策略参数
         use_dynamic_atr: 是否使用动态ATR
         phase1_mode: 是否为Phase 1（纯客观统计模式）
+        include_trading_costs: 是否包含交易成本（V8.5.2.4.19新增）
     
     Returns:
         (updated_scalping_opps, updated_swing_opps)
@@ -273,7 +297,8 @@ def add_actual_profit_to_opportunities(
             scalping_opps,
             scalping_params,
             batch_size=100,
-            use_dynamic_atr=use_dynamic_atr
+            use_dynamic_atr=use_dynamic_atr,
+            include_trading_costs=include_trading_costs
         )
         
         # 统计
@@ -289,7 +314,8 @@ def add_actual_profit_to_opportunities(
             swing_opps,
             swing_params,
             batch_size=100,
-            use_dynamic_atr=use_dynamic_atr
+            use_dynamic_atr=use_dynamic_atr,
+            include_trading_costs=include_trading_costs
         )
         
         # 统计
