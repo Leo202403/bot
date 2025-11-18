@@ -6535,19 +6535,36 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         except Exception as e:
             print(f"     ⚠️  预分析失败: {e}，使用默认范围")
     
-    # 从缓存或分析结果中提取动态范围
+    # 【V8.5.2.4.15】从缓存或分析结果中提取动态范围
     dynamic_rr_range = None
+    dynamic_atr_tp_range = None
+    dynamic_atr_sl_range = None
+    
     if optimization_cache.get('rr_distribution'):
         dynamic_rr_range = optimization_cache['rr_distribution']['range']
+        print(f"  📊 【V8.5.2.4.15】从历史数据提取动态R:R范围: [{dynamic_rr_range[0]:.2f}, {dynamic_rr_range[1]:.2f}]")
+    
+    # 【V8.5.2.4.15】提取ATR倍数范围（用于优化Phase 2搜索）
+    if optimization_cache.get('atr_multipliers'):
+        atr_mult = optimization_cache['atr_multipliers']
+        dynamic_atr_tp_range = atr_mult.get('tp_range', None)
+        dynamic_atr_sl_range = atr_mult.get('sl_range', [1.2, 2.5])
+        
+        if dynamic_atr_tp_range:
+            print(f"  📊 【V8.5.2.4.15】从历史数据提取动态ATR TP范围: [{dynamic_atr_tp_range[0]:.2f}, {dynamic_atr_tp_range[1]:.2f}]")
+        if dynamic_atr_sl_range:
+            print(f"  📊 【V8.5.2.4.15】从历史数据提取动态ATR SL范围: [{dynamic_atr_sl_range[0]:.2f}, {dynamic_atr_sl_range[1]:.2f}]")
     
     # 定义默认采样范围
     if historical_sampling_range:
         sampling_range = historical_sampling_range
     else:
+        # 【V8.5.2.4.15】优先使用历史数据的ATR倍数范围
         sampling_range = {
             'min_risk_reward': dynamic_rr_range if dynamic_rr_range else [1.5, 3.0],  # 🔧 V8.5.2: 提高到[1.5, 3.0]
             'min_indicator_consensus': [1, 5],  # 🔧 V8.3.21.7: 从1起步（配合signal_score≥75），到5（高质量共振）
-            'atr_stop_multiplier': [1.5, 3.5],  # 🔧 V8.5.2: 扩大到[1.5, 3.5]适应加密货币波动
+            'atr_stop_multiplier': dynamic_atr_sl_range if dynamic_atr_sl_range else [1.5, 3.5],  # 【V8.5.2.4.15】使用动态SL范围
+            'atr_tp_multiplier': dynamic_atr_tp_range if dynamic_atr_tp_range else [2.5, 6.0],  # 【V8.5.2.4.15】使用动态TP范围
             'min_signal_score': [60, 85]  # 🔧 V8.3.21.13: 降低到[60, 85]以捕获更多机会
         }
     
