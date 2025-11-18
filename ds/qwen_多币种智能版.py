@@ -1395,6 +1395,33 @@ def clear_symbol_orders(symbol, verbose=True):
     return success_count, fail_count
 
 
+def _precision_to_decimal_places(precision_value):
+    """
+    将precision值转换为小数位数（整数）
+    
+    Binance API可能返回两种格式：
+    - 整数：如 2 表示2位小数
+    - 浮点数：如 0.01 表示2位小数，0.001 表示3位小数
+    
+    Args:
+        precision_value: 整数或浮点数
+    
+    Returns:
+        int: 小数位数
+    """
+    if isinstance(precision_value, int):
+        return precision_value
+    elif isinstance(precision_value, float):
+        # 通过计算浮点数的小数位数来确定精度
+        # 例如: 0.01 -> 2, 0.001 -> 3, 0.1 -> 1
+        import math
+        if precision_value <= 0:
+            return 0
+        return max(0, int(round(-math.log10(precision_value))))
+    else:
+        return 2  # 默认2位小数
+
+
 def set_tpsl_orders_via_papi(symbol: str, side: str, amount: float, stop_loss: float = None, take_profit: float = None, verbose: bool = True):
     """
     V7.9.3 通过papi端点为仓位设置止盈止损订单（V8.5.1.3: 添加精度处理）
@@ -1423,8 +1450,12 @@ def set_tpsl_orders_via_papi(symbol: str, side: str, amount: float, stop_loss: f
     try:
         markets = exchange.load_markets()
         market_info = markets.get(symbol, {})
-        amount_precision = market_info.get('precision', {}).get('amount', 3)
-        price_precision = market_info.get('precision', {}).get('price', 2)
+        amount_precision_raw = market_info.get('precision', {}).get('amount', 3)
+        price_precision_raw = market_info.get('precision', {}).get('price', 2)
+        
+        # 🔧 V8.5.1.4: 转换precision为整数（支持浮点数格式）
+        amount_precision = _precision_to_decimal_places(amount_precision_raw)
+        price_precision = _precision_to_decimal_places(price_precision_raw)
         
         # 对数量和价格进行精度舍入
         amount = round(amount, amount_precision)
@@ -5468,7 +5499,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
                     model="qwen3-max",
                     messages=[{"role": "user", "content": ai_prompt}],
                     temperature=0.7,
-                    max_tokens=2000  # 🔧 Qwen限制：最大2000，避免超限
+                    max_tokens=5000  # 🔧 增加到5000，避免复杂决策时JSON被截断
                 )
                 
                 ai_content = response.choices[0].message.content.strip()
@@ -5582,7 +5613,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
                     model="qwen3-max",
                     messages=[{"role": "user", "content": ai_deep_prompt}],
                     temperature=0.8,  # 更高温度鼓励创新
-                    max_tokens=2000
+                    max_tokens=5000  # 🔧 增加到5000，避免复杂决策时JSON被截断
                 )
                 
                 ai_content = response.choices[0].message.content.strip()
@@ -5656,7 +5687,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
                     model="qwen3-max",
                     messages=[{"role": "user", "content": emergency_prompt}],
                     temperature=0.9,  # 最高温度，最大创新
-                    max_tokens=2000
+                    max_tokens=5000  # 🔧 增加到5000，避免复杂决策时JSON被截断
                 )
                 
                 ai_content = response.choices[0].message.content.strip()
@@ -6034,7 +6065,7 @@ JSON (4 test points):
             model="qwen3-max",
             messages=[{"role": "user", "content": ai_fine_tune_prompt}],
             temperature=0.3,
-            max_tokens=2000  # 🔧 Qwen限制：最大2000
+            max_tokens=5000  # 🔧 增加到5000，避免参数优化建议被截断
         )
         
         ai_content = response.choices[0].message.content.strip()
@@ -6650,51 +6681,71 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 if optimization_cache.get('precision_formula'):
                     precision_data = optimization_cache['precision_formula']
                     
-                    # 🔧 V8.5.1.9.2: 统一使用字符串键访问（JSON序列化后所有键都是字符串）
+                    # 🔧 V8.5.1.5: 统一使用字符串键访问（JSON序列化后所有键都是字符串）
                     # 基于真实数据计算精准率
                     # score维度：找最接近的阈值
                     score_precision = precision_data['by_score'].get(str(min_score), 0)
                     if score_precision == 0:
                         # 插值估算（键可能是字符串或整数，统一转换）
-                        available_scores = sorted([int(k) for k in precision_data['by_score'].keys() if int(k) <= min_score])
-                        if available_scores:
-                            # 使用字符串键查找（因为字典键是字符串）
-                            score_precision = precision_data['by_score'][str(available_scores[-1])]
-                        else:
+                        try:
+                            available_scores = sorted([int(k) for k in precision_data['by_score'].keys() if str(k).isdigit() and int(k) <= min_score])
+                            if available_scores:
+                                # 使用字符串键查找（因为字典键是字符串）
+                                score_precision = precision_data['by_score'].get(str(available_scores[-1]), 1.0)
+                            else:
+                                score_precision = 1.0
+                        except (ValueError, KeyError) as e:
+                            print(f"     ⚠️ score维度精准率解析失败: {e}，使用默认值1.0")
                             score_precision = 1.0
                     
                     # consensus维度
                     consensus_precision = precision_data['by_consensus'].get(str(min_consensus), 0)
                     if consensus_precision == 0:
-                        available_consensus = sorted([int(k) for k in precision_data['by_consensus'].keys() if int(k) <= min_consensus])
-                        if available_consensus:
-                            # 使用字符串键查找
-                            consensus_precision = precision_data['by_consensus'][str(available_consensus[-1])]
-                        else:
+                        try:
+                            available_consensus = sorted([int(k) for k in precision_data['by_consensus'].keys() if str(k).isdigit() and int(k) <= min_consensus])
+                            if available_consensus:
+                                # 使用字符串键查找
+                                consensus_precision = precision_data['by_consensus'].get(str(available_consensus[-1]), 1.0)
+                            else:
+                                consensus_precision = 1.0
+                        except (ValueError, KeyError) as e:
+                            print(f"     ⚠️ consensus维度精准率解析失败: {e}，使用默认值1.0")
                             consensus_precision = 1.0
                     
                     # R:R维度
                     rr_precision = precision_data['by_rr'].get(str(min_rr), 0)
                     if rr_precision == 0:
                         # R:R的键也是字符串，需要转换
-                        available_rrs = sorted([float(k) for k in precision_data['by_rr'].keys() if float(k) <= min_rr])
-                        if available_rrs:
-                            # 🔧 V8.3.32.11: 尝试多种格式匹配（"2.0", "2", "2.5"等）
-                            target_rr = available_rrs[-1]
-                            # 先尝试直接匹配
-                            if str(target_rr) in precision_data['by_rr']:
-                                rr_precision = precision_data['by_rr'][str(target_rr)]
-                            # 尝试整数格式
-                            elif str(int(target_rr)) in precision_data['by_rr']:
-                                rr_precision = precision_data['by_rr'][str(int(target_rr))]
-                            # 尝试格式化为1位小数
-                            elif f"{target_rr:.1f}" in precision_data['by_rr']:
-                                rr_precision = precision_data['by_rr'][f"{target_rr:.1f}"]
+                        try:
+                            available_rrs = []
+                            for k in precision_data['by_rr'].keys():
+                                try:
+                                    k_float = float(k)
+                                    if k_float <= min_rr:
+                                        available_rrs.append(k_float)
+                                except (ValueError, TypeError):
+                                    continue
+                            
+                            if available_rrs:
+                                available_rrs.sort()
+                                # 🔧 V8.5.1.5: 尝试多种格式匹配（"2.0", "2", "2.5"等）
+                                target_rr = available_rrs[-1]
+                                # 先尝试直接匹配
+                                if str(target_rr) in precision_data['by_rr']:
+                                    rr_precision = precision_data['by_rr'][str(target_rr)]
+                                # 尝试整数格式
+                                elif str(int(target_rr)) in precision_data['by_rr']:
+                                    rr_precision = precision_data['by_rr'][str(int(target_rr))]
+                                # 尝试格式化为1位小数
+                                elif f"{target_rr:.1f}" in precision_data['by_rr']:
+                                    rr_precision = precision_data['by_rr'][f"{target_rr:.1f}"]
+                                else:
+                                    # 降级：使用1.0
+                                    rr_precision = 1.0
                             else:
-                                # 降级：使用1.0
-                                print(f"  ⚠️ 未找到R:R={target_rr}的精准率数据，使用默认值1.0")
                                 rr_precision = 1.0
-                        else:
+                        except (ValueError, KeyError) as e:
+                            print(f"     ⚠️ R:R维度精准率解析失败: {e}，使用默认值1.0")
                             rr_precision = 1.0
                     
                     # 联合精准率（取平均或几何平均）
@@ -7225,7 +7276,7 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
                             {"role": "user", "content": profit_discovery_prompt}
                     ],
                     temperature=0.7,
-                    max_tokens=2000
+                    max_tokens=5000  # 🔧 增加到5000，避免分析报告被截断
                 )
                 
                 ai_content = ai_response.choices[0].message.content.strip()
@@ -15068,7 +15119,7 @@ Your core principles:
                 {"role": "user", "content": prompt},
             ],
             stream=False,
-            max_tokens=2000,  # 🔧 Qwen限制：最大2000
+            max_tokens=5000,  # 🔧 增加到5000，避免复杂决策时JSON被截断
         )
         
         result = response.choices[0].message.content
@@ -18092,20 +18143,13 @@ def _execute_single_open_action_v55(
             try:
                 markets = exchange.load_markets()
                 market_info = markets.get(symbol, {})
-                amount_precision = market_info.get('precision', {}).get('amount')
+                amount_precision_raw = market_info.get('precision', {}).get('amount')
                 
-                # 处理精度值：可能是整数（小数位数）或浮点数（步长）
-                if amount_precision is None:
+                # 🔧 V8.5.1.4: 使用统一的精度转换函数
+                if amount_precision_raw is None:
                     amount_precision = 3  # 默认BTC精度
-                elif isinstance(amount_precision, float):
-                    # 如果是浮点数（如0.001），转换为小数位数（3）
-                    import math
-                    if amount_precision > 0:
-                        amount_precision = -int(math.log10(amount_precision))
-                    else:
-                        amount_precision = 3
-                elif not isinstance(amount_precision, int) or amount_precision < 0:
-                    amount_precision = 3
+                else:
+                    amount_precision = _precision_to_decimal_places(amount_precision_raw)
             except Exception as e:
                 print(f"   ⚠️ 获取精度失败: {e}，使用默认精度3")
                 amount_precision = 3  # 默认BTC精度
@@ -18411,7 +18455,10 @@ def _execute_single_open_action_v55(
             markets = exchange.load_markets()
             market_info = markets.get(symbol, {})
             min_amount = market_info.get('limits', {}).get('amount', {}).get('min', 0)
-            amount_precision = market_info.get('precision', {}).get('amount', 3)  # 获取数量精度
+            amount_precision_raw = market_info.get('precision', {}).get('amount', 3)  # 获取数量精度
+            
+            # 🔧 V8.5.1.4: 转换precision为整数
+            amount_precision = _precision_to_decimal_places(amount_precision_raw)
             
             # 🆕 V8.5.1.2 + V8.5.1.9增强: 考虑精度限制的最小名义价值检查
             # 币安要求名义价值 > 5 USDT
@@ -20999,7 +21046,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         try:
             from calculate_actual_profit import add_actual_profit_to_opportunities
             
-            # 【V8.4.8】启用动态ATR倍数
+            # 【V8.4.8+V8.5.1.6】启用动态ATR倍数 + 重新实现模块
             scalping_opps, swing_opps = add_actual_profit_to_opportunities(
                 scalping_opps=scalping_opps,
                 swing_opps=swing_opps,
@@ -22104,7 +22151,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
                           f"(影响={sensitivity['avg_impact']:+.3f})")
             
             # 【V8.4.2修复】重新计算actual_profit以确保与参数一致
-            print(f"\n  📊 计算前后对比（使用真实利润）...")
+            print(f"\n  📊 计算前后对比（使用实际利润）...")
             
             # 导入实际利润计算模块
             from calculate_actual_profit import calculate_actual_profit_batch
@@ -22114,9 +22161,9 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
             baseline_opps_copy = [opp.copy() for opp in opportunities]
             baseline_opps_updated = calculate_actual_profit_batch(
                 opportunities=baseline_opps_copy,
-                strategy_params={**current_params, 'signal_type': 'scalping'},
+                strategy_params=current_params,
                 batch_size=100,
-                use_dynamic_atr=True  # 【V8.4.9】使用动态ATR
+                use_dynamic_atr=True
             )
             print(f"")  # 换行
             
@@ -22125,9 +22172,9 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
             optimized_opps_copy = [opp.copy() for opp in opportunities]
             optimized_opps_updated = calculate_actual_profit_batch(
                 opportunities=optimized_opps_copy,
-                strategy_params={**v8321_result['optimized_params'], 'signal_type': 'scalping'},
+                strategy_params=v8321_result['optimized_params'],
                 batch_size=100,
-                use_dynamic_atr=True  # 【V8.4.9】使用动态ATR
+                use_dynamic_atr=True
             )
             print(f"")  # 换行
             
@@ -22628,7 +22675,7 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
                           f"(影响={sensitivity['avg_impact']:+.3f})")
             
             # 【V8.4.2修复】重新计算actual_profit以确保与参数一致
-            print(f"\n  📊 计算前后对比（使用真实利润）...")
+            print(f"\n  📊 计算前后对比（使用实际利润）...")
             
             # 导入实际利润计算模块
             from calculate_actual_profit import calculate_actual_profit_batch
@@ -22638,9 +22685,9 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
             baseline_opps_copy = [opp.copy() for opp in opportunities]
             baseline_opps_updated = calculate_actual_profit_batch(
                 opportunities=baseline_opps_copy,
-                strategy_params={**current_params, 'signal_type': 'swing'},
+                strategy_params=current_params,
                 batch_size=100,
-                use_dynamic_atr=True  # 【V8.4.9】使用动态ATR
+                use_dynamic_atr=True
             )
             print(f"")  # 换行
             
@@ -22649,9 +22696,9 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
             optimized_opps_copy = [opp.copy() for opp in opportunities]
             optimized_opps_updated = calculate_actual_profit_batch(
                 opportunities=optimized_opps_copy,
-                strategy_params={**v8321_result['optimized_params'], 'signal_type': 'swing'},
+                strategy_params=v8321_result['optimized_params'],
                 batch_size=100,
-                use_dynamic_atr=True  # 【V8.4.9】使用动态ATR
+                use_dynamic_atr=True
             )
             print(f"")  # 换行
             
