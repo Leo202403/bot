@@ -9311,7 +9311,7 @@ def analyze_and_adjust_params():
                     print(f"  ⚡ 超短线策略:")
                     print(f"     捕获数量: {old_count}个 → {new_count}个 ({new_count-old_count:+d})")
                     print(f"     平均利润: {old_avg_profit:.1f}% → {new_avg_profit:.1f}% ({new_avg_profit-old_avg_profit:+.1f}%)")
-                    print(f"     总利润: +{old_total_profit:.1f}U → +{new_total_profit:.1f}U ({profit_diff:+.1f}U)")
+                    print(f"     总利润: {old_total_profit:+.1f}U → {new_total_profit:+.1f}U ({profit_diff:+.1f}U)")
                 except Exception as e:
                     print(f"  ⚠️  超短线统计失败: {e}")
             
@@ -9347,7 +9347,7 @@ def analyze_and_adjust_params():
                     print(f"  🌊 波段策略:")
                     print(f"     捕获数量: {old_count}个 → {new_count}个 ({new_count-old_count:+d})")
                     print(f"     平均利润: {old_avg_profit:.1f}% → {new_avg_profit:.1f}% ({new_avg_profit-old_avg_profit:+.1f}%)")
-                    print(f"     总利润: +{old_total_profit:.1f}U → +{new_total_profit:.1f}U ({profit_diff:+.1f}U)")
+                    print(f"     总利润: {old_total_profit:+.1f}U → {new_total_profit:+.1f}U ({profit_diff:+.1f}U)")
                 except Exception as e:
                     print(f"  ⚠️  波段统计失败: {e}")
             
@@ -9372,7 +9372,7 @@ def analyze_and_adjust_params():
                     }
                     
                     print(f"\n  📊 综合总利润:")
-                    print(f"     +{total_old:.1f}U → +{total_new:.1f}U ({total_diff:+.1f}U / {total_diff_pct:+.1f}%)")
+                    print(f"     {total_old:+.1f}U → {total_new:+.1f}U ({total_diff:+.1f}U / {total_diff_pct:+.1f}%)")
                 except Exception as e:
                     print(f"  ⚠️  综合统计失败: {e}")
             
@@ -9932,7 +9932,7 @@ def analyze_and_adjust_params():
                 </div>
                 <div style="text-align: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2);">
                     <div style="font-size: 0.8em; opacity: 0.8;">总利润变化</div>
-                    <div style="font-size: 1.5em; font-weight: bold;">+{s_old:.1f}U → +{s_new:.1f}U ({s_diff:+.1f}U) {s_emoji}</div>
+                    <div style="font-size: 1.5em; font-weight: bold;">{s_old:+.1f}U → {s_new:+.1f}U ({s_diff:+.1f}U) {s_emoji}</div>
                 </div>
             </div>
 """
@@ -9970,7 +9970,7 @@ def analyze_and_adjust_params():
                 </div>
                 <div style="text-align: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2);">
                     <div style="font-size: 0.8em; opacity: 0.8;">总利润变化</div>
-                    <div style="font-size: 1.5em; font-weight: bold;">+{w_old:.1f}U → +{w_new:.1f}U ({w_diff:+.1f}U) {w_emoji}</div>
+                    <div style="font-size: 1.5em; font-weight: bold;">{w_old:+.1f}U → {w_new:+.1f}U ({w_diff:+.1f}U) {w_emoji}</div>
                 </div>
             </div>
 """
@@ -9986,7 +9986,7 @@ def analyze_and_adjust_params():
             <div style="margin: 15px 0 0 0; padding: 12px; background: rgba(255,255,255,0.2); border-radius: 6px; text-align: center;">
                 <h4 style="margin: 0 0 8px 0; color: white;">📊 综合总利润</h4>
                 <div style="font-size: 2em; font-weight: bold; margin: 8px 0;">
-                    +{t_old:.1f}U → +{t_new:.1f}U
+                    {t_old:+.1f}U → {t_new:+.1f}U
                 </div>
                 <div style="font-size: 1.8em; font-weight: bold; color: #ffd700;">
                     {t_diff:+.1f}U ({t_diff_pct:+.1f}%) {t_emoji}
