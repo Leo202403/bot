@@ -6351,9 +6351,12 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     cache_file = f"trading_data/{os.getenv('MODEL_NAME', 'qwen')}/optimization_cache.json"
     
     # 🔧 V8.3.31.7: 先判断是否使用confirmed_opportunities
-    use_confirmed_opps = confirmed_opportunities is not None and \
-                         confirmed_opportunities.get('scalping', {}).get('opportunities') and \
-                         confirmed_opportunities.get('swing', {}).get('opportunities')
+    # 🔧 V8.5.2.4.24: 修复 - 应检查key存在性，而非列表真值（空列表[]也是有效的）
+    use_confirmed_opps = (
+        confirmed_opportunities is not None and 
+        isinstance(confirmed_opportunities.get('scalping', {}).get('opportunities'), list) and 
+        isinstance(confirmed_opportunities.get('swing', {}).get('opportunities'), list)
+    )
     
     # 尝试加载缓存
     use_cache = False
@@ -21389,6 +21392,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     
                     time_to_reach_1_5pct = None
                     time_to_reach_3pct = None
+                    time_to_reach_max = None  # 🆕 V8.5.2.4.24: 记录达到最大利润的时间
                     
                     for bar_idx, future_row in enumerate(later_24h.iterrows()):
                         _, row_data = future_row
@@ -21407,10 +21411,14 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     if time_to_reach_3pct is None and profit_pct >= 3.0:
                         time_to_reach_3pct = bar_idx + 1
                     
+                    # 🆕 V8.5.2.4.24: 记录首次达到90%最大利润的时间（作为合理退出点）
+                    if time_to_reach_max is None and profit_pct >= objective_profit * 0.9:
+                        time_to_reach_max = bar_idx + 1
+                    
                     # 判断是否符合超短线/波段条件（基于客观利润和时间）
-                    # scalping条件：6小时内达到≥1.5%利润
+                    # scalping条件：12小时内达到≥1.5%利润  【V8.5.2.4.24：从6h放宽到12h】
                     is_scalping = (time_to_reach_1_5pct is not None and 
-                                  time_to_reach_1_5pct <= 24 and  # 6小时=24个15分钟K线
+                                  time_to_reach_1_5pct <= 48 and  # 12小时=48个15分钟K线
                                   objective_profit >= 1.5)
                     
                     # swing条件：达到≥3%利润（无论时间）
@@ -21480,7 +21488,8 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         opp_data_scalping['signal_type'] = 'scalping'
                         time_hours = time_to_reach_1_5pct * 0.25 if time_to_reach_1_5pct else 6
                         opp_data_scalping['time_to_target'] = time_hours
-                        opp_data_scalping['holding_hours'] = time_hours  # 🆕 V8.5.2.4.22: 添加holding_hours字段
+                        # 🔧 V8.5.2.4.24: 使用time_to_reach_max提供更精确的持仓时间
+                        opp_data_scalping['holding_hours'] = time_to_reach_max * 0.25 if time_to_reach_max else time_hours
                         coin_scalping.append(opp_data_scalping)
                     
                     if is_swing:
@@ -21488,7 +21497,8 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         opp_data_swing['signal_type'] = 'swing'
                         time_hours = time_to_reach_3pct * 0.25 if time_to_reach_3pct else 24
                         opp_data_swing['time_to_target'] = time_hours
-                        opp_data_swing['holding_hours'] = time_hours  # 🆕 V8.5.2.4.22: 添加holding_hours字段
+                        # 🔧 V8.5.2.4.24: 使用time_to_reach_max提供更精确的持仓时间
+                        opp_data_swing['holding_hours'] = time_to_reach_max * 0.25 if time_to_reach_max else time_hours
                         coin_swing.append(opp_data_swing)
                 
                 except (ValueError, TypeError, KeyError) as e:
