@@ -15618,9 +15618,10 @@ def calculate_swing_score(market_data):
             score += 20  # 两周期共振
         
         # 3. 4小时趋势强度（波段关键）
-        if "强势多头" in lt["trend"] or "强势空头" in lt["trend"]:
+        lt_trend = lt.get("trend", "")
+        if "强势多头" in lt_trend or "强势空头" in lt_trend:
             score += 25  # 强势趋势
-        elif "多头" in lt["trend"] or "空头" in lt["trend"]:
+        elif "多头" in lt_trend or "空头" in lt_trend:
             score += 15  # 普通趋势
         
         # 4. EMA发散度（趋势强度确认）
@@ -15646,8 +15647,9 @@ def calculate_swing_score(market_data):
                 score += 10
         
         # 6. 简单回调（波段最佳入场点）
-        if pa.get("pullback_type") and pa["pullback_type"].get("type") == "simple_pullback":
-            if pa["pullback_type"].get("signal") == "entry_ready":
+        pullback_type = pa.get("pullback_type")
+        if pullback_type and isinstance(pullback_type, dict):
+            if pullback_type.get("type") == "simple_pullback" and pullback_type.get("signal") == "entry_ready":
                 score += 30  # 🎯 回调完成，波段入场
         
         # === 短期信号（低权重）===
