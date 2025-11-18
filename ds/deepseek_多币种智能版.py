@@ -22893,11 +22893,75 @@ def optimize_strategy_with_risk_control(strategy_data, strategy_type, phase1_bas
         phase2_profit = 1.0
         phase2_params = {}
     
+    # 【V8.5.2.4.14】使用precision_formula动态调整参数基准
+    print(f"\n  📊 读取历史数据的precision_formula...")
+    
+    import os
+    import json
+    from pathlib import Path
+    
+    dynamic_min_score = None
+    dynamic_min_consensus = None
+    
+    model_name = os.getenv("MODEL_NAME", "deepseek")
+    cache_file = Path("trading_data") / model_name / "optimization_cache.json"
+    
+    if cache_file.exists():
+        try:
+            with open(cache_file, 'r') as f:
+                cache = json.load(f)
+                precision_data = cache.get('precision_formula', {})
+                
+                if precision_data and isinstance(precision_data, dict):
+                    by_score = precision_data.get('by_score', {})
+                    by_consensus = precision_data.get('by_consensus', {})
+                    
+                    # 根据Phase 2捕获率，动态设置min_signal_score
+                    # 目标：找到能达到Phase 2捕获率90%的最低score
+                    target_capture = phase2_capture * 0.9
+                    
+                    for score in [50, 60, 70, 80]:
+                        score_str = str(score)
+                        capture_at_score = by_score.get(score_str, by_score.get(score, 0))
+                        if capture_at_score >= target_capture:
+                            dynamic_min_score = score
+                            print(f"     ✅ 根据历史数据，设置min_signal_score={score}（捕获率{capture_at_score*100:.1f}%）")
+                            break
+                    
+                    # 类似地设置min_consensus
+                    for consensus in [1, 2, 3, 4]:
+                        consensus_str = str(consensus)
+                        capture_at_consensus = by_consensus.get(consensus_str, by_consensus.get(consensus, 0))
+                        if capture_at_consensus >= target_capture:
+                            dynamic_min_consensus = consensus
+                            print(f"     ✅ 根据历史数据，设置min_indicator_consensus={consensus}（捕获率{capture_at_consensus*100:.1f}%）")
+                            break
+                    
+                    if not dynamic_min_score:
+                        print(f"     ⚠️  无法从历史数据找到合适的min_signal_score，使用默认值")
+                    if not dynamic_min_consensus:
+                        print(f"     ⚠️  无法从历史数据找到合适的min_consensus，使用默认值")
+        except Exception as e:
+            print(f"     ⚠️  读取precision_formula失败: {e}")
+    else:
+        print(f"     ⚠️  optimization_cache不存在，使用默认参数")
+    
+    # 应用动态阈值到phase2_params
+    if phase2_params:
+        if dynamic_min_score is not None:
+            phase2_params['min_signal_score'] = dynamic_min_score
+            print(f"     📝 更新phase2_params['min_signal_score'] = {dynamic_min_score}")
+        if dynamic_min_consensus is not None:
+            phase2_params['min_indicator_consensus'] = dynamic_min_consensus
+            print(f"     📝 更新phase2_params['min_indicator_consensus'] = {dynamic_min_consensus}")
+    
     # 【V8.5.2.4.12】调用optimize_params_v8321_lightweight
     print(f"\n  🚀 使用optimize_params_v8321_lightweight进行11维度搜索...")
     print(f"     • 测试组数: 100组（vs 旧版4组）")
     print(f"     • 评分方式: 多目标评分（期望收益+盈亏比+胜率+回撤）")
     print(f"     • 异常检测: 自动检测过拟合风险")
+    if dynamic_min_score or dynamic_min_consensus:
+        print(f"     • 动态阈值: score={dynamic_min_score or '默认'}, consensus={dynamic_min_consensus or '默认'}")
     
     try:
         optimization_result = optimize_params_v8321_lightweight(
