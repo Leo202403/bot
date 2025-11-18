@@ -6876,7 +6876,14 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     
     # 【V8.5.2.4.10】计算Phase 2 baseline（供Phase 3使用）
     # 【V8.5.2.4.20】修复：使用全部数据而非训练集计算baseline
+    # 【V8.5.2.4.22】修复：确保phase2_baseline总是生成，避免Phase 3被跳过
     phase2_baseline = None
+    
+    print(f"\n  🔍 【调试】Phase 2 baseline生成条件检查:")
+    print(f"     phase1_baseline: {'✓' if phase1_baseline else '✗'}")
+    print(f"     use_confirmed_opps: {'✓' if use_confirmed_opps else '✗'}")
+    print(f"     all_opportunities_sorted: {len(all_opportunities_sorted) if all_opportunities_sorted else 0}个")
+    
     if phase1_baseline and use_confirmed_opps and all_opportunities_sorted:
         # 使用最优参数过滤机会，计算baseline（使用全部数据）
         best_captured_opps = [
@@ -6884,6 +6891,8 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             if (opp.get('signal_score', 0) >= best_params.get('min_signal_score', 50) and
                 opp.get('consensus', 0) >= best_params.get('min_indicator_consensus', 2))
         ]
+        
+        print(f"     过滤后机会: {len(best_captured_opps)}个（信号分>{best_params.get('min_signal_score', 50)}, 共识>{best_params.get('min_indicator_consensus', 2)}）")
         
         if best_captured_opps:
             # 重新计算actual_profit（使用best_params的TP/SL）
@@ -6911,6 +6920,24 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             print(f"\n  📊 Phase 2 baseline（供Phase 3使用）:")
             print(f"     捕获: {len(best_captured_opps)}个 ({phase2_capture_rate*100:.1f}%)")
             print(f"     平均利润: {phase2_avg_profit:.2f}%")
+        else:
+            # 【V8.5.2.4.22】即使无捕获机会，也生成baseline（避免Phase 3被跳过）
+            print(f"  ⚠️  当前参数未捕获到任何机会，生成空baseline")
+            phase2_baseline = {
+                'captured_count': 0,
+                'capture_rate': 0.0,
+                'avg_profit': 0.0,
+                'params': best_params.copy()
+            }
+    else:
+        # 【V8.5.2.4.22】无条件满足时，生成最小baseline
+        print(f"  ⚠️  Phase 1数据不完整，生成最小baseline")
+        phase2_baseline = {
+            'captured_count': 0,
+            'capture_rate': 0.0,
+            'avg_profit': 0.0,
+            'params': best_params.copy()
+        }
     
     # 【V8.5.2.4.18】前向验证：在验证集上测试参数
     print(f"\n  🔍 【前向验证】在验证集上测试参数...")
@@ -6949,7 +6976,16 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             ]
             
             if train_captured_opps:
-                train_avg_profit = sum(o.get('_phase2_actual_profit', o.get('_test_actual_profit', 0)) for o in train_captured_opps) / len(train_captured_opps)
+                # 【V8.5.2.4.22】修复：重新计算训练集actual_profit（确保使用相同的参数和方法）
+                for opp in train_captured_opps:
+                    actual_profit = calculate_single_actual_profit(
+                        opp,
+                        strategy_params=best_params,
+                        use_dynamic_atr=False
+                    )
+                    opp['_train_actual_profit'] = actual_profit
+                
+                train_avg_profit = sum(o.get('_train_actual_profit', 0) for o in train_captured_opps) / len(train_captured_opps)
                 
                 profit_degradation = (train_avg_profit - val_avg_profit) / train_avg_profit if train_avg_profit > 0 else 0
                 
@@ -9339,14 +9375,14 @@ def analyze_and_adjust_params():
                     phase1_baseline=phase1_baseline_for_phase3,
                     phase2_baseline=phase2_baseline_result,
                     ai_suggested_params=ai_suggested_params
-                )
-                
+                    )
+                    
                 # 应用超短线优化结果
                 if scalping_optimization:
-                    if 'scalping_params' not in config:
-                        config['scalping_params'] = {}
-                    config['scalping_params'].update(scalping_optimization['optimized_params'])
-                    
+                            if 'scalping_params' not in config:
+                                config['scalping_params'] = {}
+                            config['scalping_params'].update(scalping_optimization['optimized_params'])
+                            
                     # 更新profit_comparison数据
                     profit_comparison['scalping'] = {
                         'name': scalping_optimization.get('name', ''),
@@ -9365,14 +9401,14 @@ def analyze_and_adjust_params():
                     phase1_baseline=phase1_baseline_for_phase3,
                     phase2_baseline=phase2_baseline_result,
                     ai_suggested_params=ai_suggested_params
-                )
-                
+                    )
+                    
                 # 应用波段优化结果
                 if swing_optimization:
-                    if 'swing_params' not in config:
-                        config['swing_params'] = {}
-                    config['swing_params'].update(swing_optimization['optimized_params'])
-                    
+                            if 'swing_params' not in config:
+                                config['swing_params'] = {}
+                            config['swing_params'].update(swing_optimization['optimized_params'])
+                            
                     # 更新profit_comparison数据
                     profit_comparison['swing'] = {
                         'name': swing_optimization.get('name', ''),
@@ -9388,7 +9424,7 @@ def analyze_and_adjust_params():
                 print(f"⚠️ Phase 3优化失败: {e}")
                 import traceback
                 traceback.print_exc()
-            
+        
             # 保存到config供邮件使用
             config['_v854_profit_comparison'] = profit_comparison
             
@@ -9688,12 +9724,12 @@ def analyze_and_adjust_params():
                 catch_rate = 0  # 🔧 V7.7.0.15 Fix: 初始化catch_rate避免NameError
                 
                 if opportunity_analysis:
-                    stats = opportunity_analysis['stats']
-                    all_opportunities = opportunity_analysis['all_opportunities']
-                    old_captured = opportunity_analysis['old_captured']  # 🔧 V7.9.1: 使用新的键名
-                    new_captured = opportunity_analysis['new_captured']  # 🔧 V7.9.1: 使用新的键名
-                    missed_new = opportunity_analysis['missed']
-                    catch_rate = stats['new_capture_rate']  # 🔧 V7.9.1: 使用新参数捕获率
+                    stats = opportunity_analysis.get('stats', {})
+                    all_opportunities = opportunity_analysis.get('all_opportunities', [])
+                    old_captured = opportunity_analysis.get('old_captured', [])  # 🔧 V8.5.2.4.22: 使用.get()避免KeyError
+                    new_captured = opportunity_analysis.get('new_captured', [])  # 🔧 V8.5.2.4.22: 使用.get()避免KeyError
+                    missed_new = opportunity_analysis.get('missed', [])
+                    catch_rate = stats.get('new_capture_rate', 0)  # 🔧 V8.5.2.4.22: 使用.get()避免KeyError
                     
                     # 🔧 V7.8.0: 获取旧参数和新参数的捕获率
                     old_capture_rate = stats.get('old_capture_rate', 0)
@@ -21358,9 +21394,9 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         _, row_data = future_row
                         
                         # 计算该方向的利润进展
-                        if direction == 'long':
+                    if direction == 'long':
                             profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
-                        else:
+                    else:
                             profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
                         
                         # 记录首次达到1.5%的时间
@@ -22810,12 +22846,23 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
         from backtest_optimizer_v8321 import detect_anomalies_local
         
         # 【V8.5.2.4.20】修复：all_results需要包含metrics字段
+        # 【V8.5.2.4.22】修复：确保params包含所有param_sensitivity中的字段
         # 构建all_results用于异常检测
         all_results = []
         
+        # 确保参数字典包含异常检测需要的字段（添加默认值）
+        def ensure_params_complete(params):
+            """确保参数字典包含所有必需字段"""
+            complete_params = params.copy()
+            complete_params.setdefault('atr_tp_multiplier', 3.0)
+            complete_params.setdefault('atr_stop_multiplier', 1.5)
+            complete_params.setdefault('min_signal_score', 60)
+            complete_params.setdefault('min_indicator_consensus', 2)
+            return complete_params
+        
         if full_scalping_result and full_scalping_result['captured_count'] > 0:
             all_results.append({
-                'params': scalping_params,
+                'params': ensure_params_complete(scalping_params),
                 'metrics': {
                     'captured_count': full_scalping_result['captured_count'],
                     'win_rate': full_scalping_result['win_rate'],
@@ -22830,7 +22877,7 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
         
         if full_swing_result and full_swing_result['captured_count'] > 0:
             all_results.append({
-                'params': swing_params,
+                'params': ensure_params_complete(swing_params),
                 'metrics': {
                     'captured_count': full_swing_result['captured_count'],
                     'win_rate': full_swing_result['win_rate'],
@@ -22887,23 +22934,27 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
         print(f"     ⚠️  异常检测失败: {e}")
         # 不影响主流程，继续
     
+    # 【V8.5.2.4.22】修复：添加sample_count字段到返回值
     return {
         'status': status,
         'full_test': {
             'captured_count': full_captured_count,
             'capture_rate': full_captured_count / full_total if full_total > 0 else 0,
             'avg_profit': full_avg_profit,
-            'win_rate': full_win_rate
+            'win_rate': full_win_rate,
+            'sample_count': full_total
         },
         'early_period': {
             'captured_count': early_captured,
             'avg_profit': early_avg_profit,
-            'win_rate': early_win_rate
+            'win_rate': early_win_rate,
+            'sample_count': early_count  # 🆕 添加样本数
         },
         'late_period': {
             'captured_count': late_captured,
             'avg_profit': late_avg_profit,
-            'win_rate': late_win_rate
+            'win_rate': late_win_rate,
+            'sample_count': late_count  # 🆕 添加样本数
         },
         'stability': {
             'profit_diff_pct': profit_diff * 100,
