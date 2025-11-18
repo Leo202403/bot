@@ -8895,6 +8895,18 @@ def analyze_and_adjust_params():
                     quick_search_baseline = quick_search_result.get('phase1_baseline')  # 🆕 V8.5.2.4.9
                     print(f"     ✓ 超短线机会: {len(quick_search_opportunities['scalping']['opportunities'])}个")
                     print(f"     ✓ 波段机会: {len(quick_search_opportunities['swing']['opportunities'])}个")
+                    
+                    # 【V8.5.2.4.21】Phase 1阶段总结输出
+                    try:
+                        from phase_output_formatter import print_phase1_summary
+                        print_phase1_summary(
+                            scalping_opps=quick_search_opportunities['scalping']['opportunities'],
+                            swing_opps=quick_search_opportunities['swing']['opportunities'],
+                            phase1_baseline=quick_search_baseline
+                        )
+                    except Exception as summary_err:
+                        print(f"     ⚠️  Phase 1总结输出失败: {summary_err}")
+                    
                 except Exception as e:
                     print(f"     ⚠️  生成机会失败: {e}，将降级使用market_snapshots")
                     quick_search_opportunities = None
@@ -8911,6 +8923,30 @@ def analyze_and_adjust_params():
             
             # 【V8.5.2.4.10】提取Phase 2 baseline（供Phase 3使用）
             phase2_baseline_result = iterative_result.get('phase2_baseline')
+            
+            # 【V8.5.2.4.21】Phase 2阶段总结输出
+            if global_initial_params and phase2_baseline_result:
+                try:
+                    from phase_output_formatter import print_phase2_summary
+                    # 提取前向验证结果（如果有）
+                    validation_result = None
+                    if iterative_result.get('validation_summary'):
+                        val_sum = iterative_result['validation_summary']
+                        train_profit = val_sum.get('train_avg_profit', 0)
+                        val_profit = val_sum.get('val_avg_profit', 0)
+                        validation_result = {
+                            'train_profit': train_profit,
+                            'val_profit': val_profit,
+                            'degradation': ((train_profit - val_profit) / train_profit) if train_profit != 0 else 0
+                        }
+                    
+                    print_phase2_summary(
+                        best_params=global_initial_params,
+                        phase2_baseline=phase2_baseline_result,
+                        validation_result=validation_result
+                    )
+                except Exception as summary_err:
+                    print(f"⚠️  Phase 2总结输出失败: {summary_err}")
             
         elif ENABLE_V770_FULL_OPTIMIZATION:
             # 完整V7.7.0优化（7-10分钟）
@@ -9325,6 +9361,47 @@ def analyze_and_adjust_params():
         # 保存到config供邮件使用
         config['_v854_profit_comparison'] = profit_comparison
         
+        # 【V8.5.2.4.21】Phase 3阶段总结输出
+        if profit_comparison.get('has_data') and phase2_baseline_result:
+            try:
+                from phase_output_formatter import print_phase3_summary
+                
+                # 构建对比数据
+                phase2_params = phase2_baseline_result.get('params', {})
+                phase3_params = config.get('scalping_params', {})  # 使用超短线参数作为代表
+                
+                scalp_data = profit_comparison.get('scalping', {})
+                swing_data = profit_comparison.get('swing', {})
+                
+                comparison_data = {
+                    'scalping': {
+                        'phase2_capture_rate': phase2_baseline_result.get('capture_rate', 0),
+                        'phase3_capture_rate': scalp_data.get('capture_rate', 0),
+                        'phase2_profit': phase2_baseline_result.get('avg_profit', 0),
+                        'phase3_profit': scalp_data.get('avg_profit', 0),
+                        'phase2_winrate': phase2_baseline_result.get('win_rate', 0),
+                        'phase3_winrate': scalp_data.get('win_rate', 0)
+                    },
+                    'swing': {
+                        'phase2_capture_rate': phase2_baseline_result.get('capture_rate', 0),
+                        'phase3_capture_rate': swing_data.get('capture_rate', 0),
+                        'phase2_profit': phase2_baseline_result.get('avg_profit', 0),
+                        'phase3_profit': swing_data.get('avg_profit', 0),
+                        'phase2_winrate': phase2_baseline_result.get('win_rate', 0),
+                        'phase3_winrate': swing_data.get('win_rate', 0)
+                    },
+                    'capture_rate_change': (scalp_data.get('capture_rate', 0) - phase2_baseline_result.get('capture_rate', 0)),
+                    'profit_change': (scalp_data.get('avg_profit', 0) - phase2_baseline_result.get('avg_profit', 0)) / phase2_baseline_result.get('avg_profit', 1)
+                }
+                
+                print_phase3_summary(
+                    phase2_params=phase2_params,
+                    phase3_params=phase3_params,
+                    comparison_data=comparison_data
+                )
+            except Exception as summary_err:
+                print(f"⚠️  Phase 3总结输出失败: {summary_err}")
+        
         
         # ========== 【V8.5.2.4.10】Phase 3重构完成 ==========
         # 旧Phase 3代码（第4.6步+第4.6.5步，约360行）已由optimize_strategy_with_risk_control()替代
@@ -9427,6 +9504,23 @@ def analyze_and_adjust_params():
                     
                     # 保存Phase 4结果到config供邮件使用
                     config['_phase4_validation'] = phase4_result
+                    
+                    # 【V8.5.2.4.21】Phase 4阶段总结输出
+                    try:
+                        from phase_output_formatter import print_phase4_summary
+                        
+                        # 准备最终参数
+                        final_params = {
+                            'scalping': config.get('scalping_params', {}),
+                            'swing': config.get('swing_params', {})
+                        }
+                        
+                        print_phase4_summary(
+                            validation_result=phase4_result,
+                            final_params=final_params
+                        )
+                    except Exception as summary_err:
+                        print(f"⚠️  Phase 4总结输出失败: {summary_err}")
                 
                 # 【V8.5.2.4.11】构建简化的opportunity_analysis（用于邮件报告）
                 # 详细的验证逻辑已由validate_params_with_overfitting_check()完成

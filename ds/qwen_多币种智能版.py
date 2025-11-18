@@ -6613,13 +6613,13 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         raise ValueError("【V8.5.2.3】quick_global_search_v8316必须提供confirmed_opportunities，不再支持降级使用market_snapshots")
     
     # 🔧 V8.5.2.4.16: 修复 - 移到if块外面，确保all_opportunities总是被定义
-    print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
-    # 合并超短线和波段机会
-    all_opportunities = (
-        confirmed_opportunities['scalping']['opportunities'] + 
-        confirmed_opportunities['swing']['opportunities']
-    )
-    print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
+        print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
+        # 合并超短线和波段机会
+        all_opportunities = (
+            confirmed_opportunities['scalping']['opportunities'] + 
+            confirmed_opportunities['swing']['opportunities']
+        )
+        print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
     
     # 【V8.5.2.4.18】前向验证：分割训练集和验证集
     print(f"\n  📊 【前向验证】数据分割（70%训练/30%验证）...")
@@ -8892,6 +8892,18 @@ def analyze_and_adjust_params():
                     quick_search_baseline = quick_search_result.get('phase1_baseline')  # 🆕 V8.5.2.4.9
                     print(f"     ✓ 超短线机会: {len(quick_search_opportunities['scalping']['opportunities'])}个")
                     print(f"     ✓ 波段机会: {len(quick_search_opportunities['swing']['opportunities'])}个")
+                    
+                    # 【V8.5.2.4.21】Phase 1阶段总结输出
+                    try:
+                        from phase_output_formatter import print_phase1_summary
+                        print_phase1_summary(
+                            scalping_opps=quick_search_opportunities['scalping']['opportunities'],
+                            swing_opps=quick_search_opportunities['swing']['opportunities'],
+                            phase1_baseline=quick_search_baseline
+                        )
+                    except Exception as summary_err:
+                        print(f"     ⚠️  Phase 1总结输出失败: {summary_err}")
+                    
                 except Exception as e:
                     print(f"     ⚠️  生成机会失败: {e}，将降级使用market_snapshots")
                     quick_search_opportunities = None
@@ -8908,6 +8920,30 @@ def analyze_and_adjust_params():
             
             # 【V8.5.2.4.10】提取Phase 2 baseline（供Phase 3使用）
             phase2_baseline_result = iterative_result.get('phase2_baseline')
+            
+            # 【V8.5.2.4.21】Phase 2阶段总结输出
+            if global_initial_params and phase2_baseline_result:
+                try:
+                    from phase_output_formatter import print_phase2_summary
+                    # 提取前向验证结果（如果有）
+                    validation_result = None
+                    if iterative_result.get('validation_summary'):
+                        val_sum = iterative_result['validation_summary']
+                        train_profit = val_sum.get('train_avg_profit', 0)
+                        val_profit = val_sum.get('val_avg_profit', 0)
+                        validation_result = {
+                            'train_profit': train_profit,
+                            'val_profit': val_profit,
+                            'degradation': ((train_profit - val_profit) / train_profit) if train_profit != 0 else 0
+                        }
+                    
+                    print_phase2_summary(
+                        best_params=global_initial_params,
+                        phase2_baseline=phase2_baseline_result,
+                        validation_result=validation_result
+                    )
+                except Exception as summary_err:
+                    print(f"⚠️  Phase 2总结输出失败: {summary_err}")
             
         elif ENABLE_V770_FULL_OPTIMIZATION:
             # 完整V7.7.0优化（7-10分钟）
@@ -9138,6 +9174,23 @@ def analyze_and_adjust_params():
                     
                     # 保存Phase 4结果到config供邮件使用
                     config['_phase4_validation'] = phase4_result
+                    
+                    # 【V8.5.2.4.21】Phase 4阶段总结输出
+                    try:
+                        from phase_output_formatter import print_phase4_summary
+                        
+                        # 准备最终参数
+                        final_params = {
+                            'scalping': config.get('scalping_params', {}),
+                            'swing': config.get('swing_params', {})
+                        }
+                        
+                        print_phase4_summary(
+                            validation_result=phase4_result,
+                            final_params=final_params
+                        )
+                    except Exception as summary_err:
+                        print(f"⚠️  Phase 4总结输出失败: {summary_err}")
                 
                 # 【V8.5.2.4.11】构建简化的opportunity_analysis（用于邮件报告）
                 # 详细的验证逻辑已由validate_params_with_overfitting_check()完成
@@ -9155,7 +9208,7 @@ def analyze_and_adjust_params():
                 
                 # 构建简化stats（从Phase 4结果提取）
                 if phase4_result:
-                    stats = {
+                stats = {
                         'total_opportunities': len(all_opps),
                         'new_captured_count': phase4_result['full_test']['captured_count'],
                         'new_capture_rate': phase4_result['full_test']['capture_rate'] * 100,
@@ -9290,10 +9343,10 @@ def analyze_and_adjust_params():
                 
                 # 应用超短线优化结果
                 if scalping_optimization:
-                    if 'scalping_params' not in config:
-                        config['scalping_params'] = {}
-                    config['scalping_params'].update(scalping_optimization['optimized_params'])
-                    
+                            if 'scalping_params' not in config:
+                                config['scalping_params'] = {}
+                            config['scalping_params'].update(scalping_optimization['optimized_params'])
+                            
                     # 更新profit_comparison数据
                     profit_comparison['scalping'] = {
                         'name': scalping_optimization.get('name', ''),
@@ -9316,10 +9369,10 @@ def analyze_and_adjust_params():
                 
                 # 应用波段优化结果
                 if swing_optimization:
-                    if 'swing_params' not in config:
-                        config['swing_params'] = {}
-                    config['swing_params'].update(swing_optimization['optimized_params'])
-                    
+                            if 'swing_params' not in config:
+                                config['swing_params'] = {}
+                            config['swing_params'].update(swing_optimization['optimized_params'])
+                            
                     # 更新profit_comparison数据
                     profit_comparison['swing'] = {
                         'name': swing_optimization.get('name', ''),
@@ -9335,9 +9388,50 @@ def analyze_and_adjust_params():
                 print(f"⚠️ Phase 3优化失败: {e}")
                 import traceback
                 traceback.print_exc()
-        
-        # 保存到config供邮件使用
-        config['_v854_profit_comparison'] = profit_comparison
+            
+            # 保存到config供邮件使用
+            config['_v854_profit_comparison'] = profit_comparison
+            
+            # 【V8.5.2.4.21】Phase 3阶段总结输出
+            if profit_comparison.get('has_data') and phase2_baseline_result:
+                try:
+                    from phase_output_formatter import print_phase3_summary
+                    
+                    # 构建对比数据
+                    phase2_params = phase2_baseline_result.get('params', {})
+                    phase3_params = config.get('scalping_params', {})  # 使用超短线参数作为代表
+                    
+                    scalp_data = profit_comparison.get('scalping', {})
+                    swing_data = profit_comparison.get('swing', {})
+                    
+                    comparison_data = {
+                        'scalping': {
+                            'phase2_capture_rate': phase2_baseline_result.get('capture_rate', 0),
+                            'phase3_capture_rate': scalp_data.get('capture_rate', 0),
+                            'phase2_profit': phase2_baseline_result.get('avg_profit', 0),
+                            'phase3_profit': scalp_data.get('avg_profit', 0),
+                            'phase2_winrate': phase2_baseline_result.get('win_rate', 0),
+                            'phase3_winrate': scalp_data.get('win_rate', 0)
+                        },
+                        'swing': {
+                            'phase2_capture_rate': phase2_baseline_result.get('capture_rate', 0),
+                            'phase3_capture_rate': swing_data.get('capture_rate', 0),
+                            'phase2_profit': phase2_baseline_result.get('avg_profit', 0),
+                            'phase3_profit': swing_data.get('avg_profit', 0),
+                            'phase2_winrate': phase2_baseline_result.get('win_rate', 0),
+                            'phase3_winrate': swing_data.get('win_rate', 0)
+                        },
+                        'capture_rate_change': (scalp_data.get('capture_rate', 0) - phase2_baseline_result.get('capture_rate', 0)),
+                        'profit_change': (scalp_data.get('avg_profit', 0) - phase2_baseline_result.get('avg_profit', 0)) / phase2_baseline_result.get('avg_profit', 1)
+                    }
+                    
+                    print_phase3_summary(
+                        phase2_params=phase2_params,
+                        phase3_params=phase3_params,
+                        comparison_data=comparison_data
+                    )
+                except Exception as summary_err:
+                    print(f"⚠️  Phase 3总结输出失败: {summary_err}")
         
         
         # ========== 【V8.5.2.4.10】Phase 3重构完成 ==========
@@ -21264,9 +21358,9 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         _, row_data = future_row
                         
                         # 计算该方向的利润进展
-                        if direction == 'long':
+                    if direction == 'long':
                             profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
-                        else:
+                    else:
                             profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
                         
                         # 记录首次达到1.5%的时间
