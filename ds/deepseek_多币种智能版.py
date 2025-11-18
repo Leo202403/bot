@@ -21298,9 +21298,9 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         _, row_data = future_row
                         
                         # 计算该方向的利润进展
-                    if direction == 'long':
+                        if direction == 'long':
                             profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
-                    else:
+                        else:
                             profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
                         
                         # 记录首次达到1.5%的时间
