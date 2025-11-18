@@ -6613,25 +6613,26 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     # 🔧 V8.5.2: 扩展参数空间 - 添加出场参数（atr_tp_multiplier, max_holding_hours）
     # 目标：入场参数最大化捕捉机会，出场参数最大化捕捉利润
     test_points = [
-        # 宽松组合（高召回 + 中等止盈）- V8.5.2: 扩大TP范围到3.0-10.0×ATR
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'atr_tp_multiplier': 4.0, 'max_holding_hours': 48, 'min_signal_score': 70, 'name': '极宽松'},
-        {'min_risk_reward': 1.8, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'atr_tp_multiplier': 5.0, 'max_holding_hours': 60, 'min_signal_score': 75, 'name': '偏宽松'},
+        # V8.5.2.1: 针对超短线优化（TP范围2.5-6.0，提高信号质量要求）
+        # 宽松组合（高召回 + 快速止盈）
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'atr_tp_multiplier': 2.5, 'max_holding_hours': 12, 'min_signal_score': 80, 'name': '快速止盈'},
+        {'min_risk_reward': 1.8, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'atr_tp_multiplier': 3.0, 'max_holding_hours': 24, 'min_signal_score': 82, 'name': '偏宽松'},
         
-        # 平衡组合（Precision vs Recall + 高止盈）
-        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'atr_tp_multiplier': 6.0, 'max_holding_hours': 72, 'min_signal_score': 78, 'name': '标准平衡'},
-        {'min_risk_reward': 2.2, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'atr_tp_multiplier': 7.0, 'max_holding_hours': 60, 'min_signal_score': 80, 'name': '高TP平衡'},
+        # 平衡组合（适中止盈 + 质量过滤）
+        {'min_risk_reward': 2.0, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'atr_tp_multiplier': 3.5, 'max_holding_hours': 36, 'min_signal_score': 85, 'name': '标准平衡'},
+        {'min_risk_reward': 2.2, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'atr_tp_multiplier': 4.0, 'max_holding_hours': 48, 'min_signal_score': 85, 'name': '高质量'},
         
-        # 严格组合（高精准 + 极高止盈）
-        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'atr_tp_multiplier': 8.0, 'max_holding_hours': 84, 'min_signal_score': 82, 'name': '偏严格'},
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 2, 'atr_stop_multiplier': atr_max, 'atr_tp_multiplier': 8.5, 'max_holding_hours': 72, 'min_signal_score': 85, 'name': '严格'},
+        # 严格组合（高精准 + 中等止盈）
+        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'atr_tp_multiplier': 4.5, 'max_holding_hours': 60, 'min_signal_score': 87, 'name': '偏严格'},
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'atr_tp_multiplier': 5.0, 'max_holding_hours': 72, 'min_signal_score': 88, 'name': '严格'},
         
-        # 超严格组合（极高精准 + 超高止盈）
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 2, 'atr_stop_multiplier': atr_max, 'atr_tp_multiplier': 9.0, 'max_holding_hours': 96, 'min_signal_score': 88, 'name': '超严格'},
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'atr_tp_multiplier': 10.0, 'max_holding_hours': 96, 'min_signal_score': 90, 'name': '极严格'},
+        # 超严格组合（极高精准 + 适中止盈）
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'atr_tp_multiplier': 5.5, 'max_holding_hours': 84, 'min_signal_score': 90, 'name': '超严格'},
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'atr_tp_multiplier': 6.0, 'max_holding_hours': 96, 'min_signal_score': 92, 'name': '极严格'},
         
-        # 特殊组合（测试不同维度）
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 2, 'atr_stop_multiplier': atr_max, 'atr_tp_multiplier': 6.0, 'max_holding_hours': 48, 'min_signal_score': 80, 'name': '低R:R高共振'},
-        {'min_risk_reward': 2.2, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'atr_tp_multiplier': 5.0, 'max_holding_hours': 60, 'min_signal_score': 75, 'name': '快速止盈'},
+        # 特殊组合（混合策略）
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'atr_tp_multiplier': 3.5, 'max_holding_hours': 24, 'min_signal_score': 88, 'name': '低R:R高共振'},
+        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'atr_tp_multiplier': 3.0, 'max_holding_hours': 18, 'min_signal_score': 82, 'name': '超快止盈'},
     ]
     
     # 🔧 V8.3.31.7: use_confirmed_opps 已在函数开始处定义（避免UnboundLocalError）
@@ -20860,9 +20861,9 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         # 不再依赖old_config，避免上一次优化失败的参数影响本次回测
         # 【V8.4.6】提高ATR倍数，让actual_profit更接近理论值
         scalping_params = {
-            'atr_tp_multiplier': 5.0,    # 【V8.5.2】从2.5提高到5.0（中庸值，确保基础数据质量）
+            'atr_tp_multiplier': 3.0,    # 【V8.5.2.1】从5.0降到3.0（符合超短线快进快出本质）
             'atr_stop_multiplier': 2.0,  # 【V8.5.2】从1.5放宽到2.0（适应加密货币波动）
-            'max_holding_hours': 12
+            'max_holding_hours': 6       # 【V8.5.2.1】从12降到6（真正的超短线）
         }
         
         swing_params = {
@@ -20871,9 +20872,9 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             'max_holding_hours': 72
         }
         
-        print(f"  🎯 使用宽松基准参数计算actual_profit（确保基础数据质量）")
-        print(f"     超短线: atr_tp=5.0, atr_sl=2.0  【V8.5.2优化】")
-        print(f"     波段: atr_tp=6.0, atr_sl=2.5  【V8.5.2优化】")
+        print(f"  🎯 使用差异化基准参数计算actual_profit（超短线vs波段）")
+        print(f"     超短线: atr_tp=3.0, atr_sl=2.0, 持仓≤6h  【V8.5.2.1：降低TP，符合快进快出】")
+        print(f"     波段: atr_tp=6.0, atr_sl=2.5, 持仓≤72h  【V8.5.2：捕捉完整趋势】")
         
         print(f"  📊 分析历史快照: {len(market_snapshots)}条记录")
         if ENABLE_SAMPLING:
