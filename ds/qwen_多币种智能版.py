@@ -2808,6 +2808,10 @@ def save_market_snapshot_v7(market_data_list):
                 ("空头" in trend_15m and "空头" in trend_1h and "空头" in trend_4h):
                 indicator_consensus += 1
             
+            # 【V8.5.2.4.3】添加到data字典中，确保实时传递给AI和订单保存
+            data["indicator_consensus"] = indicator_consensus
+            data["indicators"] = {"consensus": indicator_consensus}  # 也添加到indicators子字典
+            
             # 【V8.4】计算综合确认度评分（0-100分）
             try:
                 from consensus_calculator import calculate_consensus_score
@@ -2853,6 +2857,11 @@ def save_market_snapshot_v7(market_data_list):
             except Exception as e:
                 print(f"⚠️ 计算consensus_score失败: {e}")
                 consensus_score = 0
+            
+            # 【V8.5.2.4.3】添加consensus_score到data字典
+            data["consensus_score"] = consensus_score
+            if "indicators" in data:
+                data["indicators"]["consensus_score"] = consensus_score
             
             # 【V8.2】计算信号评分的各个维度（保存"原料"而非"成品"）
             # 初始化signal_type（防止未定义错误）
