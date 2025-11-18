@@ -9273,7 +9273,7 @@ def analyze_and_adjust_params():
                             reasons.append(f"信号分{opp.get('signal_score', 0)}<{new_scalping_params.get('min_signal_score', 60)}")
                         if opp.get('consensus_score', 0) < new_scalping_params.get('min_consensus_score', 0):
                             reasons.append(f"共振{opp.get('consensus_score', 0)}<{new_scalping_params.get('min_consensus_score', 0)}")
-                        miss_reason = "、".join(reasons) if reasons else "其他"
+                        miss_reason = "、".join(reasons) if reasons else "其他原因"  # 🔧 V8.5.2.4.28
                         print(f"     {opp['coin']}: 信号分{opp.get('signal_score', 0)} | {miss_reason}")
                 
             except Exception as e:
@@ -10008,12 +10008,12 @@ def analyze_and_adjust_params():
                 <div style="display: flex; justify-content: space-around; margin: 8px 0;">
                     <div style="text-align: center; flex: 1;">
                         <div style="font-size: 0.8em; opacity: 0.8;">捕获数量</div>
-                        <div style="font-size: 1.3em; font-weight: bold;">{scalping_data['old_count']}个</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{scalping_data.get('old_count', 0)}个</div>
                     </div>
                     <div style="align-self: center; opacity: 0.5;">→</div>
                     <div style="text-align: center; flex: 1;">
                         <div style="font-size: 0.8em; opacity: 0.8;">捕获数量</div>
-                        <div style="font-size: 1.3em; font-weight: bold;">{scalping_data['new_count']}个 ({scalping_data['count_diff']:+d})</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{scalping_data.get('new_count', 0)}个 ({scalping_data['count_diff']:+d})</div>
                     </div>
                 </div>
                 <div style="display: flex; justify-content: space-around; margin: 8px 0;">
@@ -10046,12 +10046,12 @@ def analyze_and_adjust_params():
                 <div style="display: flex; justify-content: space-around; margin: 8px 0;">
                     <div style="text-align: center; flex: 1;">
                         <div style="font-size: 0.8em; opacity: 0.8;">捕获数量</div>
-                        <div style="font-size: 1.3em; font-weight: bold;">{swing_data['old_count']}个</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{swing_data.get('old_count', 0)}个</div>
                     </div>
                     <div style="align-self: center; opacity: 0.5;">→</div>
                     <div style="text-align: center; flex: 1;">
                         <div style="font-size: 0.8em; opacity: 0.8;">捕获数量</div>
-                        <div style="font-size: 1.3em; font-weight: bold;">{swing_data['new_count']}个 ({swing_data['count_diff']:+d})</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{swing_data.get('new_count', 0)}个 ({swing_data['count_diff']:+d})</div>
                     </div>
                 </div>
                 <div style="display: flex; justify-content: space-around; margin: 8px 0;">
