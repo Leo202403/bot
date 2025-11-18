@@ -18060,17 +18060,26 @@ def _execute_single_open_action_v55(
     symbol_config = get_learning_config_for_symbol(symbol, learning_config)
     print(f"✓ 使用配置: {symbol_config.get('_source', '全局默认')} + 信号分级({signal_tier})")
 
-    # 1. 信号评分
-    score, position_ratio, suggested_leverage, signal_classification = calculate_signal_score(market_data)
+    # 1. 信号评分【V8.5.2.3：用实时评分函数+learning_config权重】
+    score_from_realtime, signal_type_from_realtime = calculate_realtime_signal_score(market_data, learning_config)
+    
+    # 仍然调用旧函数获取完整的signal_classification和position_ratio（用于后续逻辑）
+    _, position_ratio, suggested_leverage, signal_classification = calculate_signal_score(market_data)
     
     # 【V7.9.1修复】优先使用AI明确指定的signal_mode
     ai_signal_mode = action.get("signal_mode", "").lower()
     if ai_signal_mode in ['scalping', 'swing']:
         signal_classification['signal_type'] = ai_signal_mode
         signal_classification['reason'] = f"AI明确指定: {ai_signal_mode}"
-        print(f"✓ 信号得分: {score}/100 | 信号类型: {signal_classification['signal_type']} (AI指定) ({signal_classification['signal_name']})")
+        signal_type_from_realtime = ai_signal_mode  # 同步更新
+        print(f"✓ 信号得分: {score_from_realtime}/100 | 信号类型: {signal_classification['signal_type']} (AI指定) ({signal_classification['signal_name']})")
     else:
-        print(f"✓ 信号得分: {score}/100 | 信号类型: {signal_classification['signal_type']} (系统推断) ({signal_classification['signal_name']})")
+        # 使用实时评分函数的类型判断
+        signal_classification['signal_type'] = signal_type_from_realtime
+        print(f"✓ 信号得分: {score_from_realtime}/100 | 信号类型: {signal_classification['signal_type']} (实时计算) ({signal_classification['signal_name']})")
+    
+    # 使用实时计算的评分
+    score = score_from_realtime
     
     # 【V7.9】账号阶段对信号类型的限制检查
     try:
@@ -20131,19 +20140,18 @@ def analyze_trade_performance(trade, kline_snapshots):
         return {"error": f"分析失败: {str(e)}"}
 
 
-def recalculate_signal_score_from_snapshot(snapshot_row, signal_type):
+def recalculate_signal_score_from_snapshot(snapshot_row, signal_type, learning_config=None):
     """
-    【V8.5.2.2修复】从历史快照真正重新计算signal_score
+    【V8.5.2.3升级】从历史快照真正重新计算signal_score（支持权重配置）
     
-    核心改进：不依赖CSV中的错误维度分数，而是从原始OHLCV/指标数据重新计算
-    
-    问题根源：
-    - export_historical_data.py在生成快照时，calculate_signal_score_components失败返回50
-    - 导致30%利润的机会也只有50分，参数优化无法识别高质量机会
+    核心改进：
+    - 从原始OHLCV/指标数据重新计算（不依赖CSV中可能错误的维度分数）
+    - 支持learning_config权重配置（用于回测时用新参数评估历史机会）
     
     Args:
         snapshot_row: 历史快照的一行数据（pd.Series或dict）
-        signal_type: 'scalping' 或 'swing'
+        signal_type: 'scalping' 或 'swing' (基于实际价格走势的客观类型)
+        learning_config: 学习配置（包含权重配置，可选）
     
     Returns:
         int: 重新计算的signal_score（0-100）
@@ -20167,7 +20175,35 @@ def recalculate_signal_score_from_snapshot(snapshot_row, signal_type):
         return str(value)
     
     try:
-        # 🔧 V8.5.2.2: 从原始数据真正重新计算
+        # 🔧 V8.5.2.3: 从原始数据重新计算+支持权重配置
+        
+        # 获取权重配置（默认权重）
+        DEFAULT_SCALPING_WEIGHTS = {
+            'momentum': 20,
+            'volume': 35,
+            'breakout': 25,
+            'pattern': 12,
+            'trend_align': 10
+        }
+        
+        DEFAULT_SWING_WEIGHTS = {
+            'momentum': 20,
+            'volume': 35,
+            'breakout': 25,
+            'trend_align': 35,
+            'ema_divergence': 15,
+            'trend_4h_strength': 25
+        }
+        
+        # 从learning_config读取权重（如果有）
+        if learning_config and isinstance(learning_config, dict):
+            if signal_type == 'scalping':
+                weights = learning_config.get('scalping_score_weights', DEFAULT_SCALPING_WEIGHTS)
+            else:
+                weights = learning_config.get('swing_score_weights', DEFAULT_SWING_WEIGHTS)
+        else:
+            weights = DEFAULT_SCALPING_WEIGHTS if signal_type == 'scalping' else DEFAULT_SWING_WEIGHTS
+        
         total_score = 50  # 基础分
         
         # 获取原始数据（所有快照都有这些字段）
@@ -20183,35 +20219,35 @@ def recalculate_signal_score_from_snapshot(snapshot_row, signal_type):
         
         rsi_14 = safe_float(snapshot_row.get('rsi_14', 50))
         
-        # 【1. 动量评分】（超短线/波段通用）
+        # 【1. 动量评分】（用权重）
         if open_price > 0:
             momentum = abs((close - open_price) / open_price)
             if momentum > 0.015:
-                total_score += 20  # 强劲动量
+                total_score += weights.get('momentum', 20)
             elif momentum > 0.01:
-                total_score += 15
+                total_score += weights.get('momentum', 20) * 0.75
             elif momentum > 0.005:
-                total_score += 10
+                total_score += weights.get('momentum', 20) * 0.5
         
-        # 【2. 成交量评分】（快照中的volume_ratio字段）
+        # 【2. 成交量评分】（用权重）
         volume_ratio = safe_float(snapshot_row.get('volume_ratio', 0))
         if volume_ratio > 2.0:  # 极端放量
-            total_score += 35 if signal_type == 'scalping' else 35
+            total_score += weights.get('volume', 35)
         elif volume_ratio > 1.5:  # 强放量
-            total_score += 20
+            total_score += weights.get('volume', 35) * 0.6
         elif volume_ratio > 1.2:  # 中等放量
-            total_score += 10
+            total_score += weights.get('volume', 35) * 0.3
         
-        # 【3. 突破评分】（简化版：检查是否接近阻力/支撑）
+        # 【3. 突破评分】（用权重）
         resistance = safe_float(snapshot_row.get('resistance', 0))
         support = safe_float(snapshot_row.get('support', 0))
         if resistance > 0 and close > resistance * 1.001:  # 突破阻力
-            total_score += 25
+            total_score += weights.get('breakout', 25)
         elif support > 0 and close < support * 0.999:  # 突破支撑
-            total_score += 25
+            total_score += weights.get('breakout', 25)
         
-        # 【4. Pin Bar / 吞没形态评分】
-        if high > low and open_price > 0:
+        # 【4. Pin Bar / 吞没形态评分】（用权重，仅scalping）
+        if signal_type == 'scalping' and high > low and open_price > 0:
             body = abs(close - open_price)
             total_range = high - low
             upper_wick = high - max(close, open_price)
@@ -20219,11 +20255,11 @@ def recalculate_signal_score_from_snapshot(snapshot_row, signal_type):
             
             # Pin Bar判断
             if upper_wick > body * 2 and lower_wick < body * 0.5:
-                total_score += 12  # Bearish Pin
+                total_score += weights.get('pattern', 12)  # Bearish Pin
             elif lower_wick > body * 2 and upper_wick < body * 0.5:
-                total_score += 12  # Bullish Pin
+                total_score += weights.get('pattern', 12)  # Bullish Pin
         
-        # 【5. 趋势对齐评分】
+        # 【5. 趋势对齐评分】（用权重）
         trends = [trend_4h, trend_1h, trend_15m]
         bull_count = sum(1 for t in trends if '多头' in t)
         bear_count = sum(1 for t in trends if '空头' in t)
@@ -20232,31 +20268,31 @@ def recalculate_signal_score_from_snapshot(snapshot_row, signal_type):
         if signal_type == 'scalping':
             # 超短线：趋势权重低
             if aligned_count >= 2:
-                total_score += 10
+                total_score += weights.get('trend_align', 10)
         else:  # swing
             # 波段：趋势权重高
             if aligned_count >= 3:
-                total_score += 35  # 三层对齐
+                total_score += weights.get('trend_align', 35)  # 三层对齐
             elif aligned_count >= 2:
-                total_score += 20  # 两层对齐
+                total_score += weights.get('trend_align', 35) * 0.6  # 两层对齐
         
-        # 【6. 波段专用：EMA发散】
+        # 【6. 波段专用：EMA发散】（用权重）
         if signal_type == 'swing':
             ema20 = safe_float(snapshot_row.get('ema20', 0))
             ema50 = safe_float(snapshot_row.get('ema50', 0))
             if ema20 > 0 and ema50 > 0:
                 ema_divergence = abs(ema20 - ema50) / ema50 * 100
                 if ema_divergence >= 5.0:
-                    total_score += 15
+                    total_score += weights.get('ema_divergence', 15)
                 elif ema_divergence >= 3.0:
-                    total_score += 10
+                    total_score += weights.get('ema_divergence', 15) * 0.67
         
-        # 【7. 波段专用：4小时趋势强度】
+        # 【7. 波段专用：4小时趋势强度】（用权重）
         if signal_type == 'swing':
             if "强势多头" in trend_4h or "强势空头" in trend_4h:
-                total_score += 25
+                total_score += weights.get('trend_4h_strength', 25)
             elif "多头" in trend_4h or "空头" in trend_4h:
-                total_score += 15
+                total_score += weights.get('trend_4h_strength', 25) * 0.6
         
         # 【减分项】
         # RSI极端值（超短线惩罚小，波段惩罚大）
@@ -20267,7 +20303,7 @@ def recalculate_signal_score_from_snapshot(snapshot_row, signal_type):
         return min(100, max(0, int(total_score)))
         
     except Exception as e:
-        print(f"⚠️ 【V8.5.2.2】真正重新计算signal_score失败: {e}")
+        print(f"⚠️ 【V8.5.2.3】真正重新计算signal_score失败: {e}")
         import traceback
         traceback.print_exc()
         return 50  # 默认值
