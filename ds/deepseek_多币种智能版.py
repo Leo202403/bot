@@ -21548,14 +21548,16 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     if time_to_reach_max is None and profit_pct >= objective_profit * 0.9:
                         time_to_reach_max = bar_idx + 1
                     
-                    # 判断是否符合超短线/波段条件（基于客观利润和时间）
-                    # scalping条件：12小时内达到≥1.5%利润  【V8.5.2.4.24：从6h放宽到12h】
+                    # 【V8.5.2.4.25】改进：基于波动幅度分类，时长由市场数据决定
+                    # 不再强制规定时间窗口，让市场告诉我们"超短线/波段需要多久"
+                    # 
+                    # scalping条件：达到≥1.5%波动（在24h内，记录实际时长）
                     is_scalping = (time_to_reach_1_5pct is not None and 
-                                  time_to_reach_1_5pct <= 48 and  # 12小时=48个15分钟K线
                                   objective_profit >= 1.5)
                     
-                    # swing条件：达到≥3%利润（无论时间）
-                    is_swing = objective_profit >= 3.0
+                    # swing条件：达到≥3%波动（在24h内，记录实际时长）
+                    is_swing = (time_to_reach_3pct is not None and 
+                               objective_profit >= 3.0)
                     
                     # 如果两者都不符合，跳过
                     if not is_scalping and not is_swing:
@@ -21702,14 +21704,19 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         }
         
         # 【V8.5.2.4.9】Phase 1 baseline统计（供Phase 2使用）
+        # 【V8.5.2.4.25】添加平均持仓时间统计，让市场数据指导AI参数优化
         phase1_baseline = {
             'scalping': {
                 'count': len(scalping_opps),
-                'avg_objective_profit': np.mean([o.get('objective_profit', 0) for o in scalping_opps]) if scalping_opps else 0
+                'avg_objective_profit': np.mean([o.get('objective_profit', 0) for o in scalping_opps]) if scalping_opps else 0,
+                'avg_holding_hours': np.mean([o.get('holding_hours', 0) for o in scalping_opps if o.get('holding_hours')]) if scalping_opps else 0,
+                'median_holding_hours': np.median([o.get('holding_hours', 0) for o in scalping_opps if o.get('holding_hours')]) if scalping_opps else 0
             },
             'swing': {
                 'count': len(swing_opps),
-                'avg_objective_profit': np.mean([o.get('objective_profit', 0) for o in swing_opps]) if swing_opps else 0
+                'avg_objective_profit': np.mean([o.get('objective_profit', 0) for o in swing_opps]) if swing_opps else 0,
+                'avg_holding_hours': np.mean([o.get('holding_hours', 0) for o in swing_opps if o.get('holding_hours')]) if swing_opps else 0,
+                'median_holding_hours': np.median([o.get('holding_hours', 0) for o in swing_opps if o.get('holding_hours')]) if swing_opps else 0
             }
         }
         

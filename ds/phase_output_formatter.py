@@ -32,17 +32,22 @@ def print_phase1_summary(scalping_opps, swing_opps, phase1_baseline):
     else:
         scalping_avg_profit = 0
     
-    # 计算平均持仓时间（超短线）
-    if scalping_opps:
+    # 【V8.5.2.4.25】从baseline或直接计算持仓时间（平均值和中位数）
+    if phase1_baseline and phase1_baseline.get('scalping', {}).get('avg_holding_hours', 0) > 0:
+        scalping_avg_holding = phase1_baseline['scalping']['avg_holding_hours']
+        scalping_median_holding = phase1_baseline['scalping'].get('median_holding_hours', 0)
+    elif scalping_opps:
         holding_times = [o.get('holding_hours', 0) for o in scalping_opps if o.get('holding_hours')]
         scalping_avg_holding = sum(holding_times) / len(holding_times) if holding_times else 0
+        scalping_median_holding = sorted(holding_times)[len(holding_times)//2] if holding_times else 0
     else:
         scalping_avg_holding = 0
+        scalping_median_holding = 0
     
     print(f"\n📊 超短线机会:")
     print(f"   - 总数: {scalping_count}个")
     print(f"   - 平均最大利润: {scalping_avg_profit:.2f}%")
-    print(f"   - 平均持仓时间: {scalping_avg_holding:.1f}小时")
+    print(f"   - 平均持仓时间: {scalping_avg_holding:.1f}小时（中位数: {scalping_median_holding:.1f}h）")
     print(f"   - 盈利机会: {scalping_profitable}个 ({scalping_profitable/scalping_count*100 if scalping_count > 0 else 0:.1f}%)")
     
     # 波段统计
@@ -58,17 +63,22 @@ def print_phase1_summary(scalping_opps, swing_opps, phase1_baseline):
     else:
         swing_avg_profit = 0
     
-    # 计算平均持仓时间（波段）
-    if swing_opps:
+    # 【V8.5.2.4.25】从baseline或直接计算持仓时间（平均值和中位数）
+    if phase1_baseline and phase1_baseline.get('swing', {}).get('avg_holding_hours', 0) > 0:
+        swing_avg_holding = phase1_baseline['swing']['avg_holding_hours']
+        swing_median_holding = phase1_baseline['swing'].get('median_holding_hours', 0)
+    elif swing_opps:
         holding_times = [o.get('holding_hours', 0) for o in swing_opps if o.get('holding_hours')]
         swing_avg_holding = sum(holding_times) / len(holding_times) if holding_times else 0
+        swing_median_holding = sorted(holding_times)[len(holding_times)//2] if holding_times else 0
     else:
         swing_avg_holding = 0
+        swing_median_holding = 0
     
     print(f"\n📊 波段机会:")
     print(f"   - 总数: {swing_count}个")
     print(f"   - 平均最大利润: {swing_avg_profit:.2f}%")
-    print(f"   - 平均持仓时间: {swing_avg_holding:.1f}小时")
+    print(f"   - 平均持仓时间: {swing_avg_holding:.1f}小时（中位数: {swing_median_holding:.1f}h）")
     print(f"   - 盈利机会: {swing_profitable}个 ({swing_profitable/swing_count*100 if swing_count > 0 else 0:.1f}%)")
     
     # 总计
@@ -78,6 +88,10 @@ def print_phase1_summary(scalping_opps, swing_opps, phase1_baseline):
     print(f"   - 平均最大利润: {(scalping_avg_profit + swing_avg_profit) / 2:.2f}%")
     print(f"   - 超短线/波段比例: {scalping_count}:{swing_count}")
     
+    # 【V8.5.2.4.25】新增持仓时间对比，让市场数据指导策略
+    if scalping_count > 0 and swing_count > 0:
+        print(f"   - 持仓时间对比: 超短线{scalping_avg_holding:.1f}h vs 波段{swing_avg_holding:.1f}h (比例1:{swing_avg_holding/scalping_avg_holding if scalping_avg_holding > 0 else 0:.1f})")
+    
     print(f"\n{'='*70}\n")
     
     return {
@@ -85,7 +99,11 @@ def print_phase1_summary(scalping_opps, swing_opps, phase1_baseline):
         'swing_count': swing_count,
         'total_count': total_count,
         'scalping_avg_profit': scalping_avg_profit,
-        'swing_avg_profit': swing_avg_profit
+        'swing_avg_profit': swing_avg_profit,
+        'scalping_avg_holding': scalping_avg_holding,
+        'swing_avg_holding': swing_avg_holding,
+        'scalping_median_holding': scalping_median_holding,
+        'swing_median_holding': swing_median_holding
     }
 
 
