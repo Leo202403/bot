@@ -22,21 +22,53 @@ def print_phase1_summary(scalping_opps, swing_opps, phase1_baseline):
     # 超短线统计
     scalping_count = len(scalping_opps) if scalping_opps else 0
     scalping_profitable = len([o for o in scalping_opps if o.get('objective_profit', 0) > 0]) if scalping_opps else 0
-    scalping_avg_profit = phase1_baseline.get('scalping', {}).get('avg_objective_profit', 0) if phase1_baseline else 0
+    
+    # 从baseline或直接计算平均利润
+    if phase1_baseline and phase1_baseline.get('scalping', {}).get('avg_objective_profit', 0) > 0:
+        scalping_avg_profit = phase1_baseline['scalping']['avg_objective_profit']
+    elif scalping_opps:
+        profits = [o.get('objective_profit', 0) for o in scalping_opps if o.get('objective_profit', 0) > 0]
+        scalping_avg_profit = sum(profits) / len(profits) if profits else 0
+    else:
+        scalping_avg_profit = 0
+    
+    # 计算平均持仓时间（超短线）
+    if scalping_opps:
+        holding_times = [o.get('holding_hours', 0) for o in scalping_opps if o.get('holding_hours')]
+        scalping_avg_holding = sum(holding_times) / len(holding_times) if holding_times else 0
+    else:
+        scalping_avg_holding = 0
     
     print(f"\n📊 超短线机会:")
     print(f"   - 总数: {scalping_count}个")
     print(f"   - 平均最大利润: {scalping_avg_profit:.2f}%")
+    print(f"   - 平均持仓时间: {scalping_avg_holding:.1f}小时")
     print(f"   - 盈利机会: {scalping_profitable}个 ({scalping_profitable/scalping_count*100 if scalping_count > 0 else 0:.1f}%)")
     
     # 波段统计
     swing_count = len(swing_opps) if swing_opps else 0
     swing_profitable = len([o for o in swing_opps if o.get('objective_profit', 0) > 0]) if swing_opps else 0
-    swing_avg_profit = phase1_baseline.get('swing', {}).get('avg_objective_profit', 0) if phase1_baseline else 0
+    
+    # 从baseline或直接计算平均利润
+    if phase1_baseline and phase1_baseline.get('swing', {}).get('avg_objective_profit', 0) > 0:
+        swing_avg_profit = phase1_baseline['swing']['avg_objective_profit']
+    elif swing_opps:
+        profits = [o.get('objective_profit', 0) for o in swing_opps if o.get('objective_profit', 0) > 0]
+        swing_avg_profit = sum(profits) / len(profits) if profits else 0
+    else:
+        swing_avg_profit = 0
+    
+    # 计算平均持仓时间（波段）
+    if swing_opps:
+        holding_times = [o.get('holding_hours', 0) for o in swing_opps if o.get('holding_hours')]
+        swing_avg_holding = sum(holding_times) / len(holding_times) if holding_times else 0
+    else:
+        swing_avg_holding = 0
     
     print(f"\n📊 波段机会:")
     print(f"   - 总数: {swing_count}个")
     print(f"   - 平均最大利润: {swing_avg_profit:.2f}%")
+    print(f"   - 平均持仓时间: {swing_avg_holding:.1f}小时")
     print(f"   - 盈利机会: {swing_profitable}个 ({swing_profitable/swing_count*100 if swing_count > 0 else 0:.1f}%)")
     
     # 总计
@@ -51,7 +83,9 @@ def print_phase1_summary(scalping_opps, swing_opps, phase1_baseline):
     return {
         'scalping_count': scalping_count,
         'swing_count': swing_count,
-        'total_count': total_count
+        'total_count': total_count,
+        'scalping_avg_profit': scalping_avg_profit,
+        'swing_avg_profit': swing_avg_profit
     }
 
 
