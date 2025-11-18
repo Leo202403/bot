@@ -9460,9 +9460,9 @@ def analyze_and_adjust_params():
                             'phase2_winrate': phase2_baseline_result.get('win_rate', 0),
                             'phase3_winrate': swing_data.get('win_rate', 0)
                         },
-                        'capture_rate_change': (scalp_data.get('capture_rate', 0) - phase2_baseline_result.get('capture_rate', 0)),
-                        'profit_change': (scalp_data.get('avg_profit', 0) - phase2_baseline_result.get('avg_profit', 0)) / phase2_baseline_result.get('avg_profit', 1)
-                    }
+                    'capture_rate_change': (scalp_data.get('capture_rate', 0) - phase2_baseline_result.get('capture_rate', 0)),
+                    'profit_change': ((scalp_data.get('avg_profit', 0) - phase2_baseline_result.get('avg_profit', 0)) / phase2_baseline_result.get('avg_profit', 0.01) if phase2_baseline_result.get('avg_profit', 0) != 0 else 0)
+                }
                     
                     print_phase3_summary(
                         phase2_params=phase2_params,
@@ -9998,9 +9998,9 @@ def analyze_and_adjust_params():
                         
                         # 超短线策略
                         if scalping_data:
-                            s_old = scalping_data['old_total_profit']
-                            s_new = scalping_data['new_total_profit']
-                            s_diff = scalping_data['profit_diff']
+                            s_old = scalping_data.get('old_total_profit', 0)
+                            s_new = scalping_data.get('new_total_profit', 0)
+                            s_diff = scalping_data.get('profit_diff', 0)
                             s_emoji = '🟢' if s_diff > 0 else ('🔴' if s_diff < 0 else '⚪')
                             opportunity_stats_html += f"""
             <div style="margin: 15px 0; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 6px;">
@@ -10036,9 +10036,9 @@ def analyze_and_adjust_params():
                         
                         # 波段策略
                         if swing_data:
-                            w_old = swing_data['old_total_profit']
-                            w_new = swing_data['new_total_profit']
-                            w_diff = swing_data['profit_diff']
+                            w_old = swing_data.get('old_total_profit', 0)
+                            w_new = swing_data.get('new_total_profit', 0)
+                            w_diff = swing_data.get('profit_diff', 0)
                             w_emoji = '🟢' if w_diff > 0 else ('🔴' if w_diff < 0 else '⚪')
                             opportunity_stats_html += f"""
             <div style="margin: 15px 0; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 6px;">
@@ -21398,22 +21398,22 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         _, row_data = future_row
                         
                         # 计算该方向的利润进展
-                    if direction == 'long':
-                        profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
-                    else:
-                        profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
-                    
-                    # 记录首次达到1.5%的时间
-                    if time_to_reach_1_5pct is None and profit_pct >= 1.5:
-                        time_to_reach_1_5pct = bar_idx + 1
-                    
-                    # 记录首次达到3%的时间
-                    if time_to_reach_3pct is None and profit_pct >= 3.0:
-                        time_to_reach_3pct = bar_idx + 1
-                    
-                    # 🆕 V8.5.2.4.24: 记录首次达到90%最大利润的时间（作为合理退出点）
-                    if time_to_reach_max is None and profit_pct >= objective_profit * 0.9:
-                        time_to_reach_max = bar_idx + 1
+                        if direction == 'long':
+                            profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
+                        else:
+                            profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
+                        
+                        # 记录首次达到1.5%的时间
+                        if time_to_reach_1_5pct is None and profit_pct >= 1.5:
+                            time_to_reach_1_5pct = bar_idx + 1
+                        
+                        # 记录首次达到3%的时间
+                        if time_to_reach_3pct is None and profit_pct >= 3.0:
+                            time_to_reach_3pct = bar_idx + 1
+                        
+                        # 🆕 V8.5.2.4.24: 记录首次达到90%最大利润的时间（作为合理退出点）
+                        if time_to_reach_max is None and profit_pct >= objective_profit * 0.9:
+                            time_to_reach_max = bar_idx + 1
                     
                     # 【V8.5.2.4.25】改进：基于波动幅度分类，时长由市场数据决定
                     # 不再强制规定时间窗口，让市场告诉我们"超短线/波段需要多久"
