@@ -8924,10 +8924,11 @@ def analyze_and_adjust_params():
         else:
             config["market_regime"]["pause_trading"] = False
 
-        # ========== 【V8.4.10】第4.5步：用新参数重新评估历史机会（使用动态ATR） ==========
-        print("\n【第4.5步：用新参数重新评估历史机会】")
+        # ========== 【V8.5.2.4.11】第4步：Phase 4参数验证与过拟合检测 ==========
+        print("\n【第4步：Phase 4参数验证与过拟合检测】")
         opportunity_analysis = None
-        validation_passed = True  # 【V8.4.10】默认通过
+        validation_passed = True  # 默认通过
+        phase4_result = None
         
         if kline_snapshots is not None and not kline_snapshots.empty:
             try:
@@ -22294,6 +22295,309 @@ def analyze_signal_type_performance(opportunities):
             }
     
     return result
+
+
+def validate_params_with_overfitting_check(full_data, scalping_params, swing_params, phase2_baseline=None):
+    """
+    【V8.5.2.4.11】Phase 4: 参数验证与过拟合检测
+    
+    目标：
+    - 全量数据测试（14天）
+    - 分段测试（前7天 vs 后7天）
+    - 过拟合检测
+    - 稳定性评分
+    
+    Args:
+        full_data: 全量历史机会数据（14天）
+        scalping_params: Phase 3优化的超短线参数
+        swing_params: Phase 3优化的波段参数
+        phase2_baseline: Phase 2的baseline（可选，用于回退）
+    
+    Returns:
+        {
+            'status': 'PASSED'|'WARNING'|'UNSTABLE'|'OVERFITTED'|'FAILED',
+            'full_test': {...},
+            'early_period': {...},
+            'late_period': {...},
+            'stability': {...},
+            'recommendation': str
+        }
+    """
+    from calculate_actual_profit import calculate_single_actual_profit
+    import numpy as np
+    
+    print(f"\n{'='*60}")
+    print(f"【V8.5.2.4.11 Phase 4】参数验证与过拟合检测")
+    print(f"{'='*60}")
+    
+    # 分离超短线和波段数据
+    scalping_opps = [o for o in full_data if o.get('is_scalping', False)]
+    swing_opps = [o for o in full_data if not o.get('is_scalping', False)]
+    
+    total_days = 14
+    split_point = total_days // 2  # 7天
+    
+    # 假设数据按时间排序，分为前7天和后7天
+    # 使用timestamp来分割
+    all_timestamps = sorted(set(o.get('timestamp') for o in full_data if o.get('timestamp')))
+    if len(all_timestamps) < total_days:
+        print(f"  ⚠️  数据不足{total_days}天，无法进行分段测试")
+        return None
+    
+    split_timestamp = all_timestamps[split_point]
+    
+    def test_period(opps, params, period_name):
+        """测试特定时期的参数表现"""
+        if not opps:
+            return None
+        
+        captured = []
+        for opp in opps:
+            # 基本过滤
+            if (opp.get('signal_score', 0) >= params.get('min_signal_score', 60) and
+                opp.get('consensus', 0) >= params.get('min_indicator_consensus', 1)):
+                
+                # 计算actual_profit
+                actual_profit = calculate_single_actual_profit(
+                    opp,
+                    strategy_params=params,
+                    use_dynamic_atr=False
+                )
+                opp['_test_profit'] = actual_profit
+                captured.append(opp)
+        
+        if not captured:
+            return {
+                'captured_count': 0,
+                'capture_rate': 0,
+                'avg_profit': 0,
+                'win_rate': 0,
+                'profit_ratio': 0
+            }
+        
+        wins = [o for o in captured if o.get('_test_profit', 0) > 0]
+        losses = [o for o in captured if o.get('_test_profit', 0) <= 0]
+        
+        win_count = len(wins)
+        win_rate = win_count / len(captured)
+        avg_profit = sum(o.get('_test_profit', 0) for o in captured) / len(captured)
+        
+        avg_win = sum(o.get('_test_profit', 0) for o in wins) / len(wins) if wins else 0
+        avg_loss = sum(abs(o.get('_test_profit', 0)) for o in losses) / len(losses) if losses else 1
+        profit_ratio = avg_win / avg_loss if avg_loss > 0 else 0
+        
+        return {
+            'captured_count': len(captured),
+            'capture_rate': len(captured) / len(opps),
+            'avg_profit': avg_profit,
+            'win_rate': win_rate,
+            'profit_ratio': profit_ratio,
+            'captured': captured
+        }
+    
+    # 1️⃣ 全量数据测试
+    print(f"\n  📊 1️⃣ 全量数据测试（{total_days}天）...")
+    
+    full_scalping_result = test_period(scalping_opps, scalping_params, "全量超短线")
+    full_swing_result = test_period(swing_opps, swing_params, "全量波段")
+    
+    # 合并统计
+    full_captured_count = (full_scalping_result['captured_count'] if full_scalping_result else 0) + \
+                          (full_swing_result['captured_count'] if full_swing_result else 0)
+    full_total = len(scalping_opps) + len(swing_opps)
+    
+    if full_captured_count == 0:
+        print(f"     ❌ 没有捕获任何机会")
+        return {
+            'status': 'FAILED',
+            'full_test': {},
+            'recommendation': '参数过于严格，未捕获任何机会'
+        }
+    
+    # 加权平均利润
+    full_avg_profit = 0
+    full_win_rate = 0
+    if full_scalping_result and full_scalping_result['captured_count'] > 0:
+        scalp_weight = full_scalping_result['captured_count'] / full_captured_count
+        full_avg_profit += full_scalping_result['avg_profit'] * scalp_weight
+        full_win_rate += full_scalping_result['win_rate'] * scalp_weight
+    if full_swing_result and full_swing_result['captured_count'] > 0:
+        swing_weight = full_swing_result['captured_count'] / full_captured_count
+        full_avg_profit += full_swing_result['avg_profit'] * swing_weight
+        full_win_rate += full_swing_result['win_rate'] * swing_weight
+    
+    print(f"     捕获: {full_captured_count}个 ({full_captured_count/full_total*100:.1f}%)")
+    print(f"     平均利润: {full_avg_profit:.2f}%")
+    print(f"     胜率: {full_win_rate*100:.1f}%")
+    
+    # 2️⃣ 分段测试
+    print(f"\n  📊 2️⃣ 分段测试（前{split_point}天 vs 后{total_days-split_point}天）...")
+    
+    # 前期数据
+    early_scalping = [o for o in scalping_opps if o.get('timestamp', '') < split_timestamp]
+    early_swing = [o for o in swing_opps if o.get('timestamp', '') < split_timestamp]
+    
+    # 后期数据
+    late_scalping = [o for o in scalping_opps if o.get('timestamp', '') >= split_timestamp]
+    late_swing = [o for o in swing_opps if o.get('timestamp', '') >= split_timestamp]
+    
+    early_scalp_result = test_period(early_scalping, scalping_params, "前期超短线")
+    early_swing_result = test_period(early_swing, swing_params, "前期波段")
+    late_scalp_result = test_period(late_scalping, scalping_params, "后期超短线")
+    late_swing_result = test_period(late_swing, swing_params, "后期波段")
+    
+    # 合并前期统计
+    early_captured = (early_scalp_result['captured_count'] if early_scalp_result else 0) + \
+                     (early_swing_result['captured_count'] if early_swing_result else 0)
+    early_total = len(early_scalping) + len(early_swing)
+    
+    early_avg_profit = 0
+    early_win_rate = 0
+    if early_captured > 0:
+        if early_scalp_result and early_scalp_result['captured_count'] > 0:
+            w = early_scalp_result['captured_count'] / early_captured
+            early_avg_profit += early_scalp_result['avg_profit'] * w
+            early_win_rate += early_scalp_result['win_rate'] * w
+        if early_swing_result and early_swing_result['captured_count'] > 0:
+            w = early_swing_result['captured_count'] / early_captured
+            early_avg_profit += early_swing_result['avg_profit'] * w
+            early_win_rate += early_swing_result['win_rate'] * w
+    
+    # 合并后期统计
+    late_captured = (late_scalp_result['captured_count'] if late_scalp_result else 0) + \
+                    (late_swing_result['captured_count'] if late_swing_result else 0)
+    late_total = len(late_scalping) + len(late_swing)
+    
+    late_avg_profit = 0
+    late_win_rate = 0
+    if late_captured > 0:
+        if late_scalp_result and late_scalp_result['captured_count'] > 0:
+            w = late_scalp_result['captured_count'] / late_captured
+            late_avg_profit += late_scalp_result['avg_profit'] * w
+            late_win_rate += late_scalp_result['win_rate'] * w
+        if late_swing_result and late_swing_result['captured_count'] > 0:
+            w = late_swing_result['captured_count'] / late_captured
+            late_avg_profit += late_swing_result['avg_profit'] * w
+            late_win_rate += late_swing_result['win_rate'] * w
+    
+    print(f"     前期: {early_captured}个，利润{early_avg_profit:.2f}%，胜率{early_win_rate*100:.1f}%")
+    print(f"     后期: {late_captured}个，利润{late_avg_profit:.2f}%，胜率{late_win_rate*100:.1f}%")
+    
+    # 3️⃣ 过拟合检测
+    print(f"\n  🔍 3️⃣ 过拟合检测...")
+    
+    overfitting_score = 0
+    issues = []
+    
+    # 检查1：后期利润大幅下降（>30%）
+    if early_avg_profit > 0:
+        profit_diff = abs(late_avg_profit - early_avg_profit) / early_avg_profit
+        print(f"     利润差异: {profit_diff*100:.1f}% ", end="")
+        if profit_diff > 0.3:
+            overfitting_score += 1
+            issues.append(f"后期利润相比前期变化{profit_diff*100:.1f}%（>30%）")
+            print("❌ 差异过大")
+        else:
+            print("✅ 在正常范围")
+    else:
+        profit_diff = 0
+    
+    # 检查2：后期胜率大幅下降（<80%）
+    if early_win_rate > 0:
+        winrate_ratio = late_win_rate / early_win_rate
+        print(f"     胜率比例: {winrate_ratio*100:.1f}% ", end="")
+        if winrate_ratio < 0.8:
+            overfitting_score += 1
+            issues.append(f"后期胜率仅为前期的{winrate_ratio*100:.1f}%（<80%）")
+            print("❌ 下降过多")
+        else:
+            print("✅ 基本稳定")
+    else:
+        winrate_ratio = 1.0
+    
+    # 检查3：后期出现亏损
+    if late_avg_profit < 0:
+        overfitting_score += 2  # 严重问题
+        issues.append(f"后期平均利润为负（{late_avg_profit:.2f}%）")
+        print(f"     后期利润: {late_avg_profit:.2f}% ❌ 亏损")
+    
+    # 4️⃣ 稳定性评分
+    print(f"\n  📈 4️⃣ 稳定性评分...")
+    
+    stability_score = 100.0
+    if profit_diff > 0.1:
+        penalty = min(50, 20 * profit_diff)
+        stability_score -= penalty
+        print(f"     利润波动扣分: -{penalty:.1f}")
+    if winrate_ratio < 0.9:
+        penalty = min(30, 30 * (1 - winrate_ratio))
+        stability_score -= penalty
+        print(f"     胜率下降扣分: -{penalty:.1f}")
+    if late_avg_profit < 0:
+        stability_score = 0  # 直接不合格
+        print(f"     后期亏损: 稳定性归零")
+    
+    stability_score = max(0, stability_score)
+    print(f"     最终稳定性得分: {stability_score:.1f}/100")
+    
+    # 5️⃣ 最终判定
+    print(f"\n  🎯 5️⃣ 最终判定...")
+    
+    if full_avg_profit <= 0:
+        status = "FAILED"
+        recommendation = "全量数据平均利润为负，回退到保守参数"
+        print(f"     状态: ❌ {status}")
+    elif overfitting_score >= 2:
+        status = "OVERFITTED"
+        recommendation = "检测到严重过拟合，回退到Phase 2参数"
+        print(f"     状态: ⚠️  {status}（过拟合得分{overfitting_score}）")
+    elif stability_score >= 70:
+        status = "PASSED"
+        recommendation = "参数验证通过，稳定性良好"
+        print(f"     状态: ✅ {status}")
+    elif stability_score >= 50:
+        status = "WARNING"
+        recommendation = "参数基本可用但稳定性略低，建议加强监控"
+        print(f"     状态: 🟡 {status}")
+    else:
+        status = "UNSTABLE"
+        recommendation = "参数不稳定，回退到Phase 2参数"
+        print(f"     状态: ⚠️  {status}")
+    
+    print(f"     建议: {recommendation}")
+    
+    if issues:
+        print(f"\n  ⚠️  发现的问题:")
+        for issue in issues:
+            print(f"     • {issue}")
+    
+    return {
+        'status': status,
+        'full_test': {
+            'captured_count': full_captured_count,
+            'capture_rate': full_captured_count / full_total if full_total > 0 else 0,
+            'avg_profit': full_avg_profit,
+            'win_rate': full_win_rate
+        },
+        'early_period': {
+            'captured_count': early_captured,
+            'avg_profit': early_avg_profit,
+            'win_rate': early_win_rate
+        },
+        'late_period': {
+            'captured_count': late_captured,
+            'avg_profit': late_avg_profit,
+            'win_rate': late_win_rate
+        },
+        'stability': {
+            'profit_diff_pct': profit_diff * 100,
+            'winrate_ratio': winrate_ratio,
+            'stability_score': stability_score,
+            'overfitting_score': overfitting_score
+        },
+        'recommendation': recommendation,
+        'issues': issues
+    }
 
 
 def optimize_strategy_with_risk_control(strategy_data, strategy_type, phase1_baseline, phase2_baseline, ai_suggested_params=None):
