@@ -6613,14 +6613,14 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         # 【V8.5.2.3】移除降级容错，必须提供confirmed_opportunities
         raise ValueError("【V8.5.2.3】quick_global_search_v8316必须提供confirmed_opportunities，不再支持降级使用market_snapshots")
     
-    # 🔧 V8.5.2.4.16: 修复 - 移到if块外面，确保all_opportunities总是被定义
-        print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
-        # 合并超短线和波段机会
-        all_opportunities = (
-            confirmed_opportunities['scalping']['opportunities'] + 
-            confirmed_opportunities['swing']['opportunities']
-        )
-        print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
+    # 🔧 V8.5.2.4.22: 修复 - 正确的缩进，确保在use_confirmed_opps为True时执行
+    print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
+    # 合并超短线和波段机会
+    all_opportunities = (
+        confirmed_opportunities['scalping']['opportunities'] + 
+        confirmed_opportunities['swing']['opportunities']
+    )
+    print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
     
     # 【V8.5.2.4.18】前向验证：分割训练集和验证集
     print(f"\n  📊 【前向验证】数据分割（70%训练/30%验证）...")
@@ -21611,13 +21611,17 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     if is_scalping:
                         opp_data_scalping = opp_data_base.copy()
                         opp_data_scalping['signal_type'] = 'scalping'
-                        opp_data_scalping['time_to_target'] = time_to_reach_1_5pct * 0.25 if time_to_reach_1_5pct else 6
+                        time_hours = time_to_reach_1_5pct * 0.25 if time_to_reach_1_5pct else 6
+                        opp_data_scalping['time_to_target'] = time_hours
+                        opp_data_scalping['holding_hours'] = time_hours  # 🆕 V8.5.2.4.22: 添加holding_hours字段
                         coin_scalping.append(opp_data_scalping)
                     
                     if is_swing:
                         opp_data_swing = opp_data_base.copy()
                         opp_data_swing['signal_type'] = 'swing'
-                        opp_data_swing['time_to_target'] = time_to_reach_3pct * 0.25 if time_to_reach_3pct else 24
+                        time_hours = time_to_reach_3pct * 0.25 if time_to_reach_3pct else 24
+                        opp_data_swing['time_to_target'] = time_hours
+                        opp_data_swing['holding_hours'] = time_hours  # 🆕 V8.5.2.4.22: 添加holding_hours字段
                         coin_swing.append(opp_data_swing)
                 
                 except (ValueError, TypeError, KeyError) as e:
