@@ -6875,11 +6875,12 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     print(f"     盈利状态: {'✅ 找到盈利' if found_profitable else '⚠️ 未找到盈利（使用最优亏损点）'}")
     
     # 【V8.5.2.4.10】计算Phase 2 baseline（供Phase 3使用）
+    # 【V8.5.2.4.20】修复：使用全部数据而非训练集计算baseline
     phase2_baseline = None
-    if phase1_baseline and use_confirmed_opps and all_opportunities:
-        # 使用最优参数过滤机会，计算baseline
+    if phase1_baseline and use_confirmed_opps and all_opportunities_sorted:
+        # 使用最优参数过滤机会，计算baseline（使用全部数据）
         best_captured_opps = [
-            opp for opp in all_opportunities
+            opp for opp in all_opportunities_sorted
             if (opp.get('signal_score', 0) >= best_params.get('min_signal_score', 50) and
                 opp.get('consensus', 0) >= best_params.get('min_indicator_consensus', 2))
         ]
@@ -22708,33 +22709,38 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
     try:
         from backtest_optimizer_v8321 import detect_anomalies_local
         
+        # 【V8.5.2.4.20】修复：all_results需要包含metrics字段
         # 构建all_results用于异常检测
         all_results = []
         
         if full_scalping_result and full_scalping_result['captured_count'] > 0:
             all_results.append({
                 'params': scalping_params,
-                'captured_count': full_scalping_result['captured_count'],
-                'win_rate': full_scalping_result['win_rate'],
-                'avg_win': full_scalping_result.get('captured', [{}])[0].get('_test_profit', 0) if full_scalping_result.get('captured') else 0,
-                'avg_loss': 1.0,  # 简化
-                'profit_loss_ratio': full_scalping_result['profit_ratio'],
-                'capture_rate': full_scalping_result['capture_rate'],
-                'avg_profit': full_scalping_result['avg_profit'],
-                'max_drawdown': 0.1  # 简化，假设10%
+                'metrics': {
+                    'captured_count': full_scalping_result['captured_count'],
+                    'win_rate': full_scalping_result['win_rate'],
+                    'avg_win': full_scalping_result.get('captured', [{}])[0].get('_test_profit', 0) if full_scalping_result.get('captured') else 0,
+                    'avg_loss': 1.0,  # 简化
+                    'profit_loss_ratio': full_scalping_result['profit_ratio'],
+                    'capture_rate': full_scalping_result['capture_rate'],
+                    'avg_profit': full_scalping_result['avg_profit'],
+                    'max_drawdown': 0.1  # 简化，假设10%
+                }
             })
         
         if full_swing_result and full_swing_result['captured_count'] > 0:
             all_results.append({
                 'params': swing_params,
-                'captured_count': full_swing_result['captured_count'],
-                'win_rate': full_swing_result['win_rate'],
-                'avg_win': full_swing_result.get('captured', [{}])[0].get('_test_profit', 0) if full_swing_result.get('captured') else 0,
-                'avg_loss': 1.0,  # 简化
-                'profit_loss_ratio': full_swing_result['profit_ratio'],
-                'capture_rate': full_swing_result['capture_rate'],
-                'avg_profit': full_swing_result['avg_profit'],
-                'max_drawdown': 0.1  # 简化，假设10%
+                'metrics': {
+                    'captured_count': full_swing_result['captured_count'],
+                    'win_rate': full_swing_result['win_rate'],
+                    'avg_win': full_swing_result.get('captured', [{}])[0].get('_test_profit', 0) if full_swing_result.get('captured') else 0,
+                    'avg_loss': 1.0,  # 简化
+                    'profit_loss_ratio': full_swing_result['profit_ratio'],
+                    'capture_rate': full_swing_result['capture_rate'],
+                    'avg_profit': full_swing_result['avg_profit'],
+                    'max_drawdown': 0.1  # 简化，假设10%
+                }
             })
         
         # 计算参数敏感度（简化版：基于利润波动）
