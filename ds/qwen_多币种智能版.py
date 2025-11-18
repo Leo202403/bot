@@ -8932,8 +8932,8 @@ def analyze_and_adjust_params():
         
         if kline_snapshots is not None and not kline_snapshots.empty:
             try:
-                # 【V8.4.10】使用阶段2的逻辑（与动态ATR一致）
-                print("  ℹ️  使用动态ATR重新分析全量数据...")
+                # 【V8.5.2.4.11】生成全量数据用于Phase 4验证
+                print("  ℹ️  生成全量历史数据用于验证...")
                 full_analysis = analyze_separated_opportunities(
                     market_snapshots=kline_snapshots,
                     old_config=config
@@ -8944,98 +8944,114 @@ def analyze_and_adjust_params():
                 swing_opps = full_analysis['swing']['opportunities']
                 all_opps = scalping_opps + swing_opps
                 
-                # 使用新参数过滤
+                # 【V8.5.2.4.11】调用新的Phase 4验证函数
+                phase4_result = validate_params_with_overfitting_check(
+                    full_data=all_opps,
+                    scalping_params=config.get('scalping_params', {}),
+                    swing_params=config.get('swing_params', {}),
+                    phase2_baseline=phase2_baseline_result
+                )
+                
+                if phase4_result:
+                    # 根据验证结果决定是否回退参数
+                    status = phase4_result['status']
+                    
+                    if status == 'FAILED':
+                        print(f"\n  ❌ Phase 4验证失败：{phase4_result['recommendation']}")
+                        print(f"  🔄 回退到保守参数")
+                        config['scalping_params'] = {
+                            'atr_tp_multiplier': 2.0,
+                            'atr_stop_multiplier': 1.5,
+                            'max_holding_hours': 12,
+                            'min_risk_reward': 1.5,
+                            'min_signal_score': 60,
+                            '_phase4_rollback': 'conservative'
+                        }
+                        config['swing_params'] = {
+                            'atr_tp_multiplier': 4.0,
+                            'atr_stop_multiplier': 2.0,
+                            'max_holding_hours': 72,
+                            'min_risk_reward': 1.5,
+                            'min_signal_score': 60,
+                            '_phase4_rollback': 'conservative'
+                        }
+                        validation_passed = False
+                        
+                    elif status in ['OVERFITTED', 'UNSTABLE']:
+                        print(f"\n  ⚠️  Phase 4检测到问题：{phase4_result['recommendation']}")
+                        print(f"  🔄 回退到Phase 2参数")
+                        # 如果有Phase 2 baseline，使用其参数
+                        if phase2_baseline_result and phase2_baseline_result.get('params'):
+                            config['scalping_params'] = phase2_baseline_result['params'].copy()
+                            config['swing_params'] = phase2_baseline_result['params'].copy()
+                            config['scalping_params']['_phase4_rollback'] = 'phase2'
+                            config['swing_params']['_phase4_rollback'] = 'phase2'
+                        else:
+                            # 否则使用保守参数
+                            config['scalping_params'] = {
+                                'atr_tp_multiplier': 2.0,
+                                'atr_stop_multiplier': 1.5,
+                                'max_holding_hours': 12,
+                                'min_risk_reward': 1.5,
+                                'min_signal_score': 60,
+                                '_phase4_rollback': 'conservative'
+                            }
+                            config['swing_params'] = {
+                                'atr_tp_multiplier': 4.0,
+                                'atr_stop_multiplier': 2.0,
+                                'max_holding_hours': 72,
+                                'min_risk_reward': 1.5,
+                                'min_signal_score': 60,
+                                '_phase4_rollback': 'conservative'
+                            }
+                        validation_passed = False
+                        
+                    elif status == 'WARNING':
+                        print(f"\n  🟡 Phase 4警告：{phase4_result['recommendation']}")
+                        print(f"  ✅ 继续使用Phase 3参数，但建议加强监控")
+                        config['scalping_params']['_phase4_status'] = 'warning'
+                        config['swing_params']['_phase4_status'] = 'warning'
+                        validation_passed = True
+                        
+                    else:  # PASSED
+                        print(f"\n  ✅ Phase 4验证通过：{phase4_result['recommendation']}")
+                        print(f"  ✅ 使用Phase 3参数")
+                        config['scalping_params']['_phase4_status'] = 'passed'
+                        config['swing_params']['_phase4_status'] = 'passed'
+                        validation_passed = True
+                    
+                    # 保存Phase 4结果到config供邮件使用
+                    config['_phase4_validation'] = phase4_result
+                
+                # 【V8.5.2.4.11】构建简化的opportunity_analysis（用于邮件报告）
+                # 详细的验证逻辑已由validate_params_with_overfitting_check()完成
                 from backtest_optimizer_v8321 import passes_basic_filter
                 
-                # 获取新参数
                 new_scalping_params = config.get('scalping_params', {})
                 new_swing_params = config.get('swing_params', {})
                 
-                # 获取旧参数（用于对比）
-                old_scalping_params = old_config.get('scalping_params', {}) if old_config else new_scalping_params
-                old_swing_params = old_config.get('swing_params', {}) if old_config else new_swing_params
-                
-                # 过滤机会
                 new_captured_scalping = [o for o in scalping_opps if passes_basic_filter(o, new_scalping_params)]
                 new_captured_swing = [o for o in swing_opps if passes_basic_filter(o, new_swing_params)]
                 new_captured = new_captured_scalping + new_captured_swing
                 
-                old_captured_scalping = [o for o in scalping_opps if passes_basic_filter(o, old_scalping_params)]
-                old_captured_swing = [o for o in swing_opps if passes_basic_filter(o, old_swing_params)]
-                old_captured = old_captured_scalping + old_captured_swing
-                
-                # 计算统计
-                total_opps = len(all_opps)
-                avg_actual_profit = sum(o.get('actual_profit_pct', 0) for o in all_opps) / total_opps if total_opps > 0 else 0
-                
-                old_count = len(old_captured)
-                old_avg_profit = sum(o.get('actual_profit_pct', 0) for o in old_captured) / old_count if old_count > 0 else 0
-                
-                new_count = len(new_captured)
-                new_avg_profit = sum(o.get('actual_profit_pct', 0) for o in new_captured) / new_count if new_count > 0 else 0
-                
-                # 【V8.5.1】计算分类捕获率
-                scalping_total = len(scalping_opps)
-                swing_total = len(swing_opps)
-                
-                old_scalping_count = len(old_captured_scalping)
-                old_swing_count = len(old_captured_swing)
-                new_scalping_count = len(new_captured_scalping)
-                new_swing_count = len(new_captured_swing)
-                
-                scalping_old_rate = (old_scalping_count / scalping_total * 100) if scalping_total > 0 else 0
-                scalping_new_rate = (new_scalping_count / scalping_total * 100) if scalping_total > 0 else 0
-                swing_old_rate = (old_swing_count / swing_total * 100) if swing_total > 0 else 0
-                swing_new_rate = (new_swing_count / swing_total * 100) if swing_total > 0 else 0
-                
-                # 构建stats
-                stats = {
-                    'total_opportunities': total_opps,
-                    'avg_actual_profit': avg_actual_profit,
-                    'old_captured_count': old_count,
-                    'old_capture_rate': (old_count / total_opps * 100) if total_opps > 0 else 0,
-                    'avg_old_captured_profit': old_avg_profit,
-                    'avg_old_efficiency': (old_avg_profit / avg_actual_profit * 100) if avg_actual_profit > 0 else 0,
-                    'new_captured_count': new_count,
-                    'new_capture_rate': (new_count / total_opps * 100) if total_opps > 0 else 0,
-                    'avg_new_captured_profit': new_avg_profit,
-                    'avg_new_efficiency': (new_avg_profit / avg_actual_profit * 100) if avg_actual_profit > 0 else 0,
-                    'capture_rate_improvement': ((new_count - old_count) / total_opps * 100) if total_opps > 0 else 0,
-                    'profit_improvement': new_avg_profit - old_avg_profit,
-                    # 【V8.5.1】分类捕获率
-                    'scalping_old_rate': scalping_old_rate,
-                    'scalping_new_rate': scalping_new_rate,
-                    'swing_old_rate': swing_old_rate,
-                    'swing_new_rate': swing_new_rate
-                }
-                
-                # 输出统计
-                print(f"✓ 发现{stats['total_opportunities']}个客观机会（基于动态ATR计算）")
-                print(f"  📊 实际平均利润: {stats['avg_actual_profit']:.1f}%")
-                print(f"  • 旧参数: 捕获{stats['old_captured_count']}个({stats['old_capture_rate']:.1f}%) | 平均获利{stats['avg_old_captured_profit']:.1f}% | 效率{stats['avg_old_efficiency']:.0f}%")
-                print(f"  • 新参数: 捕获{stats['new_captured_count']}个({stats['new_capture_rate']:.1f}%) | 平均获利{stats['avg_new_captured_profit']:.1f}% | 效率{stats['avg_new_efficiency']:.0f}%")
-                
-                # 【V8.4.10】最终验证：如果新参数平均利润为负，拒绝优化
-                if stats['avg_new_captured_profit'] < 0:
-                    print(f"\n  ❌ 【V8.4.10最终验证失败】新参数平均利润{stats['avg_new_captured_profit']:.1f}%为负！")
-                    print(f"  🔄 将回滚到保守参数（避免过拟合）")
-                    validation_passed = False
-                else:
-                    print(f"\n  ✅ 【V8.4.10最终验证通过】新参数平均利润{stats['avg_new_captured_profit']:.1f}%为正")
-                    if stats['new_captured_count'] > stats['old_captured_count']:
-                        print(f"  ✅ 改进: 捕获率+{stats['capture_rate_improvement']:.1f}% | 利润+{stats['profit_improvement']:.1f}%")
-                    elif stats['new_captured_count'] < stats['old_captured_count']:
-                        print(f"  ⚠️  退步: 捕获率{stats['capture_rate_improvement']:.1f}% | 利润{stats['profit_improvement']:.1f}%")
-                    else:
-                        print(f"  ➡️  持平: 捕获率和利润无变化")
-                
-                # 构建返回结果
                 missed = [o for o in all_opps if o not in new_captured]
                 missed.sort(key=lambda x: x.get('objective_profit', 0), reverse=True)
                 
+                # 构建简化stats（从Phase 4结果提取）
+                if phase4_result:
+                    stats = {
+                        'total_opportunities': len(all_opps),
+                        'new_captured_count': phase4_result['full_test']['captured_count'],
+                        'new_capture_rate': phase4_result['full_test']['capture_rate'] * 100,
+                        'avg_new_captured_profit': phase4_result['full_test']['avg_profit'],
+                        'validation_status': phase4_result['status'],
+                        'stability_score': phase4_result['stability']['stability_score']
+                    }
+                else:
+                    stats = {}
+                
                 opportunity_analysis = {
                     'all_opportunities': all_opps,
-                    'old_captured': old_captured,
                     'new_captured': new_captured,
                     'missed': missed[:30],  # 只保留TOP30
                     'stats': stats
