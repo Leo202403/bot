@@ -20322,8 +20322,8 @@ def analyze_opportunities_with_new_params(market_snapshots, actual_trades, new_c
     
     核心逻辑（完全修正）：
     1. 客观识别机会：完全基于价格走势，不依赖任何参数过滤
-       - 超短线：6小时内实际达到≥1.5%利润  【V8.5.2.4】
-       - 波段：需要更长时间（>6小时）或更高利润目标（≥3%）
+       - 超短线：6小时内达到1.5%-3%利润（快进快出，小利润）【V8.5.2.4修复】
+       - 波段：6小时内达到≥3%利润（快速高利润），或需要更长时间（慢趋势）
     2. 模拟旧参数交易：真实模拟入场判断、止盈止损触发、计算捕获利润
     3. 模拟新参数交易：同样真实模拟，计算捕获利润
     4. 对比三种利润：
@@ -21273,17 +21273,23 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     if objective_profit < 1.0:  # 至少1%利润
                         continue
                     
-                    # 【V8.5.2.4】基于时间客观判断信号类型
-                    # 超短线：6小时内（24根15分钟K线）达到≥1.5%利润
-                    # 波段：需要更长时间或更高利润目标
-                    if time_to_reach_1_5pct is not None and time_to_reach_1_5pct <= 24:
-                        # 6小时内达到1.5%利润 → 超短线
-                        signal_type_objective = 'scalping'
-                        time_to_target = time_to_reach_1_5pct * 0.25  # 转换为小时（15分钟K线）
-                    else:
-                        # 需要更长时间 → 波段
+                    # 【V8.5.2.4修复】基于时间和利润客观判断信号类型
+                    # 核心逻辑：结合达到目标的时间和最终利润幅度
+                    # 超短线：6小时内达到1.5%-3%之间的利润（快进快出，小利润）
+                    # 波段：6小时内达到≥3%利润（快速高利润），或需要更长时间（慢趋势）
+                    
+                    if time_to_reach_3pct is not None and time_to_reach_3pct <= 24:
+                        # 6小时内达到3%利润 → 波段（快速捕捉到高利润）
                         signal_type_objective = 'swing'
-                        time_to_target = time_to_reach_3pct * 0.25 if time_to_reach_3pct else 24  # 转换为小时
+                        time_to_target = time_to_reach_3pct * 0.25
+                    elif time_to_reach_1_5pct is not None and time_to_reach_1_5pct <= 24 and objective_profit < 3.0:
+                        # 6小时内达到1.5%但最终利润<3% → 超短线（快进快出，小利润）
+                        signal_type_objective = 'scalping'
+                        time_to_target = time_to_reach_1_5pct * 0.25
+                    else:
+                        # 需要更长时间才能达到任何目标 → 波段（慢趋势）
+                        signal_type_objective = 'swing'
+                        time_to_target = time_to_reach_3pct * 0.25 if time_to_reach_3pct else 24
                     
                     # 【V8.3.21】创建摘要数据代替完整DataFrame
                     future_summary = {
