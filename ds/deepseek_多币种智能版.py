@@ -9250,9 +9250,9 @@ def analyze_and_adjust_params():
                             if val_avg_profit < -1.0:  # 验证期亏损严重
                                 print(f"       ⚠️  验证期亏损严重，回退到保守参数")
                                 config['scalping_params'] = {
-                                    'atr_tp_multiplier': 1.5,  # 【V8.5.2.4.1】使用新的基准参数
+                                    'atr_tp_multiplier': 2.0,  # 【V8.5.2.4.2】使用基准参数
                                     'atr_stop_multiplier': 1.5,
-                                    'max_holding_hours': 2,
+                                    'max_holding_hours': 12,
                                     'min_risk_reward': 1.5,
                                     'min_signal_score': 60,
                                     '_validation_rollback': True
@@ -9261,9 +9261,9 @@ def analyze_and_adjust_params():
                             elif improvement < -2.0:  # 【V8.5.2.4.1】训练期退步超过2%
                                 print(f"       ⚠️  优化后比baseline退步{-improvement:.1f}%，回退到保守参数")
                                 config['scalping_params'] = {
-                                    'atr_tp_multiplier': 1.5,
+                                    'atr_tp_multiplier': 2.0,
                                     'atr_stop_multiplier': 1.5,
-                                    'max_holding_hours': 2,
+                                    'max_holding_hours': 12,
                                     'min_risk_reward': 1.5,
                                     'min_signal_score': 60,
                                     '_validation_rollback': True
@@ -21171,11 +21171,11 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         
         # 【V8.4.4修复→V8.4.6优化】使用固定的基准参数，确保阶段2的客观性
         # 不再依赖old_config，避免上一次优化失败的参数影响本次回测
-        # 【V8.5.2.4.1】重新调整超短线参数：更激进，真正的快进快出
+        # 【V8.5.2.4.2】基准参数仅用于计算actual_profit，max_holding_hours由V8.3.21优化
         scalping_params = {
-            'atr_tp_multiplier': 1.5,    # 【V8.5.2.4.1】从3.0降到1.5（快速止盈，符合超短线本质）
-            'atr_stop_multiplier': 1.5,  # 【V8.5.2.4.1】从2.0降到1.5（控制风险，快速止损）
-            'max_holding_hours': 2       # 【V8.5.2.4.1】从6降到2（真正的超短线：1-2小时）
+            'atr_tp_multiplier': 2.0,    # 【V8.5.2.4.2】基准TP适中（AI会在[1.2, 6.0]范围探索）
+            'atr_stop_multiplier': 1.5,  # 【V8.5.2.4.2】基准SL适中（AI会探索）
+            'max_holding_hours': 12      # 【V8.5.2.4.2】基准时间宽松（AI会在[2, 48]范围探索）
         }
         
         swing_params = {
@@ -21185,7 +21185,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         }
         
         print(f"  🎯 使用差异化基准参数计算actual_profit（超短线vs波段）")
-        print(f"     超短线: atr_tp=1.5, atr_sl=1.5, 持仓≤2h  【V8.5.2.4.1：快速止盈，真正的超短线】")
+        print(f"     超短线: atr_tp=2.0, atr_sl=1.5, 持仓≤12h  【V8.5.2.4.2：基准值，AI会优化】")
         print(f"     波段: atr_tp=6.0, atr_sl=2.5, 持仓≤72h  【V8.5.2：捕捉完整趋势】")
         
         print(f"  📊 分析历史快照: {len(market_snapshots)}条记录")
@@ -21271,9 +21271,23 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     signal_type = str(current.get('signal_type', 'swing')).lower()
                     signal_name = str(current.get('signal_name', ''))
                     
-                    # 获取方向
-                    direction = 'long'
-                    if 'macd_signal' in current:
+                    # 【V8.5.2.4.2】修正方向判断：优先使用CSV中的ytc_direction
+                    direction = 'long'  # 默认
+                    
+                    # 优先级1：使用ytc_direction（最准确）
+                    if 'ytc_direction' in current:
+                        ytc_dir = str(current.get('ytc_direction', '')).upper()
+                        if ytc_dir == 'SHORT':
+                            direction = 'short'
+                        elif ytc_dir == 'LONG':
+                            direction = 'long'
+                    # 优先级2：使用trend信息判断
+                    elif 'trend_15m' in current:
+                        trend = str(current.get('trend_15m', '')).lower()
+                        if '空头' in trend or '空' in trend or 'bear' in trend:
+                            direction = 'short'
+                    # 优先级3：回退到macd_signal
+                    elif 'macd_signal' in current:
                         macd_sig = str(current.get('macd_signal', '')).lower()
                         if 'short' in macd_sig or 'bear' in macd_sig:
                             direction = 'short'
