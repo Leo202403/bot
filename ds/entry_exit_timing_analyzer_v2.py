@@ -786,8 +786,8 @@ def analyze_exit_timing_v2(
         exit_time_str = trade.get('平仓时间', '')
         exit_reason = trade.get('平仓原因', '')
         pnl = trade.get('盈亏', 0)
-        signal_score = trade.get('信号评分', 0)  # 🔧 V8.3.25.9: 添加信号评分
-        consensus = trade.get('共振数', 0)  # 🔧 V8.3.25.9: 添加共振数
+        signal_score = trade.get('信号分数', 0)  # 🔧 V8.5.2.3: 修正字段名（与保存时一致）
+        consensus = trade.get('共振指标数', 0)  # 🔧 V8.5.2.3: 修正字段名（与保存时一致）
         
         if not exit_time_str or exit_price == 0:
             continue
