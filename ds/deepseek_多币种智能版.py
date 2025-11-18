@@ -9603,7 +9603,8 @@ def analyze_and_adjust_params():
                             reasons.append(f"信号分{opp.get('signal_score', 0):.0f}")
                         if opp.get('consensus', 0) < config.get('min_indicator_consensus', 2):
                             reasons.append(f"共识{opp.get('consensus', 0)}")
-                        print(f"     • {opp.get('symbol', '?')}: {opp.get('objective_profit', 0):.1f}% | 原因: {', '.join(reasons)}")
+                        reason_str = ', '.join(reasons) if reasons else "其他原因"  # 🔧 V8.5.2.4.28: 确保总有原因显示
+                        print(f"     • {opp.get('symbol', '?')}: {opp.get('objective_profit', 0):.1f}% | 原因: {reason_str}")
                 
             except Exception as e:
                 print(f"⚠️ Phase 4验证失败: {e}")
@@ -21735,7 +21736,8 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         traceback.print_exc()
         return {
             'scalping': {'total_opportunities': 0, 'opportunities': []},
-            'swing': {'total_opportunities': 0, 'opportunities': []}
+            'swing': {'total_opportunities': 0, 'opportunities': []},
+            'phase1_baseline': None  # 🔧 V8.5.2.4.28: 确保总是返回phase1_baseline字段
         }
 
 

@@ -21602,7 +21602,8 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         traceback.print_exc()
         return {
             'scalping': {'total_opportunities': 0, 'opportunities': []},
-            'swing': {'total_opportunities': 0, 'opportunities': []}
+            'swing': {'total_opportunities': 0, 'opportunities': []},
+            'phase1_baseline': None  # 🔧 V8.5.2.4.28: 确保总是返回phase1_baseline字段
         }
 
 
