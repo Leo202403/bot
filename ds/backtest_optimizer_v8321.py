@@ -1054,16 +1054,16 @@ def calculate_v8321_optimization_score(result: Dict) -> float:
     # ========================================
     # 【权衡调节】盈亏比
     # ========================================
+    pl_ratio_penalty = 0  # 初始化
+    pl_ratio_bonus = 0    # 初始化
+    
     if profit_loss_ratio < 1.5:
         # 盈亏比太低，扣分
         pl_ratio_penalty = (1.5 - profit_loss_ratio) * 20  # 每低0.1扣2分
     elif profit_loss_ratio >= 2.0:
         # 盈亏比优秀，加分
         pl_ratio_bonus = min(20, (profit_loss_ratio - 2.0) * 10)  # 每高0.1加1分，最多+20
-    else:
-        # 盈亏比正常（1.5-2.0），不调整
-        pl_ratio_penalty = 0
-        pl_ratio_bonus = 0
+    # else: 盈亏比正常（1.5-2.0），保持初始值0
     
     # ========================================
     # 【权衡调节】胜率
