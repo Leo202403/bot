@@ -20321,12 +20321,12 @@ def recalculate_signal_score_from_snapshot(snapshot_row, signal_type, learning_c
 
 def analyze_opportunities_with_new_params(market_snapshots, actual_trades, new_config, old_config=None):
     """
-    用新参数重新评估历史机会（V7.9.0 - 完全重构版）
+    用新参数重新评估历史机会（V7.9.0 - 完全重构版）【V8.5.2.4：基于时间的客观分类】
     
     核心逻辑（完全修正）：
     1. 客观识别机会：完全基于价格走势，不依赖任何参数过滤
-       - 超短线：1小时内实际达到≥1.5%利润
-       - 波段：24小时内实际达到≥3%利润
+       - 超短线：6小时内实际达到≥1.5%利润  【V8.5.2.4】
+       - 波段：需要更长时间（>6小时）或更高利润目标（≥3%）
     2. 模拟旧参数交易：真实模拟入场判断、止盈止损触发、计算捕获利润
     3. 模拟新参数交易：同样真实模拟，计算捕获利润
     4. 对比三种利润：
@@ -21245,24 +21245,55 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     if later_24h.empty:
                         continue
                     
-                    # 计算客观利润（24小时内能达到的最大利润）
-                    if direction == 'long':
-                        max_price_24h = float(later_24h['high'].max())
-                        objective_profit = (max_price_24h - entry_price) / entry_price * 100 if entry_price > 0 else 0
-                    else:
-                        min_price_24h = float(later_24h['low'].min())
-                        objective_profit = (entry_price - min_price_24h) / entry_price * 100 if entry_price > 0 else 0
+                    # 【V8.5.2.4】基于实际价格走势时间来客观分类信号类型
+                    # 计算达到不同利润目标所需的时间（单位：15分钟K线数）
+                    time_to_reach_1_5pct = None  # 达到1.5%利润的时间
+                    time_to_reach_3pct = None    # 达到3%利润的时间
+                    max_profit_24h = 0
+                    
+                    for bar_idx, future_row in enumerate(later_24h.iterrows()):
+                        _, row_data = future_row
+                        if direction == 'long':
+                            profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
+                        else:
+                            profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
+                        
+                        # 记录最大利润
+                        max_profit_24h = max(max_profit_24h, profit_pct)
+                        
+                        # 记录首次达到1.5%的时间
+                        if time_to_reach_1_5pct is None and profit_pct >= 1.5:
+                            time_to_reach_1_5pct = bar_idx + 1  # +1因为bar_idx从0开始
+                        
+                        # 记录首次达到3%的时间
+                        if time_to_reach_3pct is None and profit_pct >= 3.0:
+                            time_to_reach_3pct = bar_idx + 1
+                    
+                    objective_profit = max_profit_24h
                     
                     # 只关注有利润的机会
                     if objective_profit < 1.0:  # 至少1%利润
                         continue
+                    
+                    # 【V8.5.2.4】基于时间客观判断信号类型
+                    # 超短线：6小时内（24根15分钟K线）达到≥1.5%利润
+                    # 波段：需要更长时间或更高利润目标
+                    if time_to_reach_1_5pct is not None and time_to_reach_1_5pct <= 24:
+                        # 6小时内达到1.5%利润 → 超短线
+                        signal_type_objective = 'scalping'
+                        time_to_target = time_to_reach_1_5pct * 0.25  # 转换为小时（15分钟K线）
+                    else:
+                        # 需要更长时间 → 波段
+                        signal_type_objective = 'swing'
+                        time_to_target = time_to_reach_3pct * 0.25 if time_to_reach_3pct else 24  # 转换为小时
                     
                     # 【V8.3.21】创建摘要数据代替完整DataFrame
                     future_summary = {
                         'max_high': float(later_24h['high'].max()),
                         'min_low': float(later_24h['low'].min()),
                         'final_close': float(later_24h.iloc[-1]['close']),
-                        'data_points': len(later_24h)
+                        'data_points': len(later_24h),
+                        'time_to_target': time_to_target  # 【V8.5.2.4】记录达到目标的时间
                     }
                     
                     # 🔧 V8.5.5.2: 从timestamp中提取时间和日期
@@ -21284,7 +21315,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         except:
                             pass
                     
-                    # 根据信号类型分类
+                    # 【V8.5.2.4】根据客观判断的信号类型分类（基于时间）
                     opp_data = {
                         'coin': coin,
                         'timestamp': timestamp,
@@ -21296,9 +21327,11 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         'risk_reward': risk_reward,
                         'atr': atr,
                         'signal_score': signal_score,  # 【V8.3.21】添加signal_score字段
-                        'signal_type': signal_type,  # 🔧 修复：使用实际的signal_type而非硬编码
+                        'signal_type': signal_type_objective,  # 【V8.5.2.4】使用客观判断的类型（基于时间）
+                        'signal_type_csv': signal_type,  # 保留CSV中的类型（用于对比分析）
                         'signal_name': signal_name,
                         'objective_profit': objective_profit,
+                        'time_to_target': time_to_target,  # 【V8.5.2.4】达到目标的时间（小时）
                         'future_data': future_summary,  # 【V8.3.21】使用摘要代替完整DataFrame
                         # 【V8.3.21】添加上下文字段（用于4层过滤）
                         'kline_ctx_bullish_ratio': kline_ctx_bullish_ratio,
@@ -21308,7 +21341,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         'sr_hist_avg_reaction': sr_hist_avg_reaction
                     }
                     
-                    if signal_type == 'scalping':
+                    if signal_type_objective == 'scalping':
                         coin_scalping.append(opp_data)
                     else:  # swing
                         coin_swing.append(opp_data)
