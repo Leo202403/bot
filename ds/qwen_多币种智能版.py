@@ -9129,360 +9129,86 @@ def analyze_and_adjust_params():
             'swing': {}
         }
         
-        if kline_snapshots is not None and not kline_snapshots.empty:
+        # 【V8.5.2.4.10】准备机会数据
+        if not phase2_baseline_result:
+            print(f"  ⚠️  无Phase 2 baseline，跳过Phase 3优化")
+        elif kline_snapshots is not None and not kline_snapshots.empty:
             try:
-                # 【V8.4.5】使用带前向验证的机会分析
-                separated_analysis_with_val = analyze_separated_opportunities_with_validation(
+                # 【V8.5.2.4.10】生成分离的机会数据用于Phase 3
+                separated_analysis_result = analyze_separated_opportunities(
                     market_snapshots=kline_snapshots,
-                    old_config=config,
-                    enable_validation=True  # 启用前向验证
+                    old_config=config
                 )
                 
-                # 提取训练期和验证期数据
-                train_analysis = separated_analysis_with_val['train']
-                val_analysis = separated_analysis_with_val['val']
+                scalping_data = separated_analysis_result['scalping']
+                swing_data = separated_analysis_result['swing']
                 
-                # 用于优化的数据（仅训练期）
-                separated_analysis = separated_analysis_with_val['combined']
+                phase1_baseline_for_phase3 = separated_analysis_result.get('phase1_baseline')
                 
-                # 【V8.3.16】技术债1修复：使用V7.7.0快速探索的结果作为初始参数
-                # 【V8.3.16.3】修复：从iterative_result中提取final_params
-                if global_initial_params and isinstance(global_initial_params, dict):
-                    # 优先使用final_params，如果不存在则直接使用global_initial_params（兼容旧版本）
-                    base_params = global_initial_params.get('final_params', global_initial_params)
-                else:
-                    base_params = {}
+                # 【V8.5.2.4.10】调用新的Phase 3优化函数
+                # 分别优化超短线和波段
+                scalping_optimization = optimize_strategy_with_risk_control(
+                    strategy_data=scalping_data,
+                    strategy_type='scalping',
+                    phase1_baseline=phase1_baseline_for_phase3,
+                    phase2_baseline=phase2_baseline_result,
+                    ai_suggested_params=ai_suggested_params
+                )
                 
-                initial_params_for_scalping = base_params.copy() if base_params else {}
-                initial_params_for_swing = base_params.copy() if base_params else {}
-                
-                # 合并当前配置中的策略特定参数
-                scalping_current = config.get('scalping_params', {})
-                scalping_current.update(initial_params_for_scalping)
-                
-                swing_current = config.get('swing_params', {})
-                swing_current.update(initial_params_for_swing)
-                
-                # 分别优化超短线参数
-                if separated_analysis['scalping']['total_opportunities'] > 20:
-                    print(f"\n  ⚡ 优化超短线参数...")
-                    if base_params:
-                        print(f"     ℹ️  使用V7.7.0初始参数: R:R={base_params.get('min_risk_reward', 'N/A')}, 共识={base_params.get('min_indicator_consensus', 'N/A')}")
-                    if ai_suggested_params:
-                        print(f"     🤖 AI建议参数: {ai_suggested_params}")
-                    scalping_optimization = optimize_scalping_params(
-                        scalping_data=separated_analysis['scalping'],
-                        current_params=scalping_current,
-                        initial_params=initial_params_for_scalping,  # 【V8.3.16新增】
-                        ai_suggested_params=ai_suggested_params  # 【V8.3.25.10新增】
-                    )
+                # 应用超短线优化结果
+                if scalping_optimization:
+                    if 'scalping_params' not in config:
+                        config['scalping_params'] = {}
+                    config['scalping_params'].update(scalping_optimization['optimized_params'])
                     
-                    # 【V8.3.18.5】检查AI是否拒绝优化
-                    if scalping_optimization.get('ai_rejection_reason'):
-                        print(f"  ❌ 超短线优化被AI拒绝:")
-                        print(f"     原因: {scalping_optimization['ai_rejection_reason'][:150]}...")
-                        print(f"     建议: 策略需要重新设计（当前参数time_exit=100%，目标<90%）")
-                    elif scalping_optimization.get('improvement') is not None:
-                        # 【V8.4.5】检查验证期是否已回退
-                        # 【V8.4.10】检查第4.5步最终验证是否通过
-                        if scalping_optimization.get('_validation_failed'):
-                            print(f"  ⏭️  超短线参数已被验证期回退，跳过应用优化后的参数")
-                        elif not validation_passed:
-                            print(f"  ⏭️  【V8.4.10】第4.5步最终验证失败，跳过应用优化后的参数")
-                        else:
-                            # 更新config中的超短线参数
-                            if 'scalping_params' not in config:
-                                config['scalping_params'] = {}
-                            config['scalping_params'].update(scalping_optimization['optimized_params'])
-                            
-                            old_rate = scalping_optimization['old_time_exit_rate']
-                            new_rate = scalping_optimization['new_time_exit_rate']
-                            old_profit = scalping_optimization['old_avg_profit']
-                            new_profit = scalping_optimization['new_avg_profit']
-                            old_capture = scalping_optimization.get('old_capture_rate', 0)
-                            new_capture = scalping_optimization.get('new_capture_rate', 0)
-                            
-                            # 【V8.4.5】统一显示格式（包括捕获率）
-                            print(f"  ✅ 超短线优化完成:")
-                            print(f"     捕获率: {old_capture*100:.0f}% → {new_capture*100:.0f}% ({(new_capture-old_capture)*100:+.0f}%)")
-                            print(f"     平均利润: {old_profit:.1f}% → {new_profit:.1f}% ({new_profit-old_profit:+.1f}%)")
-                            print(f"     time_exit率: {old_rate*100:.0f}% → {new_rate*100:.0f}% ({(new_rate-old_rate)*100:+.0f}%)")
-                else:
-                    print(f"  ⚠️  超短线机会不足20个（{separated_analysis['scalping']['total_opportunities']}个），跳过优化")
+                    # 更新profit_comparison数据
+                    profit_comparison['scalping'] = {
+                        'name': scalping_optimization.get('name', ''),
+                        'capture_rate': scalping_optimization['capture_rate'],
+                        'avg_profit': scalping_optimization['avg_profit'],
+                        'win_rate': scalping_optimization['win_rate'],
+                        'profit_ratio': scalping_optimization['profit_ratio'],
+                        'risk_score': scalping_optimization['risk_score']
+                    }
+                    profit_comparison['has_data'] = True
                 
-                # 分别优化波段参数
-                if separated_analysis['swing']['total_opportunities'] > 20:
-                    print(f"\n  🌊 优化波段参数...")
-                    if base_params:
-                        print(f"     ℹ️  使用V7.7.0初始参数: R:R={base_params.get('min_risk_reward', 'N/A')}, 共识={base_params.get('min_indicator_consensus', 'N/A')}")
-                    if ai_suggested_params:
-                        print(f"     🤖 AI建议参数: {ai_suggested_params}")
-                    swing_optimization = optimize_swing_params(
-                        swing_data=separated_analysis['swing'],
-                        current_params=swing_current,
-                        initial_params=initial_params_for_swing,  # 【V8.3.16新增】
-                        ai_suggested_params=ai_suggested_params  # 【V8.3.25.10新增】
-                    )
-                    
-                    if swing_optimization.get('improvement') is not None:
-                        # 【V8.4.5】检查验证期是否已回退
-                        # 【V8.4.10】检查第4.5步最终验证是否通过
-                        if swing_optimization.get('_validation_failed'):
-                            print(f"  ⏭️  波段参数已被验证期回退，跳过应用优化后的参数")
-                        elif not validation_passed:
-                            print(f"  ⏭️  【V8.4.10】第4.5步最终验证失败，跳过应用优化后的参数")
-                        else:
-                            # 更新config中的波段参数
-                            if 'swing_params' not in config:
-                                config['swing_params'] = {}
-                            config['swing_params'].update(swing_optimization['optimized_params'])
-                            
-                            old_profit = swing_optimization['old_avg_profit']
-                            new_profit = swing_optimization['new_avg_profit']
-                            old_capture = swing_optimization['old_capture_rate']
-                            new_capture = swing_optimization['new_capture_rate']
-                            old_time_exit = swing_optimization.get('old_time_exit_rate', 0)
-                            new_time_exit = swing_optimization.get('new_time_exit_rate', 0)
-                            
-                            # 【V8.4.5】统一显示格式（包括time_exit率）
-                            print(f"  ✅ 波段优化完成:")
-                            print(f"     捕获率: {old_capture*100:.0f}% → {new_capture*100:.0f}% ({(new_capture-old_capture)*100:+.0f}%)")
-                            print(f"     平均利润: {old_profit:.1f}% → {new_profit:.1f}% ({new_profit-old_profit:+.1f}%)")
-                            print(f"     time_exit率: {old_time_exit*100:.0f}% → {new_time_exit*100:.0f}% ({(new_time_exit-old_time_exit)*100:+.0f}%)")
-                else:
-                    print(f"  ⚠️  波段机会不足20个（{separated_analysis['swing']['total_opportunities']}个），跳过优化")
+                # 优化波段
+                swing_optimization = optimize_strategy_with_risk_control(
+                    strategy_data=swing_data,
+                    strategy_type='swing',
+                    phase1_baseline=phase1_baseline_for_phase3,
+                    phase2_baseline=phase2_baseline_result,
+                    ai_suggested_params=ai_suggested_params
+                )
                 
-                # 【V8.4.5】前向验证：在验证期测试优化后的参数
-                if val_analysis and (scalping_optimization or swing_optimization):
-                    print(f"\n  🔍 【V8.4.5前向验证】在验证期测试优化后的参数...")
+                # 应用波段优化结果
+                if swing_optimization:
+                    if 'swing_params' not in config:
+                        config['swing_params'] = {}
+                    config['swing_params'].update(swing_optimization['optimized_params'])
                     
-                    # 导入测试函数
-                    from backtest_optimizer_v8321 import test_params_on_opportunities
-                    
-                    # 验证超短线参数
-                    if scalping_optimization and scalping_optimization.get('optimized_params'):
-                        val_scalping_opps = val_analysis['scalping']['opportunities']
-                        if len(val_scalping_opps) >= 5:
-                            optimized_scalping_params = scalping_optimization['optimized_params']
-                            val_result = test_params_on_opportunities(
-                                opportunities=val_scalping_opps,
-                                params=optimized_scalping_params
-                            )
-                            
-                            val_avg_profit = val_result.get('avg_profit', 0)
-                            val_capture_rate = val_result.get('capture_rate', 0)
-                            
-                            print(f"     超短线验证期表现:")
-                            print(f"       平均利润: {val_avg_profit:.2f}%")
-                            print(f"       捕获率: {val_capture_rate*100:.1f}%")
-                            
-                            # 【V8.5.2.4.1】改进回退逻辑：对比训练期baseline，避免采用更差的参数
-                            train_baseline_profit = separated_analysis['scalping'].get('avg_profit', 0)
-                            improvement = scalping_optimization.get('new_avg_profit', 0) - train_baseline_profit
-                            
-                            print(f"       📊 对比训练期baseline: {train_baseline_profit:.2f}% → 优化后{scalping_optimization.get('new_avg_profit', 0):.2f}% (变化{improvement:+.2f}%)")
-                            
-                            # 决策：综合考虑验证期表现和训练期对比
-                            if val_avg_profit < -1.0:  # 验证期亏损严重
-                                print(f"       ⚠️  验证期亏损严重，回退到保守参数")
-                                config['scalping_params'] = {
-                                    'atr_tp_multiplier': 2.0,  # 【V8.5.2.4.2】使用基准参数
-                                    'atr_stop_multiplier': 1.5,
-                                    'max_holding_hours': 12,
-                                    'min_risk_reward': 1.5,
-                                    'min_signal_score': 60,
-                                    '_validation_rollback': True
-                                }
-                                scalping_optimization['_validation_failed'] = True
-                            elif improvement < -2.0:  # 【V8.5.2.4.1】训练期退步超过2%
-                                print(f"       ⚠️  优化后比baseline退步{-improvement:.1f}%，回退到保守参数")
-                                config['scalping_params'] = {
-                                    'atr_tp_multiplier': 2.0,
-                                    'atr_stop_multiplier': 1.5,
-                                    'max_holding_hours': 12,
-                                    'min_risk_reward': 1.5,
-                                    'min_signal_score': 60,
-                                    '_validation_rollback': True
-                                }
-                                scalping_optimization['_validation_failed'] = True
-                            elif val_avg_profit > 0 and improvement > 0:
-                                print(f"       ✅ 验证期盈利且训练期改进{improvement:.2f}%，使用优化后的参数")
-                            elif val_avg_profit > 0:
-                                print(f"       🟡 验证期盈利但训练期持平/退步，谨慎使用优化后的参数")
-                            else:
-                                print(f"       🟡 验证期持平/亏损但未达回退阈值，保留优化后的参数")
-                        else:
-                            print(f"     ⚠️  超短线验证期机会不足（{len(val_scalping_opps)}个），跳过验证")
-                    
-                    # 验证波段参数
-                    if swing_optimization and swing_optimization.get('optimized_params'):
-                        val_swing_opps = val_analysis['swing']['opportunities']
-                        if len(val_swing_opps) >= 5:
-                            optimized_swing_params = swing_optimization['optimized_params']
-                            val_result = test_params_on_opportunities(
-                                opportunities=val_swing_opps,
-                                params=optimized_swing_params
-                            )
-                            
-                            val_avg_profit = val_result.get('avg_profit', 0)
-                            val_capture_rate = val_result.get('capture_rate', 0)
-                            
-                            print(f"     波段验证期表现:")
-                            print(f"       平均利润: {val_avg_profit:.2f}%")
-                            print(f"       捕获率: {val_capture_rate*100:.1f}%")
-                            
-                            # 【V8.5.2.4.1】改进回退逻辑：对比训练期baseline
-                            train_baseline_profit = separated_analysis['swing'].get('avg_profit', 0)
-                            improvement = swing_optimization.get('new_avg_profit', 0) - train_baseline_profit
-                            
-                            print(f"       📊 对比训练期baseline: {train_baseline_profit:.2f}% → 优化后{swing_optimization.get('new_avg_profit', 0):.2f}% (变化{improvement:+.2f}%)")
-                            
-                            # 决策：综合考虑验证期表现和训练期对比
-                            if val_avg_profit < -1.0:  # 验证期亏损严重
-                                print(f"       ⚠️  验证期亏损严重，回退到保守参数")
-                                config['swing_params'] = {
-                                    'atr_tp_multiplier': 4.0,
-                                    'atr_stop_multiplier': 2.0,
-                                    'max_holding_hours': 72,
-                                    'min_risk_reward': 1.5,
-                                    'min_signal_score': 60,
-                                    '_validation_rollback': True
-                                }
-                                swing_optimization['_validation_failed'] = True
-                            elif improvement < -2.0:  # 【V8.5.2.4.1】训练期退步超过2%
-                                print(f"       ⚠️  优化后比baseline退步{-improvement:.1f}%，回退到保守参数")
-                                config['swing_params'] = {
-                                    'atr_tp_multiplier': 4.0,
-                                    'atr_stop_multiplier': 2.0,
-                                    'max_holding_hours': 72,
-                                    'min_risk_reward': 1.5,
-                                    'min_signal_score': 60,
-                                    '_validation_rollback': True
-                                }
-                                swing_optimization['_validation_failed'] = True
-                            elif val_avg_profit > 0 and improvement > 0:
-                                print(f"       ✅ 验证期盈利且训练期改进{improvement:.2f}%，使用优化后的参数")
-                            elif val_avg_profit > 0:
-                                print(f"       🟡 验证期盈利但训练期持平/退步，谨慎使用优化后的参数")
-                            else:
-                                print(f"       🟡 验证期持平/亏损但未达回退阈值，保留优化后的参数")
-                        else:
-                            print(f"     ⚠️  波段验证期机会不足（{len(val_swing_opps)}个），跳过验证")
+                    # 更新profit_comparison数据
+                    profit_comparison['swing'] = {
+                        'name': swing_optimization.get('name', ''),
+                        'capture_rate': swing_optimization['capture_rate'],
+                        'avg_profit': swing_optimization['avg_profit'],
+                        'win_rate': swing_optimization['win_rate'],
+                        'profit_ratio': swing_optimization['profit_ratio'],
+                        'risk_score': swing_optimization['risk_score']
+                    }
+                    profit_comparison['has_data'] = True
                 
             except Exception as e:
-                print(f"⚠️ 分离策略优化失败: {e}")
+                print(f"⚠️ Phase 3优化失败: {e}")
                 import traceback
                 traceback.print_exc()
         
-        # ========== 【V8.5.4】第4.6.5步：计算分类利润对比（供邮件使用） ==========
-        if scalping_optimization or swing_optimization:
-            print("\n【第4.6.5步：计算分类利润对比（V8.5.4）】")
-            
-            profit_comparison = {
-                'has_data': False,
-                'scalping': {},
-                'swing': {}
-            }
-            
-            if scalping_optimization and not scalping_optimization.get('_validation_failed'):
-                try:
-                    # 🔧 V8.5.5.3: 修复数据获取路径（从old_result/new_result获取）
-                    old_result = scalping_optimization.get('old_result', {})
-                    new_result = scalping_optimization.get('new_result', {})
-                    
-                    old_count = old_result.get('captured_count', 0)
-                    new_count = new_result.get('captured_count', 0)
-                    old_avg_profit = old_result.get('avg_profit', 0)
-                    new_avg_profit = new_result.get('avg_profit', 0)
-                    
-                    # 计算总利润
-                    old_total_profit = old_count * old_avg_profit / 100
-                    new_total_profit = new_count * new_avg_profit / 100
-                    profit_diff = new_total_profit - old_total_profit
-                    
-                    profit_comparison['scalping'] = {
-                        'old_count': old_count,
-                        'new_count': new_count,
-                        'old_avg_profit': old_avg_profit,
-                        'new_avg_profit': new_avg_profit,
-                        'old_total_profit': old_total_profit,
-                        'new_total_profit': new_total_profit,
-                        'profit_diff': profit_diff,
-                        'count_diff': new_count - old_count,
-                        'avg_profit_diff': new_avg_profit - old_avg_profit
-                    }
-                    profit_comparison['has_data'] = True
-                    
-                    print(f"  ⚡ 超短线策略:")
-                    print(f"     捕获数量: {old_count}个 → {new_count}个 ({new_count-old_count:+d})")
-                    print(f"     平均利润: {old_avg_profit:.1f}% → {new_avg_profit:.1f}% ({new_avg_profit-old_avg_profit:+.1f}%)")
-                    print(f"     总利润: {old_total_profit:+.1f}U → {new_total_profit:+.1f}U ({profit_diff:+.1f}U)")
-                except Exception as e:
-                    print(f"  ⚠️  超短线统计失败: {e}")
-            
-            if swing_optimization and not swing_optimization.get('_validation_failed'):
-                try:
-                    # 🔧 V8.5.5.3: 修复数据获取路径（从old_result/new_result获取）
-                    old_result = swing_optimization.get('old_result', {})
-                    new_result = swing_optimization.get('new_result', {})
-                    
-                    old_count = old_result.get('captured_count', 0)
-                    new_count = new_result.get('captured_count', 0)
-                    old_avg_profit = old_result.get('avg_profit', 0)
-                    new_avg_profit = new_result.get('avg_profit', 0)
-                    
-                    # 计算总利润
-                    old_total_profit = old_count * old_avg_profit / 100
-                    new_total_profit = new_count * new_avg_profit / 100
-                    profit_diff = new_total_profit - old_total_profit
-                    
-                    profit_comparison['swing'] = {
-                        'old_count': old_count,
-                        'new_count': new_count,
-                        'old_avg_profit': old_avg_profit,
-                        'new_avg_profit': new_avg_profit,
-                        'old_total_profit': old_total_profit,
-                        'new_total_profit': new_total_profit,
-                        'profit_diff': profit_diff,
-                        'count_diff': new_count - old_count,
-                        'avg_profit_diff': new_avg_profit - old_avg_profit
-                    }
-                    profit_comparison['has_data'] = True
-                    
-                    print(f"  🌊 波段策略:")
-                    print(f"     捕获数量: {old_count}个 → {new_count}个 ({new_count-old_count:+d})")
-                    print(f"     平均利润: {old_avg_profit:.1f}% → {new_avg_profit:.1f}% ({new_avg_profit-old_avg_profit:+.1f}%)")
-                    print(f"     总利润: {old_total_profit:+.1f}U → {new_total_profit:+.1f}U ({profit_diff:+.1f}U)")
-                except Exception as e:
-                    print(f"  ⚠️  波段统计失败: {e}")
-            
-            # 计算综合总利润
-            if profit_comparison['has_data']:
-                try:
-                    scalp_old = profit_comparison['scalping'].get('old_total_profit', 0)
-                    scalp_new = profit_comparison['scalping'].get('new_total_profit', 0)
-                    swing_old = profit_comparison['swing'].get('old_total_profit', 0)
-                    swing_new = profit_comparison['swing'].get('new_total_profit', 0)
-                    
-                    total_old = scalp_old + swing_old
-                    total_new = scalp_new + swing_new
-                    total_diff = total_new - total_old
-                    total_diff_pct = (total_diff / total_old * 100) if total_old > 0 else 0
-                    
-                    profit_comparison['total'] = {
-                        'old': total_old,
-                        'new': total_new,
-                        'diff': total_diff,
-                        'diff_pct': total_diff_pct
-                    }
-                    
-                    print(f"\n  📊 综合总利润:")
-                    print(f"     {total_old:+.1f}U → {total_new:+.1f}U ({total_diff:+.1f}U / {total_diff_pct:+.1f}%)")
-                except Exception as e:
-                    print(f"  ⚠️  综合统计失败: {e}")
-            
-            # 保存到config供邮件使用
-            config['_v854_profit_comparison'] = profit_comparison
+        # 保存到config供邮件使用
+        config['_v854_profit_comparison'] = profit_comparison
+        
+        
+        # ========== 【V8.5.2.4.10】Phase 3重构完成 ==========
+        # 旧Phase 3代码（第4.6步+第4.6.5步，约360行）已由optimize_strategy_with_risk_control()替代
         
         # ========== 【V8.3.13.3】第4.7步：Per-Symbol优化 ==========
         print("\n【第4.7步：Per-Symbol优化（V8.3.13.3）】")
