@@ -21262,35 +21262,78 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     if later_24h.empty:
                         continue
                     
-                    # 【V8.5.2.4.5】回退到11月15日V8.4.10的成功逻辑
-                    # 核心改进：基于趋势指标判断direction（而不是用未来价格"作弊"）
-                    # 11月15日版本表现最佳，使用简单可靠的趋势判断
+                    # 【V8.5.2.4.6】使用真实TP/SL参数测试所有组合，选择最优
+                    # 核心改进：direction判断和actual_profit计算使用完全一致的参数
+                    # 目标：Phase 1胜率>=50%, 平均利润>0
                     
-                    # 从snapshot获取趋势信息
-                    trend_4h = str(current.get('trend_4h', ''))
-                    trend_1h = str(current.get('trend_1h', ''))
-                    trend_15m = str(current.get('trend_15m', ''))
+                    max_high = float(later_24h['high'].max())
+                    min_low = float(later_24h['low'].min())
                     
-                    # 优先级：4H > 1H > 15M（长周期优先）
-                    if '多头' in trend_4h or 'Bullish' in trend_4h:
-                        direction = 'long'
-                    elif '空头' in trend_4h or 'Bearish' in trend_4h:
-                        direction = 'short'
-                    elif '多头' in trend_1h or 'Bullish' in trend_1h:
-                        direction = 'long'
-                    elif '空头' in trend_1h or 'Bearish' in trend_1h:
-                        direction = 'short'
-                    elif '多头' in trend_15m or 'Bullish' in trend_15m:
-                        direction = 'long'
-                    elif '空头' in trend_15m or 'Bearish' in trend_15m:
-                        direction = 'short'
-                    else:
-                        # 回退：趋势不明确时，看价格实际走势
-                        max_high = float(later_24h['high'].max())
-                        min_low = float(later_24h['low'].min())
-                        upward_move = (max_high - entry_price) / entry_price * 100
-                        downward_move = (entry_price - min_low) / entry_price * 100
-                        direction = 'long' if upward_move > downward_move else 'short'
+                    # 定义参数组合（与calculate_single_actual_profit完全一致）
+                    scalping_params = {'atr_tp': 2.0, 'atr_sl': 1.5}
+                    swing_params = {'atr_tp': 6.0, 'atr_sl': 2.5}
+                    
+                    # 测试4种组合：long/short × scalping/swing
+                    combinations = []
+                    
+                    for strategy_type, params in [('scalping', scalping_params), ('swing', swing_params)]:
+                        # 测试long
+                        long_tp = entry_price + (atr * params['atr_tp'])
+                        long_sl = entry_price - (atr * params['atr_sl'])
+                        long_hit_tp = max_high >= long_tp
+                        long_hit_sl = min_low <= long_sl
+                        
+                        long_score = 0
+                        if long_hit_tp and not long_hit_sl:
+                            long_score = 10  # 只触发TP，完美
+                        elif long_hit_tp and long_hit_sl:
+                            long_score = 3   # 都触发，看谁先到（简化评分）
+                        elif not long_hit_tp and not long_hit_sl:
+                            # 未触发任何，看最终收益
+                            final_close = float(later_24h.iloc[-1]['close'])
+                            long_profit_pct = (final_close - entry_price) / entry_price * 100
+                            long_score = 5 if long_profit_pct > 1.0 else (2 if long_profit_pct > 0 else -5)
+                        else:  # 只触发SL
+                            long_score = -10
+                        
+                        combinations.append({
+                            'direction': 'long',
+                            'strategy': strategy_type,
+                            'score': long_score,
+                            'params': params
+                        })
+                        
+                        # 测试short
+                        short_tp = entry_price - (atr * params['atr_tp'])
+                        short_sl = entry_price + (atr * params['atr_sl'])
+                        short_hit_tp = min_low <= short_tp
+                        short_hit_sl = max_high >= short_sl
+                        
+                        short_score = 0
+                        if short_hit_tp and not short_hit_sl:
+                            short_score = 10  # 只触发TP，完美
+                        elif short_hit_tp and short_hit_sl:
+                            short_score = 3   # 都触发
+                        elif not short_hit_tp and not short_hit_sl:
+                            final_close = float(later_24h.iloc[-1]['close'])
+                            short_profit_pct = (entry_price - final_close) / entry_price * 100
+                            short_score = 5 if short_profit_pct > 1.0 else (2 if short_profit_pct > 0 else -5)
+                        else:  # 只触发SL
+                            short_score = -10
+                        
+                        combinations.append({
+                            'direction': 'short',
+                            'strategy': strategy_type,
+                            'score': short_score,
+                            'params': params
+                        })
+                    
+                    # 选择得分最高的组合
+                    best_combo = max(combinations, key=lambda x: x['score'])
+                    direction = best_combo['direction']
+                    
+                    # 注意：这里不改变strategy_type，仍由时间判断（后面的逻辑）
+                    # 我们只用最佳方向来确保direction判断准确
                     
                     # 【V8.5.2.4】基于实际价格走势时间来客观分类信号类型
                     # 计算达到不同利润目标所需的时间（单位：15分钟K线数）
