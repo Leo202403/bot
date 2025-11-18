@@ -22568,6 +22568,213 @@ def analyze_signal_type_performance(opportunities):
     return result
 
 
+def optimize_strategy_with_risk_control(strategy_data, strategy_type, phase1_baseline, phase2_baseline, ai_suggested_params=None):
+    """
+    【V8.5.2.4.10】Phase 3: 风险控制优化
+    
+    目标：
+    - 约束条件：捕获率≥Phase 2的90%
+    - 优化目标：利润60% + 风险40%（胜率×盈亏比）
+    
+    流程：
+    1. 测试Phase 2参数（baseline）
+    2. 测试AI建议参数
+    3. 测试Phase 2 + AI的组合参数
+    4. 测试微调参数（在最优基础上±10%）
+    
+    Args:
+        strategy_data: 策略数据（超短线或波段）
+        strategy_type: 'scalping' or 'swing'
+        phase1_baseline: Phase 1统计基准
+        phase2_baseline: Phase 2最优结果
+        ai_suggested_params: AI建议的参数
+    
+    Returns:
+        {
+            'optimized_params': {...},
+            'capture_rate': float,
+            'avg_profit': float,
+            'win_rate': float,
+            'risk_score': float,
+            'baseline_comparison': {...}
+        }
+    """
+    from calculate_actual_profit import calculate_single_actual_profit
+    
+    print(f"\n{'='*60}")
+    print(f"【V8.5.2.4.10 Phase 3】风险控制优化 ({strategy_type})")
+    print(f"{'='*60}")
+    
+    opportunities = strategy_data['opportunities']
+    total_opps = len(opportunities)
+    
+    if total_opps < 20:
+        print(f"  ⚠️  机会不足20个（{total_opps}个），跳过优化")
+        return None
+    
+    # 显示Phase 2 baseline约束
+    if phase2_baseline:
+        phase2_capture = phase2_baseline.get('capture_rate', 0)
+        phase2_profit = phase2_baseline.get('avg_profit', 0)
+        min_capture_rate = phase2_capture * 0.9  # 约束：≥90%
+        
+        print(f"\n  📊 Phase 2 baseline:")
+        print(f"     捕获率: {phase2_capture*100:.1f}%")
+        print(f"     平均利润: {phase2_profit:.2f}%")
+        print(f"     约束条件: 捕获率≥{min_capture_rate*100:.1f}%")
+    else:
+        print(f"  ⚠️  无Phase 2 baseline，将使用宽松约束")
+        min_capture_rate = 0.3  # 默认最低30%
+        phase2_profit = 1.0
+    
+    # 准备测试参数组合
+    test_params_list = []
+    
+    # 1. Phase 2参数（baseline）
+    if phase2_baseline and phase2_baseline.get('params'):
+        test_params_list.append({
+            'name': 'Phase2_Baseline',
+            'params': phase2_baseline['params'].copy()
+        })
+    
+    # 2. AI建议参数
+    if ai_suggested_params:
+        test_params_list.append({
+            'name': 'AI_Suggested',
+            'params': ai_suggested_params.copy()
+        })
+    
+    # 3. 组合参数（Phase 2 + AI建议）
+    if phase2_baseline and phase2_baseline.get('params') and ai_suggested_params:
+        combined_params = phase2_baseline['params'].copy()
+        combined_params.update(ai_suggested_params)
+        test_params_list.append({
+            'name': 'Phase2_AI_Combined',
+            'params': combined_params
+        })
+    
+    # 4. 微调参数（基于Phase 2，调整TP/SL）
+    if phase2_baseline and phase2_baseline.get('params'):
+        base = phase2_baseline['params']
+        
+        # 提高TP（捕获更多利润）
+        higher_tp = base.copy()
+        higher_tp['atr_tp_multiplier'] = base.get('atr_tp_multiplier', 3.0) * 1.2
+        test_params_list.append({
+            'name': 'Higher_TP',
+            'params': higher_tp
+        })
+        
+        # 降低SL（提高胜率）
+        tighter_sl = base.copy()
+        tighter_sl['atr_stop_multiplier'] = base.get('atr_stop_multiplier', 1.5) * 0.9
+        test_params_list.append({
+            'name': 'Tighter_SL',
+            'params': tighter_sl
+        })
+    
+    print(f"\n  🔍 测试{len(test_params_list)}组参数组合...")
+    
+    # 测试每组参数
+    best_score = -float('inf')
+    best_result = None
+    
+    for test_config in test_params_list:
+        name = test_config['name']
+        params = test_config['params']
+        
+        # 过滤并计算
+        captured_opps = []
+        for opp in opportunities:
+            # 基本过滤
+            if (opp.get('signal_score', 0) >= params.get('min_signal_score', 60) and
+                opp.get('consensus', 0) >= params.get('min_indicator_consensus', 1)):
+                
+                # 计算actual_profit
+                actual_profit = calculate_single_actual_profit(
+                    opp,
+                    strategy_params=params,
+                    use_dynamic_atr=False
+                )
+                opp['_test_actual_profit'] = actual_profit
+                captured_opps.append(opp)
+        
+        if not captured_opps:
+            continue
+        
+        # 统计
+        capture_rate = len(captured_opps) / total_opps
+        avg_profit = sum(o.get('_test_actual_profit', 0) for o in captured_opps) / len(captured_opps)
+        
+        wins = len([o for o in captured_opps if o.get('_test_actual_profit', 0) > 0])
+        losses = len(captured_opps) - wins
+        win_rate = wins / len(captured_opps) if captured_opps else 0
+        
+        # 计算盈亏比
+        win_profits = [o.get('_test_actual_profit', 0) for o in captured_opps if o.get('_test_actual_profit', 0) > 0]
+        loss_profits = [abs(o.get('_test_actual_profit', 0)) for o in captured_opps if o.get('_test_actual_profit', 0) < 0]
+        
+        avg_win = sum(win_profits) / len(win_profits) if win_profits else 0
+        avg_loss = sum(loss_profits) / len(loss_profits) if loss_profits else 1
+        profit_ratio = avg_win / avg_loss if avg_loss > 0 else 0
+        
+        # 【V8.5.2.4.10】评分公式
+        # 约束条件：捕获率≥Phase 2的90%
+        if capture_rate < min_capture_rate:
+            score = -1000  # 不合格
+        else:
+            # 优化目标
+            profit_score = avg_profit  # 利润最大化
+            risk_score = win_rate * profit_ratio  # 风险最小化
+            
+            # 综合得分
+            score = profit_score * 0.6 + risk_score * 0.4
+        
+        print(f"\n     [{name}]")
+        print(f"       捕获率: {capture_rate*100:.1f}% {'✅' if capture_rate >= min_capture_rate else '❌'}")
+        print(f"       平均利润: {avg_profit:.2f}%")
+        print(f"       胜率: {win_rate*100:.1f}% | 盈亏比: {profit_ratio:.2f}")
+        print(f"       风险得分: {risk_score:.2f} | 综合得分: {score:.2f}")
+        
+        if score > best_score:
+            best_score = score
+            best_result = {
+                'optimized_params': params.copy(),
+                'capture_rate': capture_rate,
+                'avg_profit': avg_profit,
+                'win_rate': win_rate,
+                'profit_ratio': profit_ratio,
+                'risk_score': risk_score,
+                'score': score,
+                'name': name
+            }
+    
+    if best_result:
+        print(f"\n  ✅ 最优配置: {best_result['name']}")
+        print(f"     捕获率: {best_result['capture_rate']*100:.1f}% (Phase2: {phase2_capture*100:.1f}%)")
+        print(f"     平均利润: {best_result['avg_profit']:.2f}% (Phase2: {phase2_profit:.2f}%)")
+        print(f"     胜率: {best_result['win_rate']*100:.1f}% | 盈亏比: {best_result['profit_ratio']:.2f}")
+        print(f"     综合得分: {best_result['score']:.2f}")
+        
+        # 对比Phase 2
+        if phase2_baseline:
+            capture_diff = (best_result['capture_rate'] - phase2_capture) * 100
+            profit_diff = best_result['avg_profit'] - phase2_profit
+            
+            best_result['baseline_comparison'] = {
+                'capture_rate_change': capture_diff,
+                'profit_change': profit_diff
+            }
+            
+            print(f"\n     📊 vs Phase 2:")
+            print(f"        捕获率: {capture_diff:+.1f}%")
+            print(f"        利润: {profit_diff:+.2f}%")
+    else:
+        print(f"\n  ❌ 未找到满足约束的参数组合")
+    
+    return best_result
+
+
 def optimize_scalping_params(scalping_data, current_params, initial_params=None, ai_suggested_params=None, use_v8321=True):
     """
     【V8.3.21】超短线参数优化 - V8.3.21增强版 + 旧版Grid Search（可选）
