@@ -2770,102 +2770,13 @@ def save_market_snapshot_v7(market_data_list):
             price_action = data.get("price_action", {}) or {}
             pullback = price_action.get("pullback_type", {}) or {}
             
-            # 计算指标共振（用于复盘分析）
-            ma = data.get("moving_averages", {}) or {}
-            rsi_data = data.get("rsi", {}) or {}
-            vol = data.get("volume_analysis", {}) or {}
+            # 【V8.5.2.4.3完整修复】直接从data获取indicator_consensus
+            # 现在在get_ohlcv_data中已经计算好了，无需重复计算
+            indicator_consensus = data.get("indicator_consensus", 0)
             
-            indicator_consensus = 0
-            # 【V8.2.6修复】提高共振标准，只有"强信号"才计入
-            # 1. EMA明确发散（MA7显著高于MA24，至少2%差距）
-            ma7 = ma.get("ma7", 0)
-            ma24 = ma.get("ma24", 0)
-            if ma7 > 0 and ma24 > 0:
-                divergence = (ma7 - ma24) / ma24 * 100
-                if abs(divergence) >= 2.0:  # 至少2%的发散
-                    indicator_consensus += 1
-            
-            # 2. MACD明确金叉/死叉（histogram显著>0或<0，至少0.01）
-            macd_hist = macd_data.get("histogram", 0)
-            if abs(macd_hist) >= 0.01:  # 明确的方向
-                indicator_consensus += 1
-            
-            # 3. RSI强信号（超买>70或超卖<30，或接近中性45-55）
-            rsi_14 = rsi_data.get("rsi_14", 50)
-            if rsi_14 > 70 or rsi_14 < 30 or (45 <= rsi_14 <= 55):
-                indicator_consensus += 1
-            
-            # 4. 成交量明显放量（>150%）
-            if vol.get("ratio", 0) >= 1.5:
-                indicator_consensus += 1
-            
-            # 5. 多周期趋势一致（15m、1h、4h同向）
-            trend_15m = data.get("trend_15m", "")
-            trend_1h = mid_term.get("trend", "")
-            trend_4h = data.get("trend_4h", "")
-            if ("多头" in trend_15m and "多头" in trend_1h and "多头" in trend_4h) or \
-                ("空头" in trend_15m and "空头" in trend_1h and "空头" in trend_4h):
-                indicator_consensus += 1
-            
-            # 【V8.5.2.4.3】添加到data字典中，确保实时传递给AI和订单保存
-            data["indicator_consensus"] = indicator_consensus
-            # 确保indicators字典存在
-            if "indicators" not in data:
-                data["indicators"] = {}
-            data["indicators"]["consensus"] = indicator_consensus
-            
-            # 【V8.4】计算综合确认度评分（0-100分）
-            try:
-                from consensus_calculator import calculate_consensus_score
-                
-                # 准备数据
-                ema20_val = ma.get("ma7", 0)  # 使用MA7作为EMA20的近似
-                ema50_val = ma.get("ma24", 0)  # 使用MA24作为EMA50的近似
-                
-                # 计算最近20根K线的平均成交量
-                avg_volume_val = 0
-                if kline_list and len(kline_list) >= 20:
-                    recent_volumes = [k.get("volume", 0) for k in kline_list[-20:]]
-                    avg_volume_val = sum(recent_volumes) / len(recent_volumes) if recent_volumes else 0
-                
-                # 获取最近3根K线收盘价（用于K线序列一致性分析）
-                recent_closes = None
-                if kline_list and len(kline_list) >= 3:
-                    recent_closes = [k.get("close", 0) for k in kline_list[-3:]]
-                
-                consensus_score = calculate_consensus_score(
-                    # 指标数据
-                    ema20=ema20_val,
-                    ema50=ema50_val,
-                    macd_histogram=macd_hist,
-                    rsi_14=rsi_14,
-                    volume=data.get("volume", 0),
-                    avg_volume=avg_volume_val,
-                    # 趋势数据
-                    trend_15m=trend_15m,
-                    trend_1h=trend_1h,
-                    trend_4h=trend_4h,
-                    # 形态数据（稍后从components获取）
-                    pin_bar_score=0,  # 稍后更新
-                    engulfing_score=0,
-                    breakout_score=0,
-                    # K线序列
-                    recent_closes=recent_closes,
-                    # 支撑阻力
-                    support=((data.get("support_resistance") or {}).get("nearest_support") or {}).get("price", 0),
-                    resistance=((data.get("support_resistance") or {}).get("nearest_resistance") or {}).get("price", 0),
-                    current_price=data.get("current_price", 0)
-                )
-            except Exception as e:
-                print(f"⚠️ 计算consensus_score失败: {e}")
-                consensus_score = 0
-            
-            # 【V8.5.2.4.3】添加consensus_score到data字典
-            data["consensus_score"] = consensus_score
-            # indicators字典在上面已经创建，直接添加
-            if "indicators" not in data:
-                data["indicators"] = {}
-            data["indicators"]["consensus_score"] = consensus_score
+            # 【V8.5.2.4.3完整修复】直接从data获取consensus_score
+            # 现在在get_ohlcv_data中已经计算好了（如果需要的话）
+            consensus_score = data.get("consensus_score", 0)
             
             # 【V8.2】计算信号评分的各个维度（保存"原料"而非"成品"）
             # 初始化signal_type（防止未定义错误）
@@ -14149,6 +14060,44 @@ def get_ohlcv_data(symbol, skip_timing_check=False):
             # 【V8.3.21.2修复】添加K线历史数据，用于save_market_snapshot中的数据增强计算
             "kline_data": ohlcv_15m,  # 原始K线数据列表，每个元素是[timestamp, open, high, low, close, volume]
         }
+        
+        # 【V8.5.2.4.3完整修复】计算indicator_consensus（0-5）
+        # 这样实时传递给AI的数据就包含共振数了
+        indicator_consensus = 0
+        
+        # 1. EMA明确发散（MA7显著高于MA24，至少2%差距）
+        ma7_val = ma7
+        ma24_val = ma24
+        if ma7_val > 0 and ma24_val > 0:
+            divergence = (ma7_val - ma24_val) / ma24_val * 100
+            if abs(divergence) >= 2.0:
+                indicator_consensus += 1
+        
+        # 2. MACD明确金叉/死叉（histogram显著>0或<0，至少0.01）
+        if abs(histogram) >= 0.01:
+            indicator_consensus += 1
+        
+        # 3. RSI强信号（超买>70或超卖<30，或接近中性45-55）
+        if rsi_14 > 70 or rsi_14 < 30 or (45 <= rsi_14 <= 55):
+            indicator_consensus += 1
+        
+        # 4. 成交量明显放量（>150%）
+        if volume_ratio >= 150:
+            indicator_consensus += 1
+        
+        # 5. 多周期趋势一致（15m、1h、4h同向）
+        if ("多头" in trend and "多头" in trend_1h and "多头" in long_term_trend) or \
+           ("空头" in trend and "空头" in trend_1h and "空头" in long_term_trend):
+            indicator_consensus += 1
+        
+        # 添加到返回的data字典中
+        data["indicator_consensus"] = indicator_consensus
+        data["consensus"] = indicator_consensus  # 兼容旧字段名
+        if "indicators" not in data:
+            data["indicators"] = {}
+        data["indicators"]["consensus"] = indicator_consensus
+        
+        return data
 
     except TimeoutError:
         print(f"⚠️  获取 {symbol} 数据超时（>15秒）")
