@@ -8931,7 +8931,7 @@ def analyze_and_adjust_params():
                         enable_validation=False  # 快速探索不需要验证
                     )
                     quick_search_opportunities = quick_search_result['combined']
-                    quick_search_baseline = quick_search_result.get('phase1_baseline')  # 🆕 V8.5.2.4.9
+                    quick_search_baseline = quick_search_result['combined'].get('phase1_baseline')  # 🔧 V8.5.2.4.30: 修复phase1_baseline获取路径
                     print(f"     ✓ 超短线机会: {len(quick_search_opportunities['scalping']['opportunities'])}个")
                     print(f"     ✓ 波段机会: {len(quick_search_opportunities['swing']['opportunities'])}个")
                     
@@ -10143,23 +10143,23 @@ def analyze_and_adjust_params():
                 <div style="display: flex; justify-content: space-around; margin: 8px 0;">
                     <div style="text-align: center; flex: 1;">
                         <div style="font-size: 0.8em; opacity: 0.8;">捕获数量</div>
-                        <div style="font-size: 1.3em; font-weight: bold;">{scalping_data['old_count']}个</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{scalping_data.get('old_count', 0)}个</div>
                     </div>
                     <div style="align-self: center; opacity: 0.5;">→</div>
                     <div style="text-align: center; flex: 1;">
                         <div style="font-size: 0.8em; opacity: 0.8;">捕获数量</div>
-                        <div style="font-size: 1.3em; font-weight: bold;">{scalping_data['new_count']}个 ({scalping_data['count_diff']:+d})</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{scalping_data.get('new_count', 0)}个 ({scalping_data.get('count_diff', 0):+d})</div>
                     </div>
                 </div>
                 <div style="display: flex; justify-content: space-around; margin: 8px 0;">
                     <div style="text-align: center; flex: 1;">
                         <div style="font-size: 0.8em; opacity: 0.8;">平均利润</div>
-                        <div style="font-size: 1.3em; font-weight: bold;">{scalping_data['old_avg_profit']:.1f}%</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{scalping_data.get('old_avg_profit', 0):.1f}%</div>
                     </div>
                     <div style="align-self: center; opacity: 0.5;">→</div>
                     <div style="text-align: center; flex: 1;">
                         <div style="font-size: 0.8em; opacity: 0.8;">平均利润</div>
-                        <div style="font-size: 1.3em; font-weight: bold;">{scalping_data['new_avg_profit']:.1f}% ({scalping_data['avg_profit_diff']:+.1f}%)</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{scalping_data.get('new_avg_profit', 0):.1f}% ({scalping_data.get('avg_profit_diff', 0):+.1f}%)</div>
                     </div>
                 </div>
                 <div style="text-align: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2);">
@@ -10181,23 +10181,23 @@ def analyze_and_adjust_params():
                 <div style="display: flex; justify-content: space-around; margin: 8px 0;">
                     <div style="text-align: center; flex: 1;">
                         <div style="font-size: 0.8em; opacity: 0.8;">捕获数量</div>
-                        <div style="font-size: 1.3em; font-weight: bold;">{swing_data['old_count']}个</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{swing_data.get('old_count', 0)}个</div>
                     </div>
                     <div style="align-self: center; opacity: 0.5;">→</div>
                     <div style="text-align: center; flex: 1;">
                         <div style="font-size: 0.8em; opacity: 0.8;">捕获数量</div>
-                        <div style="font-size: 1.3em; font-weight: bold;">{swing_data['new_count']}个 ({swing_data['count_diff']:+d})</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{swing_data.get('new_count', 0)}个 ({swing_data.get('count_diff', 0):+d})</div>
                     </div>
                 </div>
                 <div style="display: flex; justify-content: space-around; margin: 8px 0;">
                     <div style="text-align: center; flex: 1;">
                         <div style="font-size: 0.8em; opacity: 0.8;">平均利润</div>
-                        <div style="font-size: 1.3em; font-weight: bold;">{swing_data['old_avg_profit']:.1f}%</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{swing_data.get('old_avg_profit', 0):.1f}%</div>
                     </div>
                     <div style="align-self: center; opacity: 0.5;">→</div>
                     <div style="text-align: center; flex: 1;">
                         <div style="font-size: 0.8em; opacity: 0.8;">平均利润</div>
-                        <div style="font-size: 1.3em; font-weight: bold;">{swing_data['new_avg_profit']:.1f}% ({swing_data['avg_profit_diff']:+.1f}%)</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{swing_data.get('new_avg_profit', 0):.1f}% ({swing_data.get('avg_profit_diff', 0):+.1f}%)</div>
                     </div>
                 </div>
                 <div style="text-align: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2);">
