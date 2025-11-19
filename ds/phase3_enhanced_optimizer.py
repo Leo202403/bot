@@ -140,13 +140,14 @@ def phase3_enhanced_optimization(
         print(f"\n     [{i}/{len(candidate_starting_points)}] 从'{starting_point['name']}'出发...")
         
         try:
-            # 为这个起点做局部搜索（50组测试）
+            # 为这个起点做局部搜索
+            # 【V8.5.2.4.47优化】从50组减到30组，避免内存耗尽（2G服务器）
             # 【V8.5.2.4.47修复】使用current_params代替starting_params，添加signal_type
             search_result = optimize_params_v8321_lightweight(
                 opportunities=all_opportunities,
                 current_params=starting_point['params'],
                 signal_type='swing',  # 默认使用swing（或根据实际情况判断）
-                max_combinations=50
+                max_combinations=30  # 【V8.5.2.4.47】50→30，节省40%内存
             )
             
             if search_result:
@@ -649,8 +650,9 @@ def optimize_for_signal_type(
                             }
                             test_combinations.append(test_params)
         
-        # 限制测试数量（每个起点最多50组）
-        test_combinations = test_combinations[:50]
+        # 【V8.5.2.4.47优化】限制测试数量，避免内存耗尽（2G服务器）
+        # 每个起点从50组减到30组，节省40%内存
+        test_combinations = test_combinations[:30]
         
         # 测试每个组合
         for params in test_combinations:

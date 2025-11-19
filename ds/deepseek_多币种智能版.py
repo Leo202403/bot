@@ -9918,79 +9918,92 @@ def analyze_and_adjust_params():
             'swing': {}
         }
         
+        # ========== 【V8.5.2.4.47】DEPRECATED - 旧Phase 3代码已被phase3_enhanced_optimizer.py替代 ==========
+        # 此段代码导致Phase 3重复执行（新Phase 3在quick_global_search_v8316中执行）
+        # 导致内存耗尽（OOM Killed）：
+        #   - 新Phase 3: 4起点×50组 = 200组测试 ✅
+        #   - 旧Phase 3: 200组(scalping)+200组(swing) = 400组 ❌
+        #   - 总计600+组测试 → 2G内存服务器崩溃
+        # 
+        # 注释理由：
+        #   1. phase3_enhanced_optimizer.py已实现所有功能（多起点+AI辅助+分离优化）
+        #   2. 避免重复计算浪费资源
+        #   3. 新Phase 3结果已在quick_global_search_v8316中应用到config
+        # 
         # 【V8.5.2.4.10】准备机会数据
-        if not phase2_baseline_result:
-            print(f"  ⚠️  无Phase 2 baseline，跳过Phase 3优化")
-        elif kline_snapshots is not None and not kline_snapshots.empty:
-            try:
-                # 【V8.5.2.4.10】生成分离的机会数据用于Phase 3
-                separated_analysis_result = analyze_separated_opportunities(
-                    market_snapshots=kline_snapshots,
-                    old_config=config
-                )
-                
-                scalping_data = separated_analysis_result['scalping']
-                swing_data = separated_analysis_result['swing']
-                
-                phase1_baseline_for_phase3 = separated_analysis_result.get('phase1_baseline')
-                
-                # 【V8.5.2.4.10】调用新的Phase 3优化函数
-                # 分别优化超短线和波段
-                scalping_optimization = optimize_strategy_with_risk_control(
-                    strategy_data=scalping_data,
-                    strategy_type='scalping',
-                    phase1_baseline=phase1_baseline_for_phase3,
-                    phase2_baseline=phase2_baseline_result,
-                    ai_suggested_params=ai_suggested_params
-                )
-                
-                # 应用超短线优化结果
-                if scalping_optimization:
-                    if 'scalping_params' not in config:
-                        config['scalping_params'] = {}
-                    config['scalping_params'].update(scalping_optimization['optimized_params'])
-                    
-                    # 更新profit_comparison数据
-                    profit_comparison['scalping'] = {
-                        'name': scalping_optimization.get('name', ''),
-                        'capture_rate': scalping_optimization['capture_rate'],
-                        'avg_profit': scalping_optimization['avg_profit'],
-                        'win_rate': scalping_optimization['win_rate'],
-                        'profit_ratio': scalping_optimization['profit_ratio'],
-                        'risk_score': scalping_optimization['risk_score']
-                    }
-                    profit_comparison['has_data'] = True
-                
-                # 优化波段
-                swing_optimization = optimize_strategy_with_risk_control(
-                    strategy_data=swing_data,
-                    strategy_type='swing',
-                    phase1_baseline=phase1_baseline_for_phase3,
-                    phase2_baseline=phase2_baseline_result,
-                    ai_suggested_params=ai_suggested_params
-                )
-                
-                # 应用波段优化结果
-                if swing_optimization:
-                    if 'swing_params' not in config:
-                        config['swing_params'] = {}
-                    config['swing_params'].update(swing_optimization['optimized_params'])
-                    
-                    # 更新profit_comparison数据
-                    profit_comparison['swing'] = {
-                        'name': swing_optimization.get('name', ''),
-                        'capture_rate': swing_optimization['capture_rate'],
-                        'avg_profit': swing_optimization['avg_profit'],
-                        'win_rate': swing_optimization['win_rate'],
-                        'profit_ratio': swing_optimization['profit_ratio'],
-                        'risk_score': swing_optimization['risk_score']
-                    }
-                    profit_comparison['has_data'] = True
-                
-            except Exception as e:
-                print(f"⚠️ Phase 3优化失败: {e}")
-                import traceback
-                traceback.print_exc()
+        # if not phase2_baseline_result:
+        #     print(f"  ⚠️  无Phase 2 baseline，跳过Phase 3优化")
+        # elif kline_snapshots is not None and not kline_snapshots.empty:
+        #     try:
+        #         # 【V8.5.2.4.10】生成分离的机会数据用于Phase 3
+        #         separated_analysis_result = analyze_separated_opportunities(
+        #             market_snapshots=kline_snapshots,
+        #             old_config=config
+        #         )
+        #         
+        #         scalping_data = separated_analysis_result['scalping']
+        #         swing_data = separated_analysis_result['swing']
+        #         
+        #         phase1_baseline_for_phase3 = separated_analysis_result.get('phase1_baseline')
+        #         
+        #         # 【V8.5.2.4.10】调用新的Phase 3优化函数
+        #         # 分别优化超短线和波段
+        #         scalping_optimization = optimize_strategy_with_risk_control(
+        #             strategy_data=scalping_data,
+        #             strategy_type='scalping',
+        #             phase1_baseline=phase1_baseline_for_phase3,
+        #             phase2_baseline=phase2_baseline_result,
+        #             ai_suggested_params=ai_suggested_params
+        #         )
+        #         
+        #         # 应用超短线优化结果
+        #         if scalping_optimization:
+        #             if 'scalping_params' not in config:
+        #                 config['scalping_params'] = {}
+        #             config['scalping_params'].update(scalping_optimization['optimized_params'])
+        #             
+        #             # 更新profit_comparison数据
+        #             profit_comparison['scalping'] = {
+        #                 'name': scalping_optimization.get('name', ''),
+        #                 'capture_rate': scalping_optimization['capture_rate'],
+        #                 'avg_profit': scalping_optimization['avg_profit'],
+        #                 'win_rate': scalping_optimization['win_rate'],
+        #                 'profit_ratio': scalping_optimization['profit_ratio'],
+        #                 'risk_score': scalping_optimization['risk_score']
+        #             }
+        #             profit_comparison['has_data'] = True
+        #         
+        #         # 优化波段
+        #         swing_optimization = optimize_strategy_with_risk_control(
+        #             strategy_data=swing_data,
+        #             strategy_type='swing',
+        #             phase1_baseline=phase1_baseline_for_phase3,
+        #             phase2_baseline=phase2_baseline_result,
+        #             ai_suggested_params=ai_suggested_params
+        #         )
+        #         
+        #         # 应用波段优化结果
+        #         if swing_optimization:
+        #             if 'swing_params' not in config:
+        #                 config['swing_params'] = {}
+        #             config['swing_params'].update(swing_optimization['optimized_params'])
+        #             
+        #             # 更新profit_comparison数据
+        #             profit_comparison['swing'] = {
+        #                 'name': swing_optimization.get('name', ''),
+        #                 'capture_rate': swing_optimization['capture_rate'],
+        #                 'avg_profit': swing_optimization['avg_profit'],
+        #                 'win_rate': swing_optimization['win_rate'],
+        #                 'profit_ratio': swing_optimization['profit_ratio'],
+        #                 'risk_score': swing_optimization['risk_score']
+        #             }
+        #             profit_comparison['has_data'] = True
+        #         
+        #     except Exception as e:
+        #         print(f"⚠️ Phase 3优化失败: {e}")
+        #         import traceback
+        #         traceback.print_exc()
+        # ========== 【V8.5.2.4.47】旧Phase 3代码注释结束 ==========
         
         # 保存到config供邮件使用
         config['_v854_profit_comparison'] = profit_comparison
