@@ -22111,10 +22111,10 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         import gc
         
         # 【V8.3.21】全局机会数量限制（保守策略：不遗漏机会）
-        MAX_OPPORTUNITIES_PER_TYPE = 1000  # 【V8.5.2.4.47】2000→1000（-50%），减少内存占用
-        MAX_OPPORTUNITIES_PER_COIN = 150   # 【V8.5.2.4.47】300→150（-50%）
-        ENABLE_SAMPLING = True   # 【V8.5.2.4.47】启用采样，关键优化，分析所有点位（保证准确性）
-        MAX_SAMPLE_POINTS = 100  # 【V8.5.2.4.47】200→100，每币种采样100个点位
+        MAX_OPPORTUNITIES_PER_TYPE = 2000  # 恢复2000，确保足够样本
+        MAX_OPPORTUNITIES_PER_COIN = 250   # 300→250（适度降低）
+        ENABLE_SAMPLING = False  # 关闭采样，保证不遗漏机会
+        MAX_SAMPLE_POINTS = 200  # 如需采样，使用200个点位
         
         scalping_opps = []
         swing_opps = []

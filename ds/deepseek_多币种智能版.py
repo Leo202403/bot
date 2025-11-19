@@ -22245,12 +22245,12 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         import pandas as pd
         import gc
         
-        # 【V8.5.2.4.47】内存优化：降低限制以适应2G服务器（与实时AI共存）
-        # 在保证回测质量的前提下，减少内存占用60%
-        MAX_OPPORTUNITIES_PER_TYPE = 1000  # 2000→1000（-50%），每类1000个足够代表性
-        MAX_OPPORTUNITIES_PER_COIN = 150   # 300→150（-50%），每币种150个
-        ENABLE_SAMPLING = True   # False→True，启用采样（关键优化）
-        MAX_SAMPLE_POINTS = 100  # 200→100，每币种最多采样100个点位
+        # 【V8.5.2.4.47修正】内存优化：Phase 1不是瓶颈，恢复机会数
+        # 真正瓶颈是Phase 3，保持Phase 1质量以确保正利润
+        MAX_OPPORTUNITIES_PER_TYPE = 2000  # 恢复2000，确保足够样本
+        MAX_OPPORTUNITIES_PER_COIN = 250   # 300→250（适度降低）
+        ENABLE_SAMPLING = False  # 关闭采样，保证不遗漏机会
+        MAX_SAMPLE_POINTS = 200  # 如需采样，使用200个点位
         
         scalping_opps = []
         swing_opps = []
