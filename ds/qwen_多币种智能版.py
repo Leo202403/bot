@@ -7468,17 +7468,54 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 phase1_baseline=phase1_baseline
             )
             
-            # 根据Phase 4验证结果决定参数
+            # 根据Phase 4验证结果决定参数并应用到config
             overall_status = phase4_result.get('overall_status', 'FAILED')
             
             if overall_status in ['PASSED', 'WARNING']:
-                # 验证通过，使用Phase 3的分离参数
-                print(f"\n  ✅ Phase 4验证通过，使用Phase 3优化参数")
-                # 这里保留best_params为Phase 2，因为实盘会根据signal_type动态选择
-                # Phase 3-4的结果保存在phase3_result和phase4_result中供后续使用
+                # 验证通过，应用Phase 3的分离参数到config
+                print(f"\n  ✅ Phase 4验证通过，应用Phase 3优化参数")
+                
+                # 应用scalping参数
+                scalping_params = phase3_result.get('scalping', {}).get('params', {})
+                if scalping_params:
+                    # 确保config中有scalping_params字段
+                    if 'scalping_params' not in config:
+                        config['scalping_params'] = {}
+                    config['scalping_params'].update(scalping_params)
+                    print(f"     🎯 超短线参数已更新:")
+                    print(f"        TP倍数: {scalping_params.get('atr_tp_multiplier', 'N/A')}")
+                    print(f"        SL倍数: {scalping_params.get('atr_stop_multiplier', 'N/A')}")
+                    print(f"        持仓时长: {scalping_params.get('max_holding_hours', 'N/A')}h")
+                    print(f"        移动止损: {'✅ 启用' if scalping_params.get('trailing_stop_enabled') else '❌ 禁用'}")
+                    print(f"        共振阈值: {scalping_params.get('min_indicator_consensus', 'N/A')}")
+                    print(f"        信号分阈值: {scalping_params.get('min_signal_score', 'N/A')}")
+                
+                # 应用swing参数
+                swing_params = phase3_result.get('swing', {}).get('params', {})
+                if swing_params:
+                    # 确保config中有swing_params字段
+                    if 'swing_params' not in config:
+                        config['swing_params'] = {}
+                    config['swing_params'].update(swing_params)
+                    print(f"     🌊 波段参数已更新:")
+                    print(f"        TP倍数: {swing_params.get('atr_tp_multiplier', 'N/A')}")
+                    print(f"        SL倍数: {swing_params.get('atr_stop_multiplier', 'N/A')}")
+                    print(f"        持仓时长: {swing_params.get('max_holding_hours', 'N/A')}h")
+                    print(f"        移动止损: {'✅ 启用' if swing_params.get('trailing_stop_enabled') else '❌ 禁用'}")
+                    print(f"        共振阈值: {swing_params.get('min_indicator_consensus', 'N/A')}")
+                    print(f"        信号分阈值: {swing_params.get('min_signal_score', 'N/A')}")
+                
+                # 保存Phase 4验证状态到config
+                config['_phase4_status'] = overall_status
+                config['_phase4_validation'] = phase4_result
+                config['_phase3_applied'] = True
+                
             else:
                 # 验证失败，回退到Phase 2参数
                 print(f"\n  ⚠️  Phase 4验证失败（{overall_status}），保持Phase 2参数")
+                config['_phase4_status'] = overall_status
+                config['_phase4_rollback'] = True
+                config['_phase3_applied'] = False
             
         except Exception as e:
             print(f"\n  ⚠️  Phase 4执行失败: {e}")
