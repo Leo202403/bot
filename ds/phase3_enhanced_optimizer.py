@@ -641,73 +641,49 @@ def optimize_for_signal_type(
     
     print(f"     💡 {signal_type}特征: 密度{avg_density:.1f}, 持仓{avg_holding:.1f}h, 平均利润{avg_profit:.1f}%")
     
-    # 【V8.5.2.4.60】从learned_features提取Phase 2测试的最优TP/SL
+    # 【V8.5.2.4.68】从learned_features提取Phase 2测试的最优TP/SL
+    # Phase 3目标：固定TP/SL，优化筛选条件（去掉杂音，提高平均利润）
     optimal_tp_sl = learned_features.get('optimal_tp_sl', {})
     
     if signal_type == 'scalping':
-        # 高密度（~11）→ 快进快出策略
-        # 【V8.5.2.4.60】围绕Phase 2最优值构建搜索空间
+        # 【V8.5.2.4.68】固定Phase 2最优TP/SL，重点测试筛选条件
         scalping_optimal = optimal_tp_sl.get('scalping', {})
         optimal_tp = scalping_optimal.get('atr_tp_multiplier', 12.0)  # Phase 2找到的最优值
         optimal_sl = scalping_optimal.get('atr_stop_multiplier', 2.0)
         
-        # 围绕最优值构建搜索空间（±20%, ±50%）
+        # 【V8.5.2.4.68】Phase 3新策略：固定TP/SL，测试signal_score和consensus矩阵
+        # 目标：在Phase 2基础上去掉杂音，提高平均利润（7% → 10-14%）
         param_grid = {
-            'min_indicator_consensus': [1, 2],
-            'min_signal_score': [60, 70, 75, 80],
-            'atr_tp_multiplier': [                           # 【V8.5.2.4.60】基于Phase 2最优值
-                round(optimal_tp * 0.8, 1),                  # -20%
-                round(optimal_tp, 1),                        # 最优值
-                round(optimal_tp * 1.2, 1),                  # +20%
-                round(optimal_tp * 1.5, 1)                   # +50%
-            ],
-            'atr_stop_multiplier': [                         # 【V8.5.2.4.60】基于Phase 2最优值
-                round(optimal_sl * 0.8, 1),
-                round(optimal_sl, 1),
-                round(optimal_sl * 1.2, 1)
-            ],
-            'max_holding_hours': [                           # 【V8.5.2.4.49】基于实际持仓时间
-                max(3, int(avg_holding * 0.8)),
-                max(4, int(avg_holding)),
-                max(6, int(avg_holding * 1.5)),
-                min(12, int(avg_holding * 2.0))
-            ],
-            'trailing_stop_enabled': [False, True]
+            'min_indicator_consensus': [1, 2, 3],             # 扩展测试范围
+            'min_signal_score': [70, 75, 80, 85, 90],        # 扩展测试范围
+            'atr_tp_multiplier': [optimal_tp],                # ✅ 固定为Phase 2最优值
+            'atr_stop_multiplier': [optimal_sl],              # ✅ 固定为Phase 2最优值
+            'max_holding_hours': [int(avg_holding)],          # ✅ 固定为实际持仓时间
+            'min_risk_reward': [1.0, 2.0, 2.5],              # 可选的R:R筛选
+            'trailing_stop_enabled': [False]                  # 简化，先不测试移动止损
         }
-        print(f"     📐 参数网格: TP={param_grid['atr_tp_multiplier']}, SL={param_grid['atr_stop_multiplier']}, 时间={param_grid['max_holding_hours']}")
-        print(f"     💡 围绕Phase 2最优值(TP={optimal_tp}, SL={optimal_sl})构建搜索空间")
+        print(f"     📐 参数网格: signal_score={param_grid['min_signal_score']}, consensus={param_grid['min_indicator_consensus']}")
+        print(f"     💡 固定Phase 2最优TP/SL(TP={optimal_tp:.1f}, SL={optimal_sl:.1f})，优化筛选条件")
+        print(f"     🎯 目标：去掉杂音，提高平均利润（预期7% → 10-14%）")
     else:  # swing
-        # 低密度（~0.9）→ 长期持有策略
-        # 【V8.5.2.4.60】围绕Phase 2最优值构建搜索空间
+        # 【V8.5.2.4.68】固定Phase 2最优TP/SL，重点测试筛选条件
         swing_optimal = optimal_tp_sl.get('swing', {})
         optimal_tp = swing_optimal.get('atr_tp_multiplier', 18.0)  # Phase 2找到的最优值
         optimal_sl = swing_optimal.get('atr_stop_multiplier', 2.5)
         
-        # 围绕最优值构建搜索空间（±20%, ±50%）
+        # 【V8.5.2.4.68】Phase 3新策略：固定TP/SL，测试signal_score和consensus矩阵
         param_grid = {
-            'min_indicator_consensus': [1, 2],
-            'min_signal_score': [70, 75, 80, 85],
-            'atr_tp_multiplier': [                           # 【V8.5.2.4.60】基于Phase 2最优值
-                round(optimal_tp * 0.8, 1),                  # -20%
-                round(optimal_tp, 1),                        # 最优值
-                round(optimal_tp * 1.2, 1),                  # +20%
-                round(optimal_tp * 1.5, 1)                   # +50%
-            ],
-            'atr_stop_multiplier': [                         # 【V8.5.2.4.60】基于Phase 2最优值
-                round(optimal_sl * 0.8, 1),
-                round(optimal_sl, 1),
-                round(optimal_sl * 1.2, 1)
-            ],
-            'max_holding_hours': [                           # 【V8.5.2.4.49】基于实际持仓时间
-                max(16, int(avg_holding * 0.8)),
-                max(20, int(avg_holding)),
-                max(24, int(avg_holding * 1.2)),
-                min(48, int(avg_holding * 1.5))
-            ],
-            'trailing_stop_enabled': [False, True]
+            'min_indicator_consensus': [1, 2, 3],             # 扩展测试范围
+            'min_signal_score': [75, 80, 85, 90, 95],        # 扩展测试范围
+            'atr_tp_multiplier': [optimal_tp],                # ✅ 固定为Phase 2最优值
+            'atr_stop_multiplier': [optimal_sl],              # ✅ 固定为Phase 2最优值
+            'max_holding_hours': [int(avg_holding)],          # ✅ 固定为实际持仓时间
+            'min_risk_reward': [1.0, 2.0, 2.5],              # 可选的R:R筛选
+            'trailing_stop_enabled': [False]                  # 简化，先不测试移动止损
         }
-        print(f"     📐 参数网格: TP={param_grid['atr_tp_multiplier']}, SL={param_grid['atr_stop_multiplier']}, 时间={param_grid['max_holding_hours']}")
-        print(f"     💡 围绕Phase 2最优值(TP={optimal_tp}, SL={optimal_sl})构建搜索空间")
+        print(f"     📐 参数网格: signal_score={param_grid['min_signal_score']}, consensus={param_grid['min_indicator_consensus']}")
+        print(f"     💡 固定Phase 2最优TP/SL(TP={optimal_tp:.1f}, SL={optimal_sl:.1f})，优化筛选条件")
+        print(f"     🎯 目标：去掉杂音，提高平均利润（预期7% → 10-14%）")
     
     # 多起点搜索
     all_results = []
@@ -715,38 +691,38 @@ def optimize_for_signal_type(
     for sp_idx, starting_point in enumerate(starting_points, 1):
         print(f"     [{sp_idx}/{len(starting_points)}] 从'{starting_point['name']}'出发...")
         
-        # 围绕起点生成测试组合（简化版：使用grid的中心值）
+        # 【V8.5.2.4.68】生成测试组合：signal_score × consensus × min_risk_reward
+        # 由于TP/SL已固定，重点测试筛选条件组合
         test_combinations = []
         
-        # 生成测试组合（每个维度取2-3个值）
+        # 测试所有signal_score和consensus组合
         for consensus in param_grid['min_indicator_consensus']:
-            for signal_score in param_grid['min_signal_score'][:2]:  # 每个起点只测试2个值
-                for tp_mult in param_grid['atr_tp_multiplier'][::2]:  # 每隔一个取
-                    for sl_mult in param_grid['atr_stop_multiplier'][:2]:
-                        for trailing in param_grid['trailing_stop_enabled']:
-                            test_params = {
-                                'min_indicator_consensus': consensus,
-                                'min_signal_score': signal_score,
-                                'atr_tp_multiplier': tp_mult,
-                                'atr_stop_multiplier': sl_mult,
-                                'max_holding_hours': param_grid['max_holding_hours'][1],  # 使用中间值
-                                'trailing_stop_enabled': trailing
-                            }
-                            test_combinations.append(test_params)
+            for signal_score in param_grid['min_signal_score']:
+                for risk_reward in param_grid['min_risk_reward']:
+                    test_params = {
+                        'min_indicator_consensus': consensus,
+                        'min_signal_score': signal_score,
+                        'min_risk_reward': risk_reward,
+                        'atr_tp_multiplier': param_grid['atr_tp_multiplier'][0],    # 固定值
+                        'atr_stop_multiplier': param_grid['atr_stop_multiplier'][0],  # 固定值
+                        'max_holding_hours': param_grid['max_holding_hours'][0],      # 固定值
+                        'trailing_stop_enabled': False  # 固定值
+                    }
+                    test_combinations.append(test_params)
         
-        # 【V8.5.2.4.47优化】限制测试数量，避免内存耗尽（与实时AI共存）
-        # 每个起点从50组减到10组，节省80%内存
-        test_combinations = test_combinations[:10]
+        # 【V8.5.2.4.68】测试组合数量：5×3×3=45组（超短线），5×3×3=45组（波段）
+        # 不再限制数量，因为只测试筛选条件，速度快
+        print(f"     📊 测试组合数: {len(test_combinations)}组 (signal_score × consensus × R:R)")
         
         # 测试每个组合
         best_for_this_start = None
         for params in test_combinations:
-            # 筛选机会
+            # 【V8.5.2.4.68】筛选机会：signal_score + consensus + R:R
             filtered_opps = [
                 opp for opp in opportunities
-                # 【V8.5.2.4.47修复】字段名统一为consensus
                 if (opp.get('consensus', 0) >= params['min_indicator_consensus'] and
-                    opp.get('signal_score', 0) >= params['min_signal_score'])
+                    opp.get('signal_score', 0) >= params['min_signal_score'] and
+                    opp.get('risk_reward', 0) >= params.get('min_risk_reward', 0))
             ]
             
             if not filtered_opps:
