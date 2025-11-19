@@ -15589,6 +15589,12 @@ def get_ohlcv_data(symbol, skip_timing_check=False):
             data["indicators"] = {}
         data["indicators"]["consensus"] = indicator_consensus
         
+        # 【V8.5.2.4.69 DEBUG】验证共振数据是否正确保存
+        print(f"  📊 【DEBUG】get_ohlcv_data返回前检查 {symbol}:")
+        print(f"     - indicator_consensus: {data.get('indicator_consensus', 'MISSING')}")
+        print(f"     - consensus: {data.get('consensus', 'MISSING')}")
+        print(f"     - indicators.consensus: {data.get('indicators', {}).get('consensus', 'MISSING')}")
+        
         return data
 
     except TimeoutError:
@@ -17972,6 +17978,13 @@ def prioritize_signals(market_data_list, ai_actions):
                 + distance_score * 0.1
             )
 
+            # 【V8.5.2.4.69 DEBUG】验证market_data是否包含共振数据
+            print(f"  📊 【DEBUG】prioritize_signals处理 {symbol}:")
+            print(f"     - 是否有indicator_consensus: {'indicator_consensus' in market_data}")
+            print(f"     - 是否有indicators: {'indicators' in market_data}")
+            if 'indicator_consensus' in market_data:
+                print(f"     - indicator_consensus值: {market_data['indicator_consensus']}")
+            
             scored_actions.append(
                 {
                     "action": action,
@@ -20630,13 +20643,18 @@ def execute_portfolio_actions(
             print("=" * 70)
 
             for item in scored_actions:
+                # 【V8.5.2.4.69修复】需要传递signal_classification参数
+                market_data = item["market_data"]
+                _, _, _, signal_classification = calculate_signal_score(market_data)
+                
                 _execute_single_open_action_v55(
                     item["action"],
-                    item["market_data"],
+                    market_data,
                     current_positions,
                     total_assets,
                     available_balance,
                     item["signal_score"],
+                    signal_classification,  # 传递signal_classification
                 )
 
         elif len(open_actions) == 1:
