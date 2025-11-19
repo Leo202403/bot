@@ -18325,6 +18325,10 @@ def _execute_single_open_action_v55(
             print(f"❌ 获取价格失败: {e}")
             return
         
+        # 【V8.5.2.4.32修复】获取杠杆（优先使用现有持仓的杠杆，其次AI建议）
+        leverage = existing_position.get('leverage', action.get('leverage', suggested_leverage))
+        leverage = max(1, min(5, int(leverage)))  # 确保在1-5范围内
+        
         # 计算加仓数量（使用智能仓位计算的结果）
         amount = (planned_position * leverage) / entry_price
         
