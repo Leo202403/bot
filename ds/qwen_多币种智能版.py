@@ -6961,13 +6961,14 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         
         print(f"     📊 采样: 超短线{len(scalping_sample)}/{len(scalping_opps_full)}, 波段{len(swing_sample)}/{len(swing_opps_full)}")
         
-        # 【V8.5.2.4.54】进一步扩大TP范围，目标捕获15-16%客观利润
-        # 策略：测试更激进的TP倍数（2.0x-2.5x required_tp）
+        # 【V8.5.2.4.67】调整TP范围，避免过度激进（30-35倍 → 15-20倍）
+        # 统计分析显示：40.7%机会只触发SL，说明TP过大
+        # 策略：测试合理的TP倍数（1.0x-1.5x required_tp）
         scalping_tp_candidates = [
+            round(scalping_required_tp * 1.0, 1),  # 100%（required_tp）
             round(scalping_required_tp * 1.2, 1),  # 120%
-            round(scalping_required_tp * 1.5, 1),  # 150%
-            round(scalping_required_tp * 2.0, 1),  # 200%（激进）
-            min(30.0, round(scalping_required_tp * 2.5, 1))  # 250%（最大，不超过30）
+            round(scalping_required_tp * 1.4, 1),  # 140%
+            min(20.0, round(scalping_required_tp * 1.5, 1))  # 150%（最大20倍）
         ]
         scalping_sl_candidates = [
             scalping_params_range['atr_sl'][0],  # 1.5（最紧）
@@ -6976,10 +6977,10 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         ]
         
         swing_tp_candidates = [
+            round(swing_required_tp * 1.0, 1),  # 100%（required_tp）
             round(swing_required_tp * 1.2, 1),  # 120%
-            round(swing_required_tp * 1.5, 1),  # 150%
-            round(swing_required_tp * 2.0, 1),  # 200%（激进）
-            min(35.0, round(swing_required_tp * 2.5, 1))  # 250%（最大，不超过35）
+            round(swing_required_tp * 1.4, 1),  # 140%
+            min(22.0, round(swing_required_tp * 1.5, 1))  # 150%（最大22倍）
         ]
         swing_sl_candidates = [
             swing_params_range['atr_sl'][0],  # 2.5（最紧）
@@ -6988,9 +6989,9 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         ]
         
         print(f"     🔬 超短线测试: TP{scalping_tp_candidates} × SL{scalping_sl_candidates} = {len(scalping_tp_candidates) * len(scalping_sl_candidates)}组")
-        print(f"     💡 扩大TP范围至{max(scalping_tp_candidates):.1f}倍，以捕获Phase 1的{scalping_avg_profit:.1f}%客观利润")
+        print(f"     💡 调整TP范围至{max(scalping_tp_candidates):.1f}倍（避免过度激进），目标捕获Phase 1的{scalping_avg_profit:.1f}%客观利润")
         print(f"     🔬 波段测试: TP{swing_tp_candidates} × SL{swing_sl_candidates} = {len(swing_tp_candidates) * len(swing_sl_candidates)}组")
-        print(f"     💡 扩大TP范围至{max(swing_tp_candidates):.1f}倍，以捕获Phase 1的{swing_avg_profit:.1f}%客观利润")
+        print(f"     💡 调整TP范围至{max(swing_tp_candidates):.1f}倍（避免过度激进），目标捕获Phase 1的{swing_avg_profit:.1f}%客观利润")
         
         # 步骤2：测试超短线TP/SL组合
         if scalping_sample:
