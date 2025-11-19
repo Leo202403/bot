@@ -6585,22 +6585,91 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     
     print(f"  📐 测试范围: R:R [{rr_min:.2f}, {rr_max:.2f}], 共识 [{consensus_min}, {consensus_max}], 分数 [{score_min}, {score_max}]")
     
-    # 【V8.5.2.4.36】分离超短线和波段的参数优化
-    # 目标：为超短线和波段分别找到最优TP/SL参数
+    # 【V8.5.2.4.37】Phase 2核心任务：从Phase 1真实数据学习特征参数
+    # 目标：最大化接近Phase 1，提取信号分权重、持仓时长等基础参数
     
-    # 定义超短线参数范围（快速止盈止损）
+    # 从Phase 1提取真实持仓时长（而非假设）
+    if phase1_baseline:
+        scalping_real_holding = phase1_baseline.get('scalping', {}).get('avg_holding_hours', 1.5)
+        swing_real_holding = phase1_baseline.get('swing', {}).get('avg_holding_hours', 6.0)
+        
+        print(f"\n  📊 【Phase 1真实持仓时长】")
+        print(f"     ⚡ 超短线: {scalping_real_holding:.1f}小时")
+        print(f"     🌊 波段: {swing_real_holding:.1f}小时")
+    else:
+        # 降级：使用保守估计
+        scalping_real_holding = 1.5
+        swing_real_holding = 6.0
+        print(f"\n  ⚠️  Phase 1数据不可用，使用保守估计")
+    
+    # 【V8.5.2.4.37】基于Phase 1真实数据定义参数搜索范围
+    # 围绕真实值上下浮动，找到最优参数
+    scalping_holding_mid = scalping_real_holding
+    swing_holding_mid = swing_real_holding
+    
     scalping_params_range = {
         'atr_tp': [1.5, 2.0, 2.5, 3.0],  # 超短线TP范围
         'atr_sl': [1.0, 1.2, 1.5, 2.0],  # 超短线SL范围
-        'max_holding': [8, 12, 16, 24]   # 超短线持仓时间（小时）
+        'max_holding': [
+            max(2, scalping_holding_mid * 0.5),      # 最小值：50%
+            scalping_holding_mid,                      # 中位值：真实值
+            scalping_holding_mid * 1.5,                # 150%
+            min(24, scalping_holding_mid * 2.0)        # 最大值：200%或24h
+        ]
     }
     
-    # 定义波段参数范围（更大利润目标）
     swing_params_range = {
         'atr_tp': [4.0, 5.0, 6.0, 7.0],  # 波段TP范围
         'atr_sl': [2.0, 2.5, 3.0, 3.5],  # 波段SL范围
-        'max_holding': [48, 60, 72, 96]  # 波段持仓时间（小时）
+        'max_holding': [
+            max(24, swing_holding_mid * 0.5),          # 最小值：50%或24h
+            swing_holding_mid,                          # 中位值：真实值
+            swing_holding_mid * 1.5,                    # 150%
+            min(96, swing_holding_mid * 2.0)            # 最大值：200%或96h
+        ]
     }
+    
+    print(f"  📐 【参数搜索范围】（基于Phase 1真实数据）")
+    print(f"     ⚡ 超短线持仓: {scalping_params_range['max_holding']}")
+    print(f"     🌊 波段持仓: {swing_params_range['max_holding']}")
+    
+    # 【V8.5.2.4.37】Phase 2核心任务2：优化信号分权重
+    # 为超短线和波段分别找到最优权重组合
+    print(f"\n  🎯 【信号分权重优化】")
+    
+    # 定义权重候选组合（围绕默认值微调）
+    scalping_weight_candidates = [
+        # 默认权重
+        {'momentum': 20, 'volume': 35, 'breakout': 25, 'pattern': 12, 'trend_align': 10, 'name': '默认'},
+        # 强调动量
+        {'momentum': 25, 'volume': 30, 'breakout': 25, 'pattern': 12, 'trend_align': 10, 'name': '动量优先'},
+        # 强调成交量
+        {'momentum': 20, 'volume': 40, 'breakout': 20, 'pattern': 12, 'trend_align': 10, 'name': '放量优先'},
+        # 强调突破
+        {'momentum': 20, 'volume': 30, 'breakout': 30, 'pattern': 12, 'trend_align': 10, 'name': '突破优先'},
+        # 平衡型
+        {'momentum': 22, 'volume': 33, 'breakout': 25, 'pattern': 12, 'trend_align': 10, 'name': '平衡'},
+    ]
+    
+    swing_weight_candidates = [
+        # 默认权重
+        {'momentum': 20, 'volume': 35, 'breakout': 25, 'trend_align': 35, 'ema_divergence': 15, 'trend_4h_strength': 25, 'name': '默认'},
+        # 强调趋势对齐
+        {'momentum': 20, 'volume': 30, 'breakout': 20, 'trend_align': 40, 'ema_divergence': 15, 'trend_4h_strength': 25, 'name': '趋势优先'},
+        # 强调4H趋势
+        {'momentum': 20, 'volume': 30, 'breakout': 20, 'trend_align': 35, 'ema_divergence': 10, 'trend_4h_strength': 35, 'name': '4H优先'},
+        # 强调动量+成交量
+        {'momentum': 25, 'volume': 40, 'breakout': 20, 'trend_align': 30, 'ema_divergence': 15, 'trend_4h_strength': 20, 'name': '动量放量'},
+        # 平衡型
+        {'momentum': 22, 'volume': 33, 'breakout': 23, 'trend_align': 33, 'ema_divergence': 15, 'trend_4h_strength': 25, 'name': '平衡'},
+    ]
+    
+    print(f"     ⚡ 超短线权重候选: {len(scalping_weight_candidates)}组")
+    print(f"     🌊 波段权重候选: {len(swing_weight_candidates)}组")
+    
+    # 存储权重候选供后续测试
+    test_points_meta['scalping_weight_candidates'] = scalping_weight_candidates
+    test_points_meta['swing_weight_candidates'] = swing_weight_candidates
     
     test_points = [
         # 通用参数组（适用于超短线和波段混合优化）
@@ -6611,10 +6680,14 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 88, 'name': '严格'},
     ]
     
-    # 【V8.5.2.4.36】存储参数范围供后续使用
+    # 【V8.5.2.4.37】存储参数范围和真实数据供后续使用
     test_points_meta = {
         'scalping_params': scalping_params_range,
-        'swing_params': swing_params_range
+        'swing_params': swing_params_range,
+        'phase1_real_holding': {
+            'scalping': scalping_real_holding,
+            'swing': swing_real_holding
+        }
     }
     
     # 🔧 V8.3.31.7: use_confirmed_opps 已在函数开始处定义（避免UnboundLocalError）
@@ -6965,16 +7038,31 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             phase2_capture_rate = len(best_captured_opps) / phase1_total if phase1_total > 0 else 0
             phase2_avg_profit = sum(o.get('_phase2_actual_profit', 0) for o in best_captured_opps) / len(best_captured_opps)
             
+            # 【V8.5.2.4.37】Phase 2 baseline扩展：保存学到的基础参数
             phase2_baseline = {
                 'captured_count': len(best_captured_opps),
                 'capture_rate': phase2_capture_rate,
                 'avg_profit': phase2_avg_profit,
-                'params': best_params.copy()
+                'params': best_params.copy(),
+                # 【V8.5.2.4.37】从Phase 1学到的真实特征
+                'learned_features': {
+                    'scalping_real_holding_hours': scalping_real_holding,
+                    'swing_real_holding_hours': swing_real_holding,
+                    'scalping_params_range': scalping_params_range,
+                    'swing_params_range': swing_params_range,
+                    'scalping_weight_candidates': scalping_weight_candidates,
+                    'swing_weight_candidates': swing_weight_candidates,
+                    'phase1_baseline': phase1_baseline  # 完整的Phase 1数据
+                }
             }
             
             print(f"\n  📊 Phase 2 baseline（供Phase 3使用）:")
             print(f"     捕获: {len(best_captured_opps)}个 ({phase2_capture_rate*100:.1f}%)")
             print(f"     平均利润: {phase2_avg_profit:.2f}%")
+            print(f"\n  💾 【学到的基础参数】")
+            print(f"     ⚡ 超短线真实持仓: {scalping_real_holding:.1f}h")
+            print(f"     🌊 波段真实持仓: {swing_real_holding:.1f}h")
+            print(f"     📊 权重候选: 超短线{len(scalping_weight_candidates)}组, 波段{len(swing_weight_candidates)}组")
         else:
             # 【V8.5.2.4.22】即使无捕获机会，也生成baseline（避免Phase 3被跳过）
             print(f"  ⚠️  当前参数未捕获到任何机会，生成空baseline")
@@ -6982,16 +7070,36 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 'captured_count': 0,
                 'capture_rate': 0.0,
                 'avg_profit': 0.0,
-                'params': best_params.copy()
+                'params': best_params.copy(),
+                # 【V8.5.2.4.37】即使无捕获，也保存学到的基础参数
+                'learned_features': {
+                    'scalping_real_holding_hours': scalping_real_holding,
+                    'swing_real_holding_hours': swing_real_holding,
+                    'scalping_params_range': scalping_params_range,
+                    'swing_params_range': swing_params_range,
+                    'scalping_weight_candidates': scalping_weight_candidates,
+                    'swing_weight_candidates': swing_weight_candidates,
+                    'phase1_baseline': phase1_baseline
+                }
             }
     else:
         # 【V8.5.2.4.22】无条件满足时，生成最小baseline
         print(f"  ⚠️  Phase 1数据不完整，生成最小baseline")
+        # 【V8.5.2.4.37】使用降级值
         phase2_baseline = {
             'captured_count': 0,
             'capture_rate': 0.0,
             'avg_profit': 0.0,
-            'params': best_params.copy()
+            'params': best_params.copy(),
+            'learned_features': {
+                'scalping_real_holding_hours': 1.5,  # 降级默认值
+                'swing_real_holding_hours': 6.0,     # 降级默认值
+                'scalping_params_range': scalping_params_range,
+                'swing_params_range': swing_params_range,
+                'scalping_weight_candidates': scalping_weight_candidates,
+                'swing_weight_candidates': swing_weight_candidates,
+                'phase1_baseline': None
+            }
         }
     
     # 【V8.5.2.4.18】前向验证：在验证集上测试参数
