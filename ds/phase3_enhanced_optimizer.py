@@ -611,7 +611,10 @@ def optimize_for_signal_type(
             'captured_count': int
         }
     """
-    from trailing_stop_calculator import batch_calculate_profits
+    # 【V8.5.2.4.69】使用calculate_actual_profit_batch而不是batch_calculate_profits
+    # 原因: batch_calculate_profits会走到模拟逻辑_calculate_with_max_profit
+    #       而没有使用V8.5.2.4.65的波动幅度修复
+    from calculate_actual_profit import calculate_actual_profit_batch
     import gc
     
     print(f"\n  🎯 【{signal_type.upper()}参数优化】")
@@ -728,13 +731,20 @@ def optimize_for_signal_type(
             if not filtered_opps:
                 continue
             
-            # 计算利润（使用移动止损）
-            profit_results = batch_calculate_profits(filtered_opps, params)
+            # 【V8.5.2.4.69】使用calculate_actual_profit_batch计算利润
+            # 它会使用future_data和V8.5.2.4.65的波动幅度修复
+            profit_results = calculate_actual_profit_batch(
+                filtered_opps, 
+                params, 
+                batch_size=1000, 
+                use_dynamic_atr=True, 
+                include_trading_costs=True
+            )
             
             # 统计
-            captured_count = len(filtered_opps)
+            captured_count = len(profit_results)
             capture_rate = captured_count / len(opportunities) if opportunities else 0
-            total_profit = sum(r['profit'] for r in profit_results)
+            total_profit = sum(r['profit_pct'] for r in profit_results)
             avg_profit = total_profit / captured_count if captured_count > 0 else 0
             
             # 【V8.5.2.4.47】只保存当前起点的最佳结果

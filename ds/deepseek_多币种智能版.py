@@ -7688,11 +7688,27 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             phase2_avg_profit = sum(o.get('_phase2_actual_profit', 0) for o in best_captured_opps) / len(best_captured_opps)
             
             # 【V8.5.2.4.38】Phase 2 baseline扩展：保存学到的基础参数 + top5参数组合
+            # 【V8.5.2.4.69】修复：best_params需要包含optimal_tp_sl参数，供Phase 4回退使用
+            phase2_params_with_tp_sl = best_params.copy()
+            optimal_tp_sl = test_points_meta.get('optimal_tp_sl', {})
+            if optimal_tp_sl:
+                # 合并超短线和波段的TP/SL参数（取平均值作为全局默认值）
+                scalping_tp = optimal_tp_sl.get('scalping', {}).get('atr_tp_multiplier', 12.0)
+                scalping_sl = optimal_tp_sl.get('scalping', {}).get('atr_stop_multiplier', 2.0)
+                swing_tp = optimal_tp_sl.get('swing', {}).get('atr_tp_multiplier', 15.0)
+                swing_sl = optimal_tp_sl.get('swing', {}).get('atr_stop_multiplier', 2.5)
+                # 使用波段参数作为默认值（更保守）
+                phase2_params_with_tp_sl['atr_tp_multiplier'] = swing_tp
+                phase2_params_with_tp_sl['atr_stop_multiplier'] = swing_sl
+                # 保存分离的参数供Phase 3使用
+                phase2_params_with_tp_sl['scalping_tp_sl'] = {'tp': scalping_tp, 'sl': scalping_sl}
+                phase2_params_with_tp_sl['swing_tp_sl'] = {'tp': swing_tp, 'sl': swing_sl}
+            
             phase2_baseline = {
                 'captured_count': len(best_captured_opps),
                 'capture_rate': phase2_capture_rate,
                 'avg_profit': phase2_avg_profit,
-                'params': best_params.copy(),
+                'params': phase2_params_with_tp_sl,
                 # 【V8.5.2.4.38】从Phase 1学到的真实特征 + 最优参数组合
                 'learned_features': {
                     'scalping_real_holding_hours': scalping_real_holding,
