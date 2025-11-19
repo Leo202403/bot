@@ -22333,6 +22333,19 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         final_profit = scalping_max_profit
                         final_holding_bars = scalping_trigger_bar + 1  # ✅ 从idx=0到触发点的总时间
                     
+                    # 【V8.5.2.4.47 DEBUG】诊断持仓时间计算
+                    # 每1000个机会输出一次详细诊断
+                    total_processed = len(scalping_opps) + len(swing_opps)
+                    if total_processed % 1000 == 0 and total_processed > 0:
+                        final_holding_hours = final_holding_bars * 0.25
+                        print(f"\n    🔍 【持仓时间诊断】第{total_processed}个机会:")
+                        print(f"       币种: {coin}, 分类: {'波段' if is_swing else '超短线'}")
+                        print(f"       利润阈值: {'10.0%' if is_swing else '5.0%'}")
+                        print(f"       最终利润: {final_profit:.2f}%")
+                        print(f"       触发bar: {swing_trigger_bar if is_swing else scalping_trigger_bar}")
+                        print(f"       持仓bars: {final_holding_bars}")
+                        print(f"       持仓小时: {final_holding_hours:.2f}h")
+                    
                     # 【V8.3.21】创建摘要数据代替完整DataFrame
                     future_summary = {
                         'max_high': float(later_24h['high'].max()),
@@ -25703,6 +25716,19 @@ def analyze_exit_timing(yesterday_trades, kline_snapshots):
     # 【V8.5.2.4.46】生成exit_table_data供邮件使用
     exit_table_data = []
     all_exits = suboptimal_exits + good_exits
+    
+    # 【V8.5.2.4.47 DEBUG】检查订单数据中的字段
+    if not yesterday_trades.empty:
+        print(f"\n  🔍 【共振数据诊断】昨日订单字段:")
+        print(f"     字段列表: {list(yesterday_trades.columns)[:15]}")
+        if len(yesterday_trades) > 0:
+            first_order = yesterday_trades.iloc[0]
+            print(f"     第一笔订单:")
+            print(f"       '共振指标数': {first_order.get('共振指标数', 'N/A')}")
+            print(f"       'indicator_consensus': {first_order.get('indicator_consensus', 'N/A')}")
+            print(f"       '信号分数': {first_order.get('信号分数', 'N/A')}")
+            print(f"       'signal_score': {first_order.get('signal_score', 'N/A')}")
+    
     for trade in all_exits:
         # 从原始订单数据中查找对应的订单，以获取完整信息
         matching_orders = yesterday_trades[
