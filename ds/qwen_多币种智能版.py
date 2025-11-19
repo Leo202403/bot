@@ -22357,14 +22357,16 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     if not is_scalping and not is_swing:
                         continue
                     
-                    # 【V8.5.2.4.47】根据分类确定最终利润和持仓时间
-                    # 修复：holding_bars应该是从开仓点到触发点的总时间，而不是跟踪时间
+                    # 【V8.5.2.4.47修正】根据分类确定最终利润和持仓时间
+                    # 修正：holding_bars = 触发点 + 跟踪持续时间（从触发到退出）
                     if is_swing:
                         final_profit = swing_max_profit
-                        final_holding_bars = swing_trigger_bar + 1  # ✅ 从idx=0到触发点的总时间
+                        # 波段总持仓 = 到达10%阈值的时间 + 跟踪持续时间
+                        final_holding_bars = swing_trigger_bar + swing_holding_bars
                     else:  # is_scalping
                         final_profit = scalping_max_profit
-                        final_holding_bars = scalping_trigger_bar + 1  # ✅ 从idx=0到触发点的总时间
+                        # 超短线总持仓 = 到达5%阈值的时间 + 跟踪持续时间
+                        final_holding_bars = scalping_trigger_bar + scalping_holding_bars
                     
                     # 【V8.5.2.4.47 DEBUG】诊断持仓时间计算
                     # 每1000个机会输出一次详细诊断
