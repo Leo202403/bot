@@ -7319,7 +7319,11 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 # 🔧 V8.5.2: 使用test_params的TP/SL参数重新计算actual_profit（确保优化与验证逻辑一致）
                 from calculate_actual_profit import calculate_single_actual_profit
                 
-                for opp in captured_opps:
+                # 🔧 V8.5.2.4.61 调试：启用前3个机会的调试模式
+                debug_count = 0
+                debug_enabled = len(captured_opps) > 0  # 如果有捕获机会，启用调试
+                
+                for idx, opp in enumerate(captured_opps):
                     # 【V8.5.2.4.36】根据signal_type使用差异化参数（从参数范围取中位数）
                     signal_type = opp.get('signal_type', 'swing')
                     
@@ -7352,12 +7356,27 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                         'max_holding_hours': config_variant.get('max_holding_hours', default_holding)
                     }
                     
+                    # 🔧 V8.5.2.4.61 调试：启用前3个机会的调试模式
+                    if debug_enabled and debug_count < 3:
+                        opp['_debug'] = True
+                        print(f"\n  🔍 调试机会#{idx+1}/{len(captured_opps)}: {opp.get('coin')} {opp.get('direction')}")
+                        print(f"     Entry: {opp.get('entry_price')}, ATR: {opp.get('atr')}")
+                        print(f"     TP: {strategy_params.get('atr_tp_multiplier')}倍, SL: {strategy_params.get('atr_stop_multiplier')}倍")
+                        print(f"     future_data存在: {bool(opp.get('future_data'))}")
+                        debug_count += 1
+                    
                     # 使用差异化参数计算实际利润
                     actual_profit = calculate_single_actual_profit(
                         opp,
                         strategy_params=strategy_params,
                         use_dynamic_atr=False  # 禁用动态ATR，确保公平比较
                     )
+                    
+                    # 🔧 V8.5.2.4.61 调试：打印结果
+                    if opp.get('_debug'):
+                        print(f"     → 实际利润: {actual_profit:.2f}%")
+                        opp.pop('_debug', None)  # 清理调试标记
+                    
                     opp['_test_actual_profit'] = actual_profit  # 临时存储
                 
                 # 计算平均实际利润

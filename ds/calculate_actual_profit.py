@@ -51,14 +51,29 @@ def calculate_single_actual_profit(
         atr = opportunity.get('atr', 0)
         future_data = opportunity.get('future_data', {})
         
-        if entry_price <= 0 or atr <= 0:
-            return 0  # 数据不完整，返回0
+        # 🔧 V8.5.2.4.61 调试：检查数据完整性
+        debug_mode = opportunity.get('_debug', False)
+        if debug_mode or entry_price <= 0 or atr <= 0:
+            if entry_price <= 0:
+                print(f"  🐛 entry_price无效: {entry_price}")
+            if atr <= 0:
+                print(f"  🐛 atr无效: {atr}")
+            if not future_data:
+                print(f"  🐛 future_data缺失")
+            if entry_price <= 0 or atr <= 0:
+                return 0  # 数据不完整，返回0
         
         # 2. 获取未来价格数据
         max_high = future_data.get('max_high', entry_price)
         min_low = future_data.get('min_low', entry_price)
         final_close = future_data.get('final_close', entry_price)
         data_points = future_data.get('data_points', 96)  # 默认24小时=96个15分钟K线
+        
+        # 🔧 V8.5.2.4.61 调试：检查future_data有效性
+        if debug_mode and (max_high == entry_price or min_low == entry_price):
+            print(f"  🐛 future_data无效: max_high={max_high}, min_low={min_low}, entry={entry_price}")
+            if not future_data:
+                print(f"     future_data为空dict")
         
         # 3. 计算止盈止损价格
         atr_stop_mult = strategy_params.get('atr_stop_multiplier', 1.5)
