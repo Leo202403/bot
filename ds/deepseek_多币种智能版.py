@@ -21201,6 +21201,21 @@ def trading_bot():
         
         print(f"✓ 成功获取 {valid_data_count}/{len(market_data_list)} 个币种数据")
         
+        # 【V8.5.2.4.69 DEBUG】market_data_list构建完成后立即验证共振字段
+        print(f"\n  📊 【DEBUG】market_data_list构建完成后验证:")
+        for data in market_data_list:
+            if data:
+                symbol = data.get('symbol', 'UNKNOWN')
+                has_indicator_consensus = 'indicator_consensus' in data
+                has_indicators = 'indicators' in data
+                has_consensus = 'consensus' in data
+                print(f"     - {symbol}: indicator_consensus={has_indicator_consensus}, indicators={has_indicators}, consensus={has_consensus}")
+                if has_indicator_consensus:
+                    print(f"       → indicator_consensus值: {data['indicator_consensus']}")
+                if has_indicators and isinstance(data.get('indicators'), dict):
+                    print(f"       → indicators.consensus值: {data['indicators'].get('consensus', 'MISSING')}")
+        print()
+        
         print("⏳ [2/6] 获取余额和持仓...")
         # 2. 获取当前余额和持仓
         balance = exchange.fetch_balance()

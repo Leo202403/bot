@@ -20559,6 +20559,22 @@ def execute_portfolio_actions(
                 (m for m in market_data_list if m["symbol"] == symbol), None
             )
 
+            # 【V8.5.2.4.69 DEBUG】单个开仓信号分支验证market_data
+            print(f"  📊 【DEBUG】单个开仓信号分支获取market_data:")
+            print(f"     - symbol: {symbol}")
+            print(f"     - market_data_list长度: {len(market_data_list) if market_data_list else 0}")
+            print(f"     - market_data存在: {market_data is not None}")
+            if market_data:
+                print(f"     - indicator_consensus字段: {'indicator_consensus' in market_data}")
+                print(f"     - indicators字段: {'indicators' in market_data}")
+                print(f"     - consensus字段: {'consensus' in market_data}")
+                if 'indicator_consensus' in market_data:
+                    print(f"       → indicator_consensus值: {market_data['indicator_consensus']}")
+                if 'indicators' in market_data and isinstance(market_data.get('indicators'), dict):
+                    print(f"       → indicators.consensus值: {market_data['indicators'].get('consensus', 'MISSING')}")
+                if 'consensus' in market_data:
+                    print(f"       → consensus值: {market_data['consensus']}")
+
             if market_data:
                 signal_score, _, _, signal_classification = calculate_signal_score(market_data)
                 _execute_single_open_action_v55(
@@ -21049,6 +21065,21 @@ def trading_bot():
             return
         
         print(f"✓ 成功获取 {valid_data_count}/{len(market_data_list)} 个币种数据")
+        
+        # 【V8.5.2.4.69 DEBUG】market_data_list构建完成后立即验证共振字段
+        print(f"\n  📊 【DEBUG】market_data_list构建完成后验证:")
+        for data in market_data_list:
+            if data:
+                symbol = data.get('symbol', 'UNKNOWN')
+                has_indicator_consensus = 'indicator_consensus' in data
+                has_indicators = 'indicators' in data
+                has_consensus = 'consensus' in data
+                print(f"     - {symbol}: indicator_consensus={has_indicator_consensus}, indicators={has_indicators}, consensus={has_consensus}")
+                if has_indicator_consensus:
+                    print(f"       → indicator_consensus值: {data['indicator_consensus']}")
+                if has_indicators and isinstance(data.get('indicators'), dict):
+                    print(f"       → indicators.consensus值: {data['indicators'].get('consensus', 'MISSING')}")
+        print()
         
         print("⏳ [2/6] 获取余额和持仓...")
         # 2. 获取当前余额和持仓
