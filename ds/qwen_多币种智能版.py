@@ -6677,9 +6677,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     # 【V8.5.2.4.39】Phase 2核心任务3：测试权重候选，找到最优权重
     print(f"\n  🔬 【测试权重候选】寻找最贴近Phase 1的信号分计算方式...")
     
-    # 导入必要的函数
-    from recalculate_signal_score import recalculate_signal_score_from_snapshot
-    
+    # 【V8.5.2.4.44】recalculate_signal_score_from_snapshot函数已在主文件中定义，无需导入
     # 分别测试超短线和波段的权重
     best_scalping_weights = None
     best_swing_weights = None
@@ -22090,8 +22088,8 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                             profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
                         
                         # === 超短线跟踪 ===
-                        if not scalping_tracking and profit_pct >= 1.5:
-                            # 触发超短线跟踪
+                        if not scalping_tracking and profit_pct >= 2.0:
+                            # 触发超短线跟踪（【V8.5.2.4.44】阈值从1.5%调整为2%）
                             scalping_tracking = True
                             scalping_trigger_bar = bar_idx
                             scalping_max_profit = profit_pct
@@ -22122,8 +22120,8 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                                 break
                         
                         # === 波段跟踪 ===
-                        if not swing_tracking and profit_pct >= 3.0:
-                            # 触发波段跟踪
+                        if not swing_tracking and profit_pct >= 5.0:
+                            # 触发波段跟踪（【V8.5.2.4.44】阈值从3.0%调整为5.0%）
                             swing_tracking = True
                             swing_trigger_bar = bar_idx
                             swing_max_profit = profit_pct
