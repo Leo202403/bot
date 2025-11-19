@@ -9351,10 +9351,10 @@ def analyze_and_adjust_params():
                 
                 # 应用超短线优化结果
                 if scalping_optimization:
-                            if 'scalping_params' not in config:
-                                config['scalping_params'] = {}
-                            config['scalping_params'].update(scalping_optimization['optimized_params'])
-                            
+                    if 'scalping_params' not in config:
+                        config['scalping_params'] = {}
+                    config['scalping_params'].update(scalping_optimization['optimized_params'])
+                    
                     # 更新profit_comparison数据
                     profit_comparison['scalping'] = {
                         'name': scalping_optimization.get('name', ''),
@@ -9377,10 +9377,10 @@ def analyze_and_adjust_params():
                 
                 # 应用波段优化结果
                 if swing_optimization:
-                            if 'swing_params' not in config:
-                                config['swing_params'] = {}
-                            config['swing_params'].update(swing_optimization['optimized_params'])
-                            
+                    if 'swing_params' not in config:
+                        config['swing_params'] = {}
+                    config['swing_params'].update(swing_optimization['optimized_params'])
+                    
                     # 更新profit_comparison数据
                     profit_comparison['swing'] = {
                         'name': swing_optimization.get('name', ''),
@@ -9480,19 +9480,19 @@ def analyze_and_adjust_params():
                     if status == 'FAILED':
                         print(f"\n  ❌ Phase 4验证失败：{phase4_result['recommendation']}")
                         print(f"  🔄 回退到保守参数")
-                                config['scalping_params'] = {
-                                    'atr_tp_multiplier': 2.0,
-                                    'atr_stop_multiplier': 1.5,
-                                    'max_holding_hours': 12,
-                                    'min_risk_reward': 1.5,
+                        config['scalping_params'] = {
+                            'atr_tp_multiplier': 2.0,
+                            'atr_stop_multiplier': 1.5,
+                            'max_holding_hours': 12,
+                            'min_risk_reward': 1.5,
                             'min_signal_score': 60,
                             '_phase4_rollback': 'conservative'
                         }
-                                config['swing_params'] = {
+                        config['swing_params'] = {
                             'atr_tp_multiplier': 4.0,
                             'atr_stop_multiplier': 2.0,
-                                    'max_holding_hours': 72,
-                                    'min_risk_reward': 1.5,
+                            'max_holding_hours': 72,
+                            'min_risk_reward': 1.5,
                             'min_signal_score': 60,
                             '_phase4_rollback': 'conservative'
                         }
@@ -9507,7 +9507,7 @@ def analyze_and_adjust_params():
                             config['swing_params'] = phase2_baseline_result['params'].copy()
                             config['scalping_params']['_phase4_rollback'] = 'phase2'
                             config['swing_params']['_phase4_rollback'] = 'phase2'
-                            else:
+                        else:
                             # 否则使用保守参数
                             config['scalping_params'] = {
                                 'atr_tp_multiplier': 2.0,
@@ -9612,7 +9612,7 @@ def analyze_and_adjust_params():
                         reason_str = ', '.join(reasons) if reasons else "其他原因"  # 🔧 V8.5.2.4.31: 显示具体阈值对比
                         print(f"     • {opp.get('symbol', '?')}: {opp.get('objective_profit', 0):.1f}% | 原因: {reason_str}")
                 
-                except Exception as e:
+            except Exception as e:
                 print(f"⚠️ Phase 4验证失败: {e}")
                 import traceback
                 traceback.print_exc()
@@ -21557,9 +21557,9 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         _, row_data = future_row
                         
                         # 计算该方向的利润进展
-                    if direction == 'long':
+                        if direction == 'long':
                             profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
-                    else:
+                        else:
                             profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
                         
                         # === 超短线跟踪 ===
