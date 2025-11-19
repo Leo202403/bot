@@ -16845,11 +16845,13 @@ def classify_signal_type(market_data):
         if engulfing in ["bullish_engulfing", "bearish_engulfing"]:
             # 检查是否在支撑/阻力3%内
             current_price = market_data.get("current_price", 0)
-            nearest_support = sr.get("nearest_support", {}).get("price", 0)
-            nearest_resistance = sr.get("nearest_resistance", {}).get("price", 0)
+            nearest_support = sr.get("nearest_support") or {}
+            nearest_resistance = sr.get("nearest_resistance") or {}
+            nearest_support_price = nearest_support.get("price", 0)
+            nearest_resistance_price = nearest_resistance.get("price", 0)
             
-            near_support = nearest_support > 0 and abs(current_price - nearest_support) / current_price < 0.03
-            near_resistance = nearest_resistance > 0 and abs(current_price - nearest_resistance) / current_price < 0.03
+            near_support = nearest_support_price > 0 and abs(current_price - nearest_support_price) / current_price < 0.03
+            near_resistance = nearest_resistance_price > 0 and abs(current_price - nearest_resistance_price) / current_price < 0.03
             
             if near_support or near_resistance:
                 level_name = "支撑位" if near_support else "阻力位"
