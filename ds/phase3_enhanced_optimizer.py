@@ -141,13 +141,13 @@ def phase3_enhanced_optimization(
         
         try:
             # 为这个起点做局部搜索
-            # 【V8.5.2.4.47优化】从50组减到15组，避免内存耗尽（与实时AI共存）
+            # 【V8.5.2.4.47优化】从50组减到10组，避免内存耗尽（与实时AI共存）
             # 【V8.5.2.4.47修复】使用current_params代替starting_params，添加signal_type
             search_result = optimize_params_v8321_lightweight(
                 opportunities=all_opportunities,
                 current_params=starting_point['params'],
                 signal_type='swing',  # 默认使用swing（或根据实际情况判断）
-                max_combinations=15  # 【V8.5.2.4.47】50→30→15，节省70%内存
+                max_combinations=10  # 【V8.5.2.4.47】50→30→15→10，节省80%内存
             )
             
             if search_result:
@@ -294,6 +294,12 @@ def phase3_enhanced_optimization(
         starting_points=candidate_starting_points,
         kline_snapshots=kline_snapshots
     )
+    
+    # 【V8.5.2.4.47】超短线优化完成，立即释放内存
+    import gc
+    del scalping_opps  # 删除已用完的超短线机会列表
+    gc.collect()
+    print(f"     💾 超短线优化完成，已释放内存")
     
     # 优化波段参数
     swing_result = optimize_for_signal_type(
@@ -601,9 +607,19 @@ def optimize_for_signal_type(
         }
     """
     from trailing_stop_calculator import batch_calculate_profits
+    import gc
     
     print(f"\n  🎯 【{signal_type.upper()}参数优化】")
     print(f"     机会数量: {len(opportunities)}个")
+    
+    # 【V8.5.2.4.47】内存优化：对大量机会进行采样
+    if len(opportunities) > 1000:
+        import random
+        sample_size = 1000
+        sampled_opportunities = random.sample(opportunities, sample_size)
+        print(f"     💾 内存优化：采样{sample_size}个机会（保留{sample_size/len(opportunities)*100:.1f}%）")
+        opportunities = sampled_opportunities
+        gc.collect()
     
     # 参数搜索空间（包括移动止损）
     # 【V8.5.2.4.47修复】放宽阈值，避免过度筛选导致捕获率极低和负利润
@@ -652,10 +668,11 @@ def optimize_for_signal_type(
                             test_combinations.append(test_params)
         
         # 【V8.5.2.4.47优化】限制测试数量，避免内存耗尽（与实时AI共存）
-        # 每个起点从50组减到15组，节省70%内存
-        test_combinations = test_combinations[:15]
+        # 每个起点从50组减到10组，节省80%内存
+        test_combinations = test_combinations[:10]
         
         # 测试每个组合
+        best_for_this_start = None
         for params in test_combinations:
             # 筛选机会
             filtered_opps = [
@@ -677,14 +694,21 @@ def optimize_for_signal_type(
             total_profit = sum(r['profit'] for r in profit_results)
             avg_profit = total_profit / captured_count if captured_count > 0 else 0
             
-            all_results.append({
-                'params': params,
-                'starting_point': starting_point['name'],
-                'captured_count': captured_count,
-                'capture_rate': capture_rate,
-                'avg_profit': avg_profit,
-                'total_profit': total_profit
-            })
+            # 【V8.5.2.4.47】只保存当前起点的最佳结果
+            if best_for_this_start is None or total_profit > best_for_this_start['total_profit']:
+                best_for_this_start = {
+                    'params': params,
+                    'starting_point': starting_point['name'],
+                    'captured_count': captured_count,
+                    'capture_rate': capture_rate,
+                    'avg_profit': avg_profit,
+                    'total_profit': total_profit
+                }
+        
+        # 【V8.5.2.4.47】每个起点测试完后立即保存最佳结果并释放内存
+        if best_for_this_start:
+            all_results.append(best_for_this_start)
+        gc.collect()  # 立即释放内存
     
     if not all_results:
         print(f"     ⚠️  未找到有效结果")
