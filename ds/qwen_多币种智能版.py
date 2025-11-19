@@ -6961,31 +6961,36 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         
         print(f"     📊 采样: 超短线{len(scalping_sample)}/{len(scalping_opps_full)}, 波段{len(swing_sample)}/{len(swing_opps_full)}")
         
-        # 【内存优化】减少测试组合数：每个维度只取3个值
+        # 【V8.5.2.4.53】基于Phase 1客观利润扩大TP测试范围
+        # 目标：让TP能够捕获接近Phase 1的15-16%客观利润
         scalping_tp_candidates = [
-            scalping_params_range['atr_tp'][0],  # 最小值
-            scalping_params_range['atr_tp'][2],  # 中位值（100%）
-            scalping_params_range['atr_tp'][3]   # 最大值
+            scalping_params_range['atr_tp'][2],  # 100%基准（围绕required_tp）
+            round(scalping_required_tp * 1.2, 1),  # 120%（向上探索）
+            round(scalping_required_tp * 1.5, 1),  # 150%（接近客观利润）
+            min(25.0, round(scalping_required_tp * 1.8, 1))  # 180%（最大探索，不超过25）
         ]
         scalping_sl_candidates = [
-            scalping_params_range['atr_sl'][1],  # 2.0
-            scalping_params_range['atr_sl'][2],  # 2.5
-            scalping_params_range['atr_sl'][3]   # 3.0
+            scalping_params_range['atr_sl'][0],  # 1.5（最紧）
+            scalping_params_range['atr_sl'][2],  # 2.5（中等）
+            scalping_params_range['atr_sl'][3]   # 3.0（宽松）
         ]
         
         swing_tp_candidates = [
-            swing_params_range['atr_tp'][0],  # 最小值
-            swing_params_range['atr_tp'][1],  # 中位值（100%）
-            swing_params_range['atr_tp'][3]   # 最大值
+            swing_params_range['atr_tp'][1],  # 100%基准
+            round(swing_required_tp * 1.2, 1),  # 120%
+            round(swing_required_tp * 1.5, 1),  # 150%（接近客观利润）
+            min(30.0, round(swing_required_tp * 1.8, 1))  # 180%（最大探索）
         ]
         swing_sl_candidates = [
-            swing_params_range['atr_sl'][0],  # 2.5
-            swing_params_range['atr_sl'][1],  # 3.0
-            swing_params_range['atr_sl'][3]   # 4.0
+            swing_params_range['atr_sl'][0],  # 2.5（最紧）
+            swing_params_range['atr_sl'][1],  # 3.0（中等）
+            swing_params_range['atr_sl'][3]   # 4.0（宽松）
         ]
         
         print(f"     🔬 超短线测试: TP{scalping_tp_candidates} × SL{scalping_sl_candidates} = {len(scalping_tp_candidates) * len(scalping_sl_candidates)}组")
+        print(f"     💡 扩大TP范围至{max(scalping_tp_candidates):.1f}倍，以捕获Phase 1的{scalping_avg_profit:.1f}%客观利润")
         print(f"     🔬 波段测试: TP{swing_tp_candidates} × SL{swing_sl_candidates} = {len(swing_tp_candidates) * len(swing_sl_candidates)}组")
+        print(f"     💡 扩大TP范围至{max(swing_tp_candidates):.1f}倍，以捕获Phase 1的{swing_avg_profit:.1f}%客观利润")
         
         # 步骤2：测试超短线TP/SL组合
         if scalping_sample:
@@ -7160,12 +7165,23 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             gc.collect()
         
         gc.collect()
+        
+        # 【V8.5.2.4.53】显示最优TP/SL将被应用
+        if best_scalping_tp_sl or best_swing_tp_sl:
+            print(f"\n     ✅ 【最优TP/SL将应用到后续流程】")
+            if best_scalping_tp_sl:
+                print(f"        ⚡ 超短线: TP={best_scalping_tp_sl['tp']:.1f}, SL={best_scalping_tp_sl['sl']:.1f} → 利润{best_scalping_tp_sl['avg_profit']:.2f}%")
+            if best_swing_tp_sl:
+                print(f"        🌊 波段: TP={best_swing_tp_sl['tp']:.1f}, SL={best_swing_tp_sl['sl']:.1f} → 利润{best_swing_tp_sl['avg_profit']:.2f}%")
+            print(f"        💡 后续参数组合测试和Phase 3将使用这些最优值")
     else:
         print(f"     ⚠️  跳过TP/SL测试（无机会数据）")
     
     # 【V8.5.2.4.39】Phase 2核心任务5：扩展参数组合测试，覆盖更广范围
     print(f"\n  🎯 【参数组合测试】寻找捕获率最高的参数组合...")
     print(f"     💡 注意：此时使用的是优化权重计算的signal_score")
+    if best_scalping_tp_sl or best_swing_tp_sl:
+        print(f"     💡 使用TP/SL测试找到的最优值进行计算")
     
     # 【V8.5.2.4.39】扩展test_points，全面覆盖R:R、信号分、共振的组合空间
     test_points = [
@@ -7307,19 +7323,27 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     signal_type = opp.get('signal_type', 'swing')
                     
                     # 获取当前test_point指定的TP/SL参数（优先）
-                    # 如果未指定，则根据signal_type使用默认值（从参数范围取中位数）
+                    # 【V8.5.2.4.53】优先使用最优TP/SL，其次使用参数范围中位数
                     if signal_type == 'scalping':
-                        # 超短线：使用超短线参数范围的中位数
-                        default_tp = scalping_params_range['atr_tp'][1]  # 2.0
-                        default_sl = scalping_params_range['atr_sl'][2]  # 1.5
-                        default_holding = scalping_params_range['max_holding'][1]  # 12
+                        # 超短线：优先使用TP/SL测试找到的最优值
+                        if best_scalping_tp_sl:
+                            default_tp = best_scalping_tp_sl['tp']
+                            default_sl = best_scalping_tp_sl['sl']
+                        else:
+                            default_tp = scalping_params_range['atr_tp'][1]
+                            default_sl = scalping_params_range['atr_sl'][2]
+                        default_holding = scalping_params_range['max_holding'][1]
                     else:  # swing
-                        # 波段：使用波段参数范围的中位数
-                        default_tp = swing_params_range['atr_tp'][2]  # 6.0
-                        default_sl = swing_params_range['atr_sl'][1]  # 2.5
-                        default_holding = swing_params_range['max_holding'][2]  # 72
+                        # 波段：优先使用TP/SL测试找到的最优值
+                        if best_swing_tp_sl:
+                            default_tp = best_swing_tp_sl['tp']
+                            default_sl = best_swing_tp_sl['sl']
+                        else:
+                            default_tp = swing_params_range['atr_tp'][2]
+                            default_sl = swing_params_range['atr_sl'][1]
+                        default_holding = swing_params_range['max_holding'][2]
                     
-                    # 创建差异化的strategy_params（优先使用test_point指定的值）
+                    # 创建差异化的strategy_params（优先使用test_point指定的值，其次使用最优TP/SL）
                     strategy_params = {
                         **config_variant,
                         'atr_tp_multiplier': config_variant.get('atr_tp_multiplier', default_tp),
