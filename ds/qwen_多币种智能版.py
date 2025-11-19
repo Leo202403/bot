@@ -7629,17 +7629,28 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             from calculate_actual_profit import calculate_single_actual_profit
             
             for opp in best_captured_opps:
-                # 【V8.5.2.4.36】根据signal_type使用差异化参数（从参数范围取中位数）
+                # 【V8.5.2.4.36】根据signal_type使用差异化参数
+                # 【V8.5.2.4.60】优先使用TP/SL测试找到的最优值
                 signal_type = opp.get('signal_type', 'swing')
                 
-                # 根据signal_type使用默认值（从参数范围取中位数）
+                # 根据signal_type使用最优TP/SL（优先）或参数范围中位数（降级）
                 if signal_type == 'scalping':
-                    default_tp = scalping_params_range['atr_tp'][1]  # 2.0
-                    default_sl = scalping_params_range['atr_sl'][2]  # 1.5
+                    # 优先使用TP/SL测试的最优值
+                    if best_scalping_tp_sl:
+                        default_tp = best_scalping_tp_sl['tp']
+                        default_sl = best_scalping_tp_sl['sl']
+                    else:
+                        default_tp = scalping_params_range['atr_tp'][1]  # 降级：2.0
+                        default_sl = scalping_params_range['atr_sl'][2]  # 降级：1.5
                     default_holding = scalping_params_range['max_holding'][1]  # 12
                 else:
-                    default_tp = swing_params_range['atr_tp'][2]  # 6.0
-                    default_sl = swing_params_range['atr_sl'][1]  # 2.5
+                    # 优先使用TP/SL测试的最优值
+                    if best_swing_tp_sl:
+                        default_tp = best_swing_tp_sl['tp']
+                        default_sl = best_swing_tp_sl['sl']
+                    else:
+                        default_tp = swing_params_range['atr_tp'][2]  # 降级：6.0
+                        default_sl = swing_params_range['atr_sl'][1]  # 降级：2.5
                     default_holding = swing_params_range['max_holding'][2]  # 72
                 
                 strategy_params = {
