@@ -7349,11 +7349,12 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                         default_holding = swing_params_range['max_holding'][2]
                     
                     # 创建差异化的strategy_params（优先使用test_point指定的值，其次使用最优TP/SL）
+                    # 【V8.5.2.4.62】使用 or 操作符处理None值，确保fallback到default值
                     strategy_params = {
                         **config_variant,
-                        'atr_tp_multiplier': config_variant.get('atr_tp_multiplier', default_tp),
-                        'atr_stop_multiplier': config_variant.get('atr_stop_multiplier', default_sl),
-                        'max_holding_hours': config_variant.get('max_holding_hours', default_holding)
+                        'atr_tp_multiplier': config_variant.get('atr_tp_multiplier') or default_tp,
+                        'atr_stop_multiplier': config_variant.get('atr_stop_multiplier') or default_sl,
+                        'max_holding_hours': config_variant.get('max_holding_hours') or default_holding
                     }
                     
                     # 🔧 V8.5.2.4.61 调试：启用前3个机会的调试模式
