@@ -9874,24 +9874,25 @@ def analyze_and_adjust_params():
         """
         # 【END DEPRECATED CODE】
         
-        # 【V8.5.2.4.46】基于Phase 3-4结果生成opportunity_analysis（供邮件使用）
+        # 【V8.5.2.4.47】基于Phase 1数据生成opportunity_analysis（供邮件使用）
+        # 修复：即使Phase 4失败，只要有机会数据就应该生成对比分析
         opportunity_analysis = None
         validation_passed = True
         
-        if phase4_result_extracted and not phase4_result_extracted.get('error') and all_opportunities_sorted:
+        if all_opportunities_sorted:
             try:
-                print(f"\n  📊 【V8.5.2.4.46】生成机会对比分析...")
+                print(f"\n  📊 【V8.5.2.4.47】生成机会对比分析...")
                 
-                # 获取Phase 4的测试结果
-                full_test = phase4_result_extracted.get('full_test', {})
+                # 获取Phase 4的测试结果（如果可用）
+                full_test = phase4_result_extracted.get('full_test', {}) if phase4_result_extracted else {}
                 
                 # 分类机会
                 scalping_opps = [opp for opp in all_opportunities_sorted if opp.get('signal_type') == 'scalping']
                 swing_opps = [opp for opp in all_opportunities_sorted if opp.get('signal_type') == 'swing']
                 
                 # 计算每个机会是否会被新参数捕获
-                scalping_params = config.get('scalping_params', {})
-                swing_params = config.get('swing_params', {})
+                scalping_params = config.get('scalping_params', config.get('global', {}))
+                swing_params = config.get('swing_params', config.get('global', {}))
                 
                 for opp in all_opportunities_sorted:
                     signal_type = opp.get('signal_type')
@@ -9906,10 +9907,28 @@ def analyze_and_adjust_params():
                     
                     opp['new_can_entry'] = (signal_score >= min_signal and consensus >= min_consensus)
                     opp['old_can_entry'] = True  # 假设旧参数都能捕获（用于对比）
+                    
+                    # 添加捕获利润和效率字段（供邮件显示）
+                    if opp['new_can_entry']:
+                        opp['new_captured_profit'] = opp.get('objective_profit', 0)
+                        opp['new_efficiency'] = 100.0  # 简化：假设100%效率
+                        opp['new_exit_type'] = 'TP'
+                    else:
+                        opp['new_captured_profit'] = 0
+                        opp['new_efficiency'] = 0
+                        opp['new_exit_type'] = 'N/A'
+                    
+                    opp['old_captured_profit'] = opp.get('objective_profit', 0)
+                    opp['old_efficiency'] = 100.0
+                    opp['old_exit_type'] = 'TP'
                 
-                new_captured = [opp for opp in all_opportunities_sorted if opp['new_can_entry']]
+                new_captured = [opp for opp in all_opportunities_sorted if opp.get('new_can_entry', False)]
                 old_captured = all_opportunities_sorted[:]  # 旧参数假设捕获所有
-                missed = [opp for opp in all_opportunities_sorted if not opp['new_can_entry']]
+                missed = [opp for opp in all_opportunities_sorted if not opp.get('new_can_entry', False)]
+                
+                # 计算平均利润
+                avg_old_profit = sum(o.get('objective_profit', 0) for o in old_captured) / len(old_captured) if old_captured else 0
+                avg_new_profit = sum(o.get('objective_profit', 0) for o in new_captured) / len(new_captured) if new_captured else 0
                 
                 # 构建stats
                 stats = {
@@ -9918,10 +9937,10 @@ def analyze_and_adjust_params():
                     'old_capture_rate': 100.0,  # 假设旧参数100%捕获
                     'new_captured_count': len(new_captured),
                     'new_capture_rate': len(new_captured) / len(all_opportunities_sorted) * 100 if all_opportunities_sorted else 0,
-                    'avg_old_captured_profit': full_test.get('baseline_avg_profit', 0),  # 使用Phase 4基准
-                    'avg_new_captured_profit': full_test.get('avg_profit', 0),  # 使用Phase 4结果
-                    'validation_status': phase4_result_extracted.get('status', 'UNKNOWN'),
-                    'stability_score': phase4_result_extracted.get('stability', {}).get('stability_score', 0)
+                    'avg_old_captured_profit': avg_old_profit,
+                    'avg_new_captured_profit': avg_new_profit,
+                    'validation_status': phase4_result_extracted.get('overall_status', 'UNKNOWN') if phase4_result_extracted else 'NO_PHASE4',
+                    'stability_score': phase4_result_extracted.get('stability', {}).get('stability_score', 0) if phase4_result_extracted else 0
                 }
                 
                 opportunity_analysis = {
@@ -9933,12 +9952,16 @@ def analyze_and_adjust_params():
                 }
                 
                 print(f"     ✓ 生成机会分析: 总{len(all_opportunities_sorted)}个, 新参数捕获{len(new_captured)}个({stats['new_capture_rate']:.1f}%)")
+                print(f"        超短线: {len(scalping_opps)}个, 波段: {len(swing_opps)}个")
                 
             except Exception as e:
                 print(f"  ⚠️ 生成机会对比分析失败: {e}")
                 import traceback
                 traceback.print_exc()
                 opportunity_analysis = None
+        else:
+            print(f"  ⚠️  跳过机会对比分析（无机会数据）")
+        
         phase4_result = None
 
         # ========== 【V8.3.25.10】第4.55步：提取AI洞察的参数建议 ==========
