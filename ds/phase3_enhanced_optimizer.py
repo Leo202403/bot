@@ -141,13 +141,13 @@ def phase3_enhanced_optimization(
         
         try:
             # 为这个起点做局部搜索
-            # 【V8.5.2.4.47优化】从50组减到30组，避免内存耗尽（2G服务器）
+            # 【V8.5.2.4.47优化】从50组减到15组，避免内存耗尽（与实时AI共存）
             # 【V8.5.2.4.47修复】使用current_params代替starting_params，添加signal_type
             search_result = optimize_params_v8321_lightweight(
                 opportunities=all_opportunities,
                 current_params=starting_point['params'],
                 signal_type='swing',  # 默认使用swing（或根据实际情况判断）
-                max_combinations=30  # 【V8.5.2.4.47】50→30，节省40%内存
+                max_combinations=15  # 【V8.5.2.4.47】50→30→15，节省70%内存
             )
             
             if search_result:
@@ -651,9 +651,9 @@ def optimize_for_signal_type(
                             }
                             test_combinations.append(test_params)
         
-        # 【V8.5.2.4.47优化】限制测试数量，避免内存耗尽（2G服务器）
-        # 每个起点从50组减到30组，节省40%内存
-        test_combinations = test_combinations[:30]
+        # 【V8.5.2.4.47优化】限制测试数量，避免内存耗尽（与实时AI共存）
+        # 每个起点从50组减到15组，节省70%内存
+        test_combinations = test_combinations[:15]
         
         # 测试每个组合
         for params in test_combinations:

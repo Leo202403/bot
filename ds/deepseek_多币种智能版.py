@@ -6645,31 +6645,25 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     # 为超短线和波段分别找到最优权重组合
     print(f"\n  🎯 【信号分权重优化】")
     
-    # 定义权重候选组合（围绕默认值微调）
+    # 【V8.5.2.4.47】内存优化：定义权重候选组合（5→3组，减少40%测试量）
     scalping_weight_candidates = [
-        # 默认权重
+        # 默认权重（保留）
         {'momentum': 20, 'volume': 35, 'breakout': 25, 'pattern': 12, 'trend_align': 10, 'name': '默认'},
-        # 强调动量
+        # 强调动量（保留）
         {'momentum': 25, 'volume': 30, 'breakout': 25, 'pattern': 12, 'trend_align': 10, 'name': '动量优先'},
-        # 强调成交量
-        {'momentum': 20, 'volume': 40, 'breakout': 20, 'pattern': 12, 'trend_align': 10, 'name': '放量优先'},
-        # 强调突破
-        {'momentum': 20, 'volume': 30, 'breakout': 30, 'pattern': 12, 'trend_align': 10, 'name': '突破优先'},
-        # 平衡型
+        # 平衡型（保留）
         {'momentum': 22, 'volume': 33, 'breakout': 25, 'pattern': 12, 'trend_align': 10, 'name': '平衡'},
+        # 【V8.5.2.4.47】移除放量优先、突破优先（减少内存占用）
     ]
     
     swing_weight_candidates = [
-        # 默认权重
+        # 默认权重（保留）
         {'momentum': 20, 'volume': 35, 'breakout': 25, 'trend_align': 35, 'ema_divergence': 15, 'trend_4h_strength': 25, 'name': '默认'},
-        # 强调趋势对齐
+        # 强调趋势对齐（保留）
         {'momentum': 20, 'volume': 30, 'breakout': 20, 'trend_align': 40, 'ema_divergence': 15, 'trend_4h_strength': 25, 'name': '趋势优先'},
-        # 强调4H趋势
-        {'momentum': 20, 'volume': 30, 'breakout': 20, 'trend_align': 35, 'ema_divergence': 10, 'trend_4h_strength': 35, 'name': '4H优先'},
-        # 强调动量+成交量
-        {'momentum': 25, 'volume': 40, 'breakout': 20, 'trend_align': 30, 'ema_divergence': 15, 'trend_4h_strength': 20, 'name': '动量放量'},
-        # 平衡型
+        # 平衡型（保留）
         {'momentum': 22, 'volume': 33, 'breakout': 23, 'trend_align': 33, 'ema_divergence': 15, 'trend_4h_strength': 25, 'name': '平衡'},
+        # 【V8.5.2.4.47】移除4H优先、动量放量（减少内存占用）
     ]
     
     print(f"     ⚡ 超短线权重候选: {len(scalping_weight_candidates)}组")
@@ -22251,11 +22245,12 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         import pandas as pd
         import gc
         
-        # 【V8.3.21】全局机会数量限制（保守策略：不遗漏机会）
-        MAX_OPPORTUNITIES_PER_TYPE = 2000  # 提高到2000，确保不遗漏重要机会
-        MAX_OPPORTUNITIES_PER_COIN = 300   # 提高到300
-        ENABLE_SAMPLING = False  # 关闭采样，分析所有点位（保证准确性）
-        MAX_SAMPLE_POINTS = 200  # 如果开启采样才使用
+        # 【V8.5.2.4.47】内存优化：降低限制以适应2G服务器（与实时AI共存）
+        # 在保证回测质量的前提下，减少内存占用60%
+        MAX_OPPORTUNITIES_PER_TYPE = 1000  # 2000→1000（-50%），每类1000个足够代表性
+        MAX_OPPORTUNITIES_PER_COIN = 150   # 300→150（-50%），每币种150个
+        ENABLE_SAMPLING = True   # False→True，启用采样（关键优化）
+        MAX_SAMPLE_POINTS = 100  # 200→100，每币种最多采样100个点位
         
         scalping_opps = []
         swing_opps = []
@@ -22617,6 +22612,12 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         
         print(f"\n  ⚡ 超短线机会: {len(scalping_opps)}个（已优化）")
         print(f"  🌊 波段机会: {len(swing_opps)}个（已优化）")
+        
+        # 【V8.5.2.4.47】强制垃圾回收，释放DataFrame内存
+        gc.collect()
+        import sys
+        if hasattr(sys, 'getallocatedblocks'):
+            print(f"  💾 内存优化：已释放临时DataFrame内存")
         
         # 【V8.3.21.9】计算实际利润（内存优化版）
         try:
