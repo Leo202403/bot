@@ -7452,11 +7452,12 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             print(f"{'='*70}")
             
             model_name = os.getenv("MODEL_NAME", "deepseek")
+            # 【V8.5.2.4.46】kline_snapshots参数可选，传None即可（所有数据已在opportunities中）
             phase3_result = phase3_enhanced_optimization(
                 all_opportunities=all_opportunities_sorted,
                 phase1_baseline=phase1_baseline,
                 phase2_baseline=phase2_baseline,
-                kline_snapshots=kline_snapshots,
+                kline_snapshots=None,
                 model_name=model_name
             )
             
@@ -22230,8 +22231,8 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                             profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
                         
                         # === 超短线跟踪 ===
-                        if not scalping_tracking and profit_pct >= 3.0:
-                            # 触发超短线跟踪（【V8.5.2.4.45】阈值从2%调整为3%，提高收益要求）
+                        if not scalping_tracking and profit_pct >= 5.0:
+                            # 触发超短线跟踪（【V8.5.2.4.46】阈值从3%调整为5%，确保时间差异）
                             scalping_tracking = True
                             scalping_trigger_bar = bar_idx
                             scalping_max_profit = profit_pct
@@ -22262,8 +22263,8 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                                 break
                         
                         # === 波段跟踪 ===
-                        if not swing_tracking and profit_pct >= 8.0:
-                            # 触发波段跟踪（【V8.5.2.4.45】阈值从5.0%调整为8.0%，捕捉更强趋势）
+                        if not swing_tracking and profit_pct >= 10.0:
+                            # 触发波段跟踪（【V8.5.2.4.46】阈值从8.0%调整为10.0%，只捕捉真正的波段趋势）
                             swing_tracking = True
                             swing_trigger_bar = bar_idx
                             swing_max_profit = profit_pct
