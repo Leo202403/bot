@@ -8023,7 +8023,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     swing_tp_sl = phase2_params.get('swing_tp_sl', {})
                     
                     # 构建超短线参数（使用scalping_tp_sl）
-                    config['scalping_params'] = {
+                    current_config['scalping_params'] = {
                         'min_risk_reward': phase2_params.get('min_risk_reward', 1.0),
                         'min_indicator_consensus': phase2_params.get('min_indicator_consensus', 1),
                         'min_signal_score': phase2_params.get('min_signal_score', 70),
@@ -8036,7 +8036,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     }
                     
                     # 构建波段参数（使用swing_tp_sl）
-                    config['swing_params'] = {
+                    current_config['swing_params'] = {
                         'min_risk_reward': phase2_params.get('min_risk_reward', 1.0),
                         'min_indicator_consensus': phase2_params.get('min_indicator_consensus', 1),
                         'min_signal_score': phase2_params.get('min_signal_score', 75),
@@ -8049,12 +8049,12 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     }
                     
                     print(f"\n  📊 【Phase 4回退】已应用Phase 2参数:")
-                    print(f"     ⚡ 超短线: TP={config['scalping_params']['atr_tp_multiplier']:.1f}, SL={config['scalping_params']['atr_stop_multiplier']:.1f}, 持仓{config['scalping_params']['max_holding_hours']}h")
-                    print(f"     🌊 波段: TP={config['swing_params']['atr_tp_multiplier']:.1f}, SL={config['swing_params']['atr_stop_multiplier']:.1f}, 持仓{config['swing_params']['max_holding_hours']}h")
+                    print(f"     ⚡ 超短线: TP={current_config['scalping_params']['atr_tp_multiplier']:.1f}, SL={current_config['scalping_params']['atr_stop_multiplier']:.1f}, 持仓{current_config['scalping_params']['max_holding_hours']}h")
+                    print(f"     🌊 波段: TP={current_config['swing_params']['atr_tp_multiplier']:.1f}, SL={current_config['swing_params']['atr_stop_multiplier']:.1f}, 持仓{current_config['swing_params']['max_holding_hours']}h")
                 else:
                     # 如果没有Phase 2 baseline，使用保守默认值
                     print(f"\n  ⚠️  无Phase 2 baseline，使用保守默认参数")
-                    config['scalping_params'] = {
+                    current_config['scalping_params'] = {
                         'atr_tp_multiplier': 12.0,
                         'atr_stop_multiplier': 2.0,
                         'max_holding_hours': 4,
@@ -8064,7 +8064,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                         'trailing_stop_enabled': False,
                         '_phase4_rollback': 'conservative'
                     }
-                    config['swing_params'] = {
+                    current_config['swing_params'] = {
                         'atr_tp_multiplier': 15.0,
                         'atr_stop_multiplier': 2.5,
                         'max_holding_hours': 17,
