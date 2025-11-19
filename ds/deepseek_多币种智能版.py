@@ -9908,8 +9908,9 @@ def analyze_and_adjust_params():
             print(f"  ⚠️  提取AI参数建议失败: {e}")
             ai_suggested_params = None
 
-        # ========== 【V8.5.2.4.10】第3步：Phase 3风险控制优化 ==========
-        print("\n【第3步：Phase 3风险控制优化】")
+        # ========== 【V8.5.2.4.47】DEPRECATED - 旧Phase 3已被phase3_enhanced_optimizer.py替代 ==========
+        # 删除print避免日志混乱，变量初始化保留（可能被后续代码使用）
+        # print("\n【第3步：Phase 3风险控制优化】")  ← 已删除
         scalping_optimization = None
         swing_optimization = None
         profit_comparison = {

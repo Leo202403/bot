@@ -606,23 +606,24 @@ def optimize_for_signal_type(
     print(f"     机会数量: {len(opportunities)}个")
     
     # 参数搜索空间（包括移动止损）
+    # 【V8.5.2.4.47修复】放宽阈值，避免过度筛选导致捕获率极低和负利润
     if signal_type == 'scalping':
         param_grid = {
-            'min_indicator_consensus': [1, 2, 3],
-            'min_signal_score': [80, 85, 90],
+            'min_indicator_consensus': [1, 2],          # 降低：减少3（过严）
+            'min_signal_score': [60, 70, 75, 80],       # 降低：从80起降到60起
             'atr_tp_multiplier': [1.5, 2.0, 2.5, 3.0],
             'atr_stop_multiplier': [1.0, 1.5, 2.0],
             'max_holding_hours': [4, 8, 12, 16],
-            'trailing_stop_enabled': [True, False]
+            'trailing_stop_enabled': [False, True]      # 优先测试不用移动止损
         }
     else:  # swing
         param_grid = {
-            'min_indicator_consensus': [2, 3, 4],
-            'min_signal_score': [85, 88, 90],
+            'min_indicator_consensus': [1, 2],          # 降低：从2起降到1起，减少3、4
+            'min_signal_score': [70, 75, 80, 85],       # 降低：从85起降到70起
             'atr_tp_multiplier': [4.0, 5.0, 6.0, 7.0],
             'atr_stop_multiplier': [2.0, 2.5, 3.0],
             'max_holding_hours': [48, 72, 96],
-            'trailing_stop_enabled': [True, False]
+            'trailing_stop_enabled': [False, True]      # 优先测试不用移动止损
         }
     
     # 多起点搜索
