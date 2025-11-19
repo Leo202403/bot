@@ -6673,10 +6673,31 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 from calculate_actual_profit import calculate_single_actual_profit
                 
                 for opp in captured_opps:
-                    # 使用当前test_params的TP/SL参数计算实际利润
+                    # 【V8.5.2.4.35】根据signal_type使用差异化参数
+                    signal_type = opp.get('signal_type', 'swing')
+                    
+                    # 创建差异化的strategy_params
+                    if signal_type == 'scalping':
+                        # 超短线：快速止盈止损
+                        strategy_params = {
+                            **config_variant,
+                            'atr_tp_multiplier': 2.0,
+                            'atr_stop_multiplier': 1.5,
+                            'max_holding_hours': 12
+                        }
+                    else:  # swing
+                        # 波段：更大的利润目标
+                        strategy_params = {
+                            **config_variant,
+                            'atr_tp_multiplier': 6.0,
+                            'atr_stop_multiplier': 2.5,
+                            'max_holding_hours': 72
+                        }
+                    
+                    # 使用差异化参数计算实际利润
                     actual_profit = calculate_single_actual_profit(
                         opp,
-                        strategy_params=config_variant,  # 传入当前test_params
+                        strategy_params=strategy_params,
                         use_dynamic_atr=False  # 禁用动态ATR，确保公平比较
                     )
                     opp['_test_actual_profit'] = actual_profit  # 临时存储
@@ -6903,9 +6924,16 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             from calculate_actual_profit import calculate_single_actual_profit
             
             for opp in best_captured_opps:
+                # 【V8.5.2.4.35】根据signal_type使用差异化参数
+                signal_type = opp.get('signal_type', 'swing')
+                if signal_type == 'scalping':
+                    strategy_params = {**best_params, 'atr_tp_multiplier': 2.0, 'atr_stop_multiplier': 1.5, 'max_holding_hours': 12}
+                else:
+                    strategy_params = {**best_params, 'atr_tp_multiplier': 6.0, 'atr_stop_multiplier': 2.5, 'max_holding_hours': 72}
+                
                 actual_profit = calculate_single_actual_profit(
                     opp,
-                    strategy_params=best_params,
+                    strategy_params=strategy_params,
                     use_dynamic_atr=False
                 )
                 opp['_phase2_actual_profit'] = actual_profit
@@ -6962,9 +6990,16 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             from calculate_actual_profit import calculate_single_actual_profit
             
             for opp in val_captured_opps:
+                # 【V8.5.2.4.35】根据signal_type使用差异化参数
+                signal_type = opp.get('signal_type', 'swing')
+                if signal_type == 'scalping':
+                    strategy_params = {**best_params, 'atr_tp_multiplier': 2.0, 'atr_stop_multiplier': 1.5, 'max_holding_hours': 12}
+                else:
+                    strategy_params = {**best_params, 'atr_tp_multiplier': 6.0, 'atr_stop_multiplier': 2.5, 'max_holding_hours': 72}
+                
                 actual_profit = calculate_single_actual_profit(
                     opp,
-                    strategy_params=best_params,
+                    strategy_params=strategy_params,
                     use_dynamic_atr=False
                 )
                 opp['_val_actual_profit'] = actual_profit
@@ -6982,9 +7017,16 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             if train_captured_opps:
                 # 【V8.5.2.4.22】修复：重新计算训练集actual_profit（确保使用相同的参数和方法）
                 for opp in train_captured_opps:
+                    # 【V8.5.2.4.35】根据signal_type使用差异化参数
+                    signal_type = opp.get('signal_type', 'swing')
+                    if signal_type == 'scalping':
+                        strategy_params = {**best_params, 'atr_tp_multiplier': 2.0, 'atr_stop_multiplier': 1.5, 'max_holding_hours': 12}
+                    else:
+                        strategy_params = {**best_params, 'atr_tp_multiplier': 6.0, 'atr_stop_multiplier': 2.5, 'max_holding_hours': 72}
+                    
                     actual_profit = calculate_single_actual_profit(
                         opp,
-                        strategy_params=best_params,
+                        strategy_params=strategy_params,
                         use_dynamic_atr=False
                     )
                     opp['_train_actual_profit'] = actual_profit
