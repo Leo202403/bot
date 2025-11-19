@@ -6701,26 +6701,31 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         for idx, weight_config in enumerate(scalping_weight_candidates, 1):
             # 重新计算这些机会的signal_score
             recalc_count = 0
+            # 【V8.5.2.4.47】构造learning_config格式
+            learning_config = {
+                'scalping_score_weights': {k: v for k, v in weight_config.items() if k != 'name'}
+            }
+            
             for opp in scalping_opps:
                 snapshot = opp.get('snapshot')
                 if snapshot:
-                    # 使用自定义权重重新计算signal_score
+                    # 【V8.5.2.4.47】修复参数传递：使用正确的参数名
                     new_score = recalculate_signal_score_from_snapshot(
-                        snapshot=snapshot,
+                        snapshot_row=snapshot,  # ✅ 修复参数名
                         signal_type='scalping',
-                        custom_weights=weight_config
+                        learning_config=learning_config  # ✅ 修复参数名和结构
                     )
                     opp['_weight_test_score'] = new_score
                     recalc_count += 1
             
-            # 使用min_signal_score=75过滤，计算捕获率
-            # （75分是一个合理的基准，既不太严格也不太宽松）
-            captured = [o for o in scalping_opps if o.get('_weight_test_score', 0) >= 75]
+            # 【V8.5.2.4.47】降低信号分阈值，从75降至60，避免过度过滤
+            # （因为客观机会本身已经是盈利的，不需要太严格的信号分过滤）
+            captured = [o for o in scalping_opps if o.get('_weight_test_score', 0) >= 60]
             capture_rate = len(captured) / phase1_scalping_count if phase1_scalping_count > 0 else 0
             
             # 计算平均利润
             if captured:
-                avg_profit = sum(o.get('max_potential_profit', 0) for o in captured) / len(captured)
+                avg_profit = sum(o.get('objective_profit', 0) for o in captured) / len(captured)
             else:
                 avg_profit = 0
             
@@ -6751,25 +6756,30 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         for idx, weight_config in enumerate(swing_weight_candidates, 1):
             # 重新计算这些机会的signal_score
             recalc_count = 0
+            # 【V8.5.2.4.47】构造learning_config格式
+            learning_config = {
+                'swing_score_weights': {k: v for k, v in weight_config.items() if k != 'name'}
+            }
+            
             for opp in swing_opps:
                 snapshot = opp.get('snapshot')
                 if snapshot:
-                    # 使用自定义权重重新计算signal_score
+                    # 【V8.5.2.4.47】修复参数传递：使用正确的参数名
                     new_score = recalculate_signal_score_from_snapshot(
-                        snapshot=snapshot,
+                        snapshot_row=snapshot,  # ✅ 修复参数名
                         signal_type='swing',
-                        custom_weights=weight_config
+                        learning_config=learning_config  # ✅ 修复参数名和结构
                     )
                     opp['_weight_test_score'] = new_score
                     recalc_count += 1
             
-            # 使用min_signal_score=75过滤
-            captured = [o for o in swing_opps if o.get('_weight_test_score', 0) >= 75]
+            # 【V8.5.2.4.47】降低信号分阈值，从75降至60
+            captured = [o for o in swing_opps if o.get('_weight_test_score', 0) >= 60]
             capture_rate = len(captured) / phase1_swing_count if phase1_swing_count > 0 else 0
             
             # 计算平均利润
             if captured:
-                avg_profit = sum(o.get('max_potential_profit', 0) for o in captured) / len(captured)
+                avg_profit = sum(o.get('objective_profit', 0) for o in captured) / len(captured)
             else:
                 avg_profit = 0
             
