@@ -744,7 +744,8 @@ def optimize_for_signal_type(
             # 统计
             captured_count = len(profit_results)
             capture_rate = captured_count / len(opportunities) if opportunities else 0
-            total_profit = sum(r['profit_pct'] for r in profit_results)
+            # 【V8.5.2.4.69】修复：字段名应为actual_profit_pct（calculate_actual_profit_batch返回的字段名）
+            total_profit = sum(r.get('actual_profit_pct', 0) for r in profit_results)
             avg_profit = total_profit / captured_count if captured_count > 0 else 0
             
             # 【V8.5.2.4.47】只保存当前起点的最佳结果
