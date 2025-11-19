@@ -6610,36 +6610,110 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         swing_real_holding = 6.0
         print(f"\n  ⚠️  Phase 1数据不可用，使用保守估计")
     
-    # 【V8.5.2.4.37】基于Phase 1真实数据定义参数搜索范围
-    # 围绕真实值上下浮动，找到最优参数
+    # 【V8.5.2.4.49】动态参数范围计算（基于Phase 1统计）
+    # 核心理念：参数范围应该能捕获Phase 1识别的利润
+    
+    import numpy as np
+    
+    # 提取Phase 1统计数据
+    scalping_avg_profit = 15.0  # 默认值
+    swing_avg_profit = 16.0
+    scalping_median_atr = 1.5
+    swing_median_atr = 1.5
+    scalping_avg_density = 10.0
+    swing_avg_density = 1.0
+    
+    if phase1_baseline and confirmed_opportunities and use_confirmed_opps:
+        # 从Phase 1 baseline提取平均利润
+        scalping_avg_profit = phase1_baseline.get('scalping', {}).get('avg_objective_profit', 15.0)
+        swing_avg_profit = phase1_baseline.get('swing', {}).get('avg_objective_profit', 16.0)
+        
+        # 从confirmed_opportunities提取ATR中位数
+        scalping_opps = confirmed_opportunities.get('scalping', {}).get('opportunities', [])
+        swing_opps = confirmed_opportunities.get('swing', {}).get('opportunities', [])
+        
+        if scalping_opps:
+            scalping_atrs = [o.get('atr', 0) for o in scalping_opps if o.get('atr', 0) > 0]
+            scalping_densities = [o.get('profit_density', 0) for o in scalping_opps if o.get('profit_density', 0) > 0]
+            if scalping_atrs:
+                scalping_median_atr = np.median(scalping_atrs)
+            if scalping_densities:
+                scalping_avg_density = np.mean(scalping_densities)
+        
+        if swing_opps:
+            swing_atrs = [o.get('atr', 0) for o in swing_opps if o.get('atr', 0) > 0]
+            swing_densities = [o.get('profit_density', 0) for o in swing_opps if o.get('profit_density', 0) > 0]
+            if swing_atrs:
+                swing_median_atr = np.median(swing_atrs)
+            if swing_densities:
+                swing_avg_density = np.mean(swing_densities)
+    
+    # 计算required_tp_multiplier（需要多少倍ATR才能捕获Phase 1的利润）
+    scalping_required_tp = scalping_avg_profit / scalping_median_atr if scalping_median_atr > 0 else 10.0
+    swing_required_tp = swing_avg_profit / swing_median_atr if swing_median_atr > 0 else 12.0
+    
+    print(f"\n  📊 【V8.5.2.4.49】动态参数范围计算:")
+    print(f"     ⚡ 超短线: 平均利润{scalping_avg_profit:.1f}%, ATR{scalping_median_atr:.2f}%, 密度{scalping_avg_density:.1f}")
+    print(f"        → 需要TP倍数: {scalping_required_tp:.1f} (={scalping_avg_profit:.1f}%/{scalping_median_atr:.2f}%)")
+    print(f"     🌊 波段: 平均利润{swing_avg_profit:.1f}%, ATR{swing_median_atr:.2f}%, 密度{swing_avg_density:.1f}")
+    print(f"        → 需要TP倍数: {swing_required_tp:.1f} (={swing_avg_profit:.1f}%/{swing_median_atr:.2f}%)")
+    
+    # 【V8.5.2.4.49】动态定义参数搜索范围
+    # 围绕required_tp搜索（70%, 85%, 100%, 115%）
     scalping_holding_mid = scalping_real_holding
     swing_holding_mid = swing_real_holding
     
     scalping_params_range = {
-        'atr_tp': [1.5, 2.0, 2.5, 3.0],  # 超短线TP范围
-        'atr_sl': [1.0, 1.2, 1.5, 2.0],  # 超短线SL范围
+        'atr_tp': [
+            max(6.0, round(scalping_required_tp * 0.7, 1)),    # 70%
+            max(8.0, round(scalping_required_tp * 0.85, 1)),   # 85%
+            round(scalping_required_tp, 1),                     # 100%
+            min(20.0, round(scalping_required_tp * 1.15, 1))   # 115%
+        ],
+        'atr_sl': [
+            1.5,  # 基于高密度：需要宽容的止损
+            2.0,
+            2.5,
+            3.0
+        ],
         'max_holding': [
             max(2, scalping_holding_mid * 0.5),      # 最小值：50%
-            scalping_holding_mid,                      # 中位值：真实值
-            scalping_holding_mid * 1.5,                # 150%
-            min(24, scalping_holding_mid * 2.0)        # 最大值：200%或24h
+            scalping_holding_mid * 0.8,               # 80%
+            scalping_holding_mid,                      # 100%（真实值）
+            scalping_holding_mid * 1.5                # 150%
         ]
     }
     
     swing_params_range = {
-        'atr_tp': [4.0, 5.0, 6.0, 7.0],  # 波段TP范围
-        'atr_sl': [2.0, 2.5, 3.0, 3.5],  # 波段SL范围
+        'atr_tp': [
+            max(12.0, round(swing_required_tp * 0.8, 1)),    # 80%
+            round(swing_required_tp, 1),                      # 100%
+            round(swing_required_tp * 1.2, 1),                # 120%
+            min(30.0, round(swing_required_tp * 1.5, 1))     # 150%
+        ],
+        'atr_sl': [
+            2.5,  # 基于低密度：需要非常宽容的止损
+            3.0,
+            3.5,
+            4.0
+        ],
         'max_holding': [
-            max(24, swing_holding_mid * 0.5),          # 最小值：50%或24h
-            swing_holding_mid,                          # 中位值：真实值
-            swing_holding_mid * 1.5,                    # 150%
-            min(96, swing_holding_mid * 2.0)            # 最大值：200%或96h
+            max(12, swing_holding_mid * 0.6),          # 最小值：60%
+            swing_holding_mid * 0.8,                    # 80%
+            swing_holding_mid,                          # 100%（真实值）
+            min(72, swing_holding_mid * 1.5)           # 150%或72h
         ]
     }
     
-    print(f"  📐 【参数搜索范围】（基于Phase 1真实数据）")
-    print(f"     ⚡ 超短线持仓: {scalping_params_range['max_holding']}")
-    print(f"     🌊 波段持仓: {swing_params_range['max_holding']}")
+    print(f"  📐 【参数搜索范围】（基于Phase 1统计动态调整）")
+    print(f"     ⚡ 超短线:")
+    print(f"        TP: {scalping_params_range['atr_tp']} (围绕{scalping_required_tp:.1f})")
+    print(f"        SL: {scalping_params_range['atr_sl']} (高密度策略)")
+    print(f"        持仓: {[round(h, 1) for h in scalping_params_range['max_holding']]}h")
+    print(f"     🌊 波段:")
+    print(f"        TP: {swing_params_range['atr_tp']} (围绕{swing_required_tp:.1f})")
+    print(f"        SL: {swing_params_range['atr_sl']} (低密度策略)")
+    print(f"        持仓: {[round(h, 1) for h in swing_params_range['max_holding']]}h")
     
     # 【V8.5.2.4.37】Phase 2核心任务2：优化信号分权重
     # 为超短线和波段分别找到最优权重组合

@@ -621,26 +621,55 @@ def optimize_for_signal_type(
         opportunities = sampled_opportunities
         gc.collect()
     
-    # 参数搜索空间（包括移动止损）
-    # 【V8.5.2.4.47修复】放宽阈值，避免过度筛选导致捕获率极低和负利润
+    # 【V8.5.2.4.49】基于利润密度动态调整参数搜索空间
+    # 核心理念：高密度→快进快出，低密度→长期持有
+    
+    import numpy as np
+    
+    # 提取该类型的平均密度和持仓时间
+    densities = [o.get('profit_density', 0) for o in opportunities if o.get('profit_density', 0) > 0]
+    holding_hours_list = [o.get('holding_hours', 0) for o in opportunities if o.get('holding_hours', 0) > 0]
+    avg_profit = np.mean([o.get('objective_profit', 0) for o in opportunities]) if opportunities else 15.0
+    
+    avg_density = np.mean(densities) if densities else (10.0 if signal_type == 'scalping' else 1.0)
+    avg_holding = np.mean(holding_hours_list) if holding_hours_list else (4.0 if signal_type == 'scalping' else 20.0)
+    
+    print(f"     💡 {signal_type}特征: 密度{avg_density:.1f}, 持仓{avg_holding:.1f}h, 平均利润{avg_profit:.1f}%")
+    
     if signal_type == 'scalping':
+        # 高密度（~11）→ 快进快出策略
+        # TP较小（快速止盈）、SL宽容（避免被震出）、时间较短
         param_grid = {
-            'min_indicator_consensus': [1, 2],          # 降低：减少3（过严）
-            'min_signal_score': [60, 70, 75, 80],       # 降低：从80起降到60起
-            'atr_tp_multiplier': [1.5, 2.0, 2.5, 3.0],
-            'atr_stop_multiplier': [1.0, 1.5, 2.0],
-            'max_holding_hours': [4, 8, 12, 16],
-            'trailing_stop_enabled': [False, True]      # 优先测试不用移动止损
+            'min_indicator_consensus': [1, 2],
+            'min_signal_score': [60, 70, 75, 80],
+            'atr_tp_multiplier': [8, 10, 12, 15],           # 【V8.5.2.4.49】提高TP以捕获Phase 1利润
+            'atr_stop_multiplier': [2.0, 2.5, 3.0],         # 【V8.5.2.4.49】宽容SL适应高密度
+            'max_holding_hours': [                           # 【V8.5.2.4.49】基于实际持仓时间
+                max(3, int(avg_holding * 0.8)),
+                max(4, int(avg_holding)),
+                max(6, int(avg_holding * 1.5)),
+                min(12, int(avg_holding * 2.0))
+            ],
+            'trailing_stop_enabled': [False, True]
         }
+        print(f"     📐 参数网格: TP={param_grid['atr_tp_multiplier']}, SL={param_grid['atr_stop_multiplier']}, 时间={param_grid['max_holding_hours']}")
     else:  # swing
+        # 低密度（~0.9）→ 长期持有策略
+        # TP较大（捕获完整波段）、SL非常宽容（避免被正常回调震出）、时间较长
         param_grid = {
-            'min_indicator_consensus': [1, 2],          # 降低：从2起降到1起，减少3、4
-            'min_signal_score': [70, 75, 80, 85],       # 降低：从85起降到70起
-            'atr_tp_multiplier': [4.0, 5.0, 6.0, 7.0],
-            'atr_stop_multiplier': [2.0, 2.5, 3.0],
-            'max_holding_hours': [48, 72, 96],
-            'trailing_stop_enabled': [False, True]      # 优先测试不用移动止损
+            'min_indicator_consensus': [1, 2],
+            'min_signal_score': [70, 75, 80, 85],
+            'atr_tp_multiplier': [15, 18, 22, 25],          # 【V8.5.2.4.49】大TP捕获完整波段
+            'atr_stop_multiplier': [3.0, 3.5, 4.0],         # 【V8.5.2.4.49】更宽容SL适应低密度
+            'max_holding_hours': [                           # 【V8.5.2.4.49】基于实际持仓时间
+                max(16, int(avg_holding * 0.8)),
+                max(20, int(avg_holding)),
+                max(24, int(avg_holding * 1.2)),
+                min(48, int(avg_holding * 1.5))
+            ],
+            'trailing_stop_enabled': [False, True]
         }
+        print(f"     📐 参数网格: TP={param_grid['atr_tp_multiplier']}, SL={param_grid['atr_stop_multiplier']}, 时间={param_grid['max_holding_hours']}")
     
     # 多起点搜索
     all_results = []
