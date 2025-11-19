@@ -7289,13 +7289,14 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     print(f"\n  🔍 测试{len(test_points)}组战略采样（含signal_score优化）...")
     
     for i, test_params in enumerate(test_points):
-        # 🔧 V8.5.2: 扩展config_variant，包含出场参数
+        # 【V8.5.2.4.54】test_points不再包含TP/SL，使用.get()避免KeyError
+        # TP/SL将由后续逻辑从best_scalping_tp_sl/best_swing_tp_sl获取
         config_variant = {
             'min_risk_reward': test_params['min_risk_reward'],
             'min_indicator_consensus': test_params['min_indicator_consensus'],
-            'atr_stop_multiplier': test_params['atr_stop_multiplier'],
-            'atr_tp_multiplier': test_params.get('atr_tp_multiplier', 4.0),  # 🆕 止盈倍数
-            'max_holding_hours': test_params.get('max_holding_hours', 72),  # 🆕 持仓上限
+            'atr_stop_multiplier': test_params.get('atr_stop_multiplier'),  # None时使用最优SL
+            'atr_tp_multiplier': test_params.get('atr_tp_multiplier'),  # None时使用最优TP
+            'max_holding_hours': test_params.get('max_holding_hours'),  # None时使用默认值
             'min_signal_score': test_params.get('min_signal_score', 50)
         }
         
