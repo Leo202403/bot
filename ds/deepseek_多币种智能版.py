@@ -22365,14 +22365,27 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     signal_type = str(current.get('signal_type', 'swing')).lower()
                     signal_name = str(current.get('signal_name', ''))
                     
+                    # 【V8.5.2.4.47修正】Phase 1信号质量筛选
+                    # 目标：只在"有信号的点位"才考虑是否有机会
+                    # 原因：如果随机点都算机会，会导致：
+                    #   1. 找到的不是"真实交易机会"，而是"利润波动点"
+                    #   2. 持仓时间计算不准（从随机点开始，而非信号点）
+                    #   3. 超短线/波段区分不清（都从随机点开始）
+                    # 
+                    # 修正：增加最低信号质量要求
+                    if signal_score < 70:  # 信号分太低，不是好的入场点
+                        continue
+                    if consensus < 2:      # 共振太少，信号不够强
+                        continue
+                    # ✅ 现在这个点有一定的信号质量，才值得看未来利润
+                    
                     # 获取后续24小时数据
                     later_24h = coin_data.iloc[idx+1:idx+97].copy()
                     if later_24h.empty:
                         continue
                     
-                    # 【V8.5.2.4.8】Phase 1纯客观统计：只记录最大潜在利润
-                    # 目标：统计所有客观机会，不引入任何参数过滤
-                    # 为Phase 2-5提供机会池
+                    # 【V8.5.2.4.47修正】Phase 1：从"有信号的点"统计未来利润
+                    # 现在找到的才是"真实的交易机会"（有信号 + 有利润）
                     
                     max_high = float(later_24h['high'].max())
                     min_low = float(later_24h['low'].min())
