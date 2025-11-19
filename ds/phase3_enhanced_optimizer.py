@@ -206,14 +206,19 @@ def phase3_enhanced_optimization(
         for opp in filtered_opps:
             signal_type = opp.get('signal_type', 'swing')
             
-            # 根据signal_type使用默认值
+            # 【V8.5.2.4.60】从learned_features提取最优TP/SL
+            optimal_tp_sl = learned_features.get('optimal_tp_sl', {})
+            
+            # 根据signal_type使用最优TP/SL（优先）或默认值（降级）
             if signal_type == 'scalping':
-                default_tp = 2.0
-                default_sl = 1.5
+                scalping_optimal = optimal_tp_sl.get('scalping', {})
+                default_tp = scalping_optimal.get('atr_tp_multiplier', 2.0)
+                default_sl = scalping_optimal.get('atr_stop_multiplier', 1.5)
                 default_holding = 12
             else:
-                default_tp = 6.0
-                default_sl = 2.5
+                swing_optimal = optimal_tp_sl.get('swing', {})
+                default_tp = swing_optimal.get('atr_tp_multiplier', 6.0)
+                default_sl = swing_optimal.get('atr_stop_multiplier', 2.5)
                 default_holding = 72
             
             strategy_params = {
@@ -636,14 +641,31 @@ def optimize_for_signal_type(
     
     print(f"     💡 {signal_type}特征: 密度{avg_density:.1f}, 持仓{avg_holding:.1f}h, 平均利润{avg_profit:.1f}%")
     
+    # 【V8.5.2.4.60】从learned_features提取Phase 2测试的最优TP/SL
+    optimal_tp_sl = learned_features.get('optimal_tp_sl', {})
+    
     if signal_type == 'scalping':
         # 高密度（~11）→ 快进快出策略
-        # TP较小（快速止盈）、SL宽容（避免被震出）、时间较短
+        # 【V8.5.2.4.60】围绕Phase 2最优值构建搜索空间
+        scalping_optimal = optimal_tp_sl.get('scalping', {})
+        optimal_tp = scalping_optimal.get('atr_tp_multiplier', 12.0)  # Phase 2找到的最优值
+        optimal_sl = scalping_optimal.get('atr_stop_multiplier', 2.0)
+        
+        # 围绕最优值构建搜索空间（±20%, ±50%）
         param_grid = {
             'min_indicator_consensus': [1, 2],
             'min_signal_score': [60, 70, 75, 80],
-            'atr_tp_multiplier': [8, 10, 12, 15],           # 【V8.5.2.4.49】提高TP以捕获Phase 1利润
-            'atr_stop_multiplier': [2.0, 2.5, 3.0],         # 【V8.5.2.4.49】宽容SL适应高密度
+            'atr_tp_multiplier': [                           # 【V8.5.2.4.60】基于Phase 2最优值
+                round(optimal_tp * 0.8, 1),                  # -20%
+                round(optimal_tp, 1),                        # 最优值
+                round(optimal_tp * 1.2, 1),                  # +20%
+                round(optimal_tp * 1.5, 1)                   # +50%
+            ],
+            'atr_stop_multiplier': [                         # 【V8.5.2.4.60】基于Phase 2最优值
+                round(optimal_sl * 0.8, 1),
+                round(optimal_sl, 1),
+                round(optimal_sl * 1.2, 1)
+            ],
             'max_holding_hours': [                           # 【V8.5.2.4.49】基于实际持仓时间
                 max(3, int(avg_holding * 0.8)),
                 max(4, int(avg_holding)),
@@ -653,14 +675,29 @@ def optimize_for_signal_type(
             'trailing_stop_enabled': [False, True]
         }
         print(f"     📐 参数网格: TP={param_grid['atr_tp_multiplier']}, SL={param_grid['atr_stop_multiplier']}, 时间={param_grid['max_holding_hours']}")
+        print(f"     💡 围绕Phase 2最优值(TP={optimal_tp}, SL={optimal_sl})构建搜索空间")
     else:  # swing
         # 低密度（~0.9）→ 长期持有策略
-        # TP较大（捕获完整波段）、SL非常宽容（避免被正常回调震出）、时间较长
+        # 【V8.5.2.4.60】围绕Phase 2最优值构建搜索空间
+        swing_optimal = optimal_tp_sl.get('swing', {})
+        optimal_tp = swing_optimal.get('atr_tp_multiplier', 18.0)  # Phase 2找到的最优值
+        optimal_sl = swing_optimal.get('atr_stop_multiplier', 2.5)
+        
+        # 围绕最优值构建搜索空间（±20%, ±50%）
         param_grid = {
             'min_indicator_consensus': [1, 2],
             'min_signal_score': [70, 75, 80, 85],
-            'atr_tp_multiplier': [15, 18, 22, 25],          # 【V8.5.2.4.49】大TP捕获完整波段
-            'atr_stop_multiplier': [3.0, 3.5, 4.0],         # 【V8.5.2.4.49】更宽容SL适应低密度
+            'atr_tp_multiplier': [                           # 【V8.5.2.4.60】基于Phase 2最优值
+                round(optimal_tp * 0.8, 1),                  # -20%
+                round(optimal_tp, 1),                        # 最优值
+                round(optimal_tp * 1.2, 1),                  # +20%
+                round(optimal_tp * 1.5, 1)                   # +50%
+            ],
+            'atr_stop_multiplier': [                         # 【V8.5.2.4.60】基于Phase 2最优值
+                round(optimal_sl * 0.8, 1),
+                round(optimal_sl, 1),
+                round(optimal_sl * 1.2, 1)
+            ],
             'max_holding_hours': [                           # 【V8.5.2.4.49】基于实际持仓时间
                 max(16, int(avg_holding * 0.8)),
                 max(20, int(avg_holding)),
@@ -670,6 +707,7 @@ def optimize_for_signal_type(
             'trailing_stop_enabled': [False, True]
         }
         print(f"     📐 参数网格: TP={param_grid['atr_tp_multiplier']}, SL={param_grid['atr_stop_multiplier']}, 时间={param_grid['max_holding_hours']}")
+        print(f"     💡 围绕Phase 2最优值(TP={optimal_tp}, SL={optimal_sl})构建搜索空间")
     
     # 多起点搜索
     all_results = []
