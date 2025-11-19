@@ -6675,6 +6675,12 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     print(f"     ⚡ 超短线权重候选: {len(scalping_weight_candidates)}组")
     print(f"     🌊 波段权重候选: {len(swing_weight_candidates)}组")
     
+    # 【V8.5.2.4.45】初始化test_points_meta（必须在使用前定义）
+    test_points_meta = {
+        'scalping_params': scalping_params_range,
+        'swing_params': swing_params_range,
+    }
+    
     # 【V8.5.2.4.39】Phase 2核心任务3：测试权重候选，找到最优权重
     print(f"\n  🔬 【测试权重候选】寻找最贴近Phase 1的信号分计算方式...")
     
@@ -6839,14 +6845,10 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     
     print(f"     📊 将测试{len(test_points)}组参数组合（覆盖R:R 1.0-3.5, 信号分70-92, 共振1-4）")
     
-    # 【V8.5.2.4.37】存储参数范围和真实数据供后续使用
-    test_points_meta = {
-        'scalping_params': scalping_params_range,
-        'swing_params': swing_params_range,
-        'phase1_real_holding': {
-            'scalping': scalping_real_holding,
-            'swing': swing_real_holding
-        }
+    # 【V8.5.2.4.45】更新test_points_meta，添加更多信息
+    test_points_meta['phase1_real_holding'] = {
+        'scalping': scalping_real_holding,
+        'swing': swing_real_holding
     }
     
     # 🔧 V8.3.31.7: use_confirmed_opps 已在函数开始处定义（避免UnboundLocalError）
@@ -22228,8 +22230,8 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                             profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
                         
                         # === 超短线跟踪 ===
-                        if not scalping_tracking and profit_pct >= 2.0:
-                            # 触发超短线跟踪（【V8.5.2.4.44】阈值从1.5%调整为2%）
+                        if not scalping_tracking and profit_pct >= 3.0:
+                            # 触发超短线跟踪（【V8.5.2.4.45】阈值从2%调整为3%，提高收益要求）
                             scalping_tracking = True
                             scalping_trigger_bar = bar_idx
                             scalping_max_profit = profit_pct
@@ -22260,8 +22262,8 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                                 break
                         
                         # === 波段跟踪 ===
-                        if not swing_tracking and profit_pct >= 5.0:
-                            # 触发波段跟踪（【V8.5.2.4.44】阈值从3.0%调整为5.0%）
+                        if not swing_tracking and profit_pct >= 8.0:
+                            # 触发波段跟踪（【V8.5.2.4.45】阈值从5.0%调整为8.0%，捕捉更强趋势）
                             swing_tracking = True
                             swing_trigger_bar = bar_idx
                             swing_max_profit = profit_pct
