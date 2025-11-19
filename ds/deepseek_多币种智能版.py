@@ -15070,7 +15070,8 @@ def get_ohlcv_data(symbol, skip_timing_check=False):
             indicator_consensus += 1
         
         # 4. 成交量明显放量（>150%）
-        if volume_ratio >= 150:
+        # 【V8.5.2.4.47修复】volume_ratio是倍数(如1.5)，不是百分比
+        if volume_ratio >= 1.5:
             indicator_consensus += 1
         
         # 5. 多周期趋势一致（15m、1h、4h同向）
@@ -19866,17 +19867,35 @@ def _execute_single_open_action_v55(
         # 记录开仓（使用标准字段格式，【V7.9】增加signal_type）
         # 🆕 V8.5.1.8: 从market_data获取indicator_consensus
         # 【V8.5.2.4.3】修复：优先从market_data的indicators字段获取
+        # 【V8.5.2.4.47】增强debug，诊断为什么indicator_consensus是0
         indicator_consensus = 0
         if market_data:
+            # 【V8.5.2.4.47 DEBUG】诊断market_data结构
+            print(f"  🔍 【DEBUG】market_data结构检查:")
+            print(f"     - 是否有indicators: {'indicators' in market_data}")
+            if 'indicators' in market_data:
+                print(f"       indicators类型: {type(market_data['indicators'])}")
+                if isinstance(market_data['indicators'], dict):
+                    print(f"       indicators内容: {market_data['indicators']}")
+            print(f"     - 是否有indicator_consensus: {'indicator_consensus' in market_data}")
+            if 'indicator_consensus' in market_data:
+                print(f"       indicator_consensus值: {market_data['indicator_consensus']}")
+            print(f"     - 是否有consensus: {'consensus' in market_data}")
+            if 'consensus' in market_data:
+                print(f"       consensus值: {market_data['consensus']}")
+            
             # 优先从indicators.consensus获取（实时计算的共振数）
             if 'indicators' in market_data and isinstance(market_data['indicators'], dict):
                 indicator_consensus = market_data['indicators'].get('consensus', 0)
+                print(f"     ✓ 从indicators.consensus获取: {indicator_consensus}")
             # 回退：直接从market_data根级别获取
             elif 'indicator_consensus' in market_data:
                 indicator_consensus = market_data.get('indicator_consensus', 0)
+                print(f"     ✓ 从indicator_consensus获取: {indicator_consensus}")
             # 回退：从共振字段获取
             elif 'consensus' in market_data:
                 indicator_consensus = market_data.get('consensus', 0)
+                print(f"     ✓ 从consensus获取: {indicator_consensus}")
         
         trade_record = {
             "开仓时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
