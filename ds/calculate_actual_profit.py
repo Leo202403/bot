@@ -135,10 +135,12 @@ def calculate_single_actual_profit(
                 # 概率决策
                 if prob_hit_sl_first > 0.5:
                     exit_price = stop_loss
-                    opportunity['exit_method'] = f'stop_loss_prob_{prob_hit_sl_first:.0%}'
+                    exit_method = f'stop_loss_prob_{prob_hit_sl_first:.0%}'  # 🔧 V8.5.2.4.64 修复：设置局部变量
+                    opportunity['exit_method'] = exit_method
                 else:
                     exit_price = take_profit
-                    opportunity['exit_method'] = f'take_profit_prob_{1-prob_hit_sl_first:.0%}'
+                    exit_method = f'take_profit_prob_{1-prob_hit_sl_first:.0%}'  # 🔧 V8.5.2.4.64 修复：设置局部变量
+                    opportunity['exit_method'] = exit_method
             elif hit_stop_loss:
                 exit_price = stop_loss
                 exit_method = 'stop_loss'
@@ -178,10 +180,12 @@ def calculate_single_actual_profit(
                 
                 if prob_hit_sl_first > 0.5:
                     exit_price = stop_loss
-                    opportunity['exit_method'] = f'stop_loss_prob_{prob_hit_sl_first:.0%}'
+                    exit_method = f'stop_loss_prob_{prob_hit_sl_first:.0%}'  # 🔧 V8.5.2.4.64 修复：设置局部变量
+                    opportunity['exit_method'] = exit_method
                 else:
                     exit_price = take_profit
-                    opportunity['exit_method'] = f'take_profit_prob_{1-prob_hit_sl_first:.0%}'
+                    exit_method = f'take_profit_prob_{1-prob_hit_sl_first:.0%}'  # 🔧 V8.5.2.4.64 修复：设置局部变量
+                    opportunity['exit_method'] = exit_method
             elif hit_stop_loss:
                 exit_price = stop_loss
                 exit_method = 'stop_loss'
