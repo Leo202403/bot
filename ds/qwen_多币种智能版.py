@@ -9587,7 +9587,14 @@ def analyze_and_adjust_params():
         else:
             config["market_regime"]["pause_trading"] = False
 
-        # ========== 【V8.5.2.4.11】第4步：Phase 4参数验证与过拟合检测 ==========
+        # ========== 【DEPRECATED - V8.5.2.4.42】旧Phase 4代码已移除 ==========
+        # 新Phase 4系统已在quick_explore_profit_opportunities()中集成
+        # 位置：行7460-7487（qwen_多币种智能版.py）
+        # 新模块：phase4_validator.py
+        # 
+        # 此处代码段（行9779-9949）已废弃，保留注释供参考
+        """
+        【旧版Phase 4代码 - 已废弃】
         print("\n【第4步：Phase 4参数验证与过拟合检测】")
         opportunity_analysis = None
         validation_passed = True  # 默认通过
@@ -9754,6 +9761,13 @@ def analyze_and_adjust_params():
                 print(f"  详细错误: {traceback.format_exc()}")
                 opportunity_analysis = None
                 validation_passed = True  # 失败时默认通过（不影响流程）
+        """
+        # 【END DEPRECATED CODE】
+        
+        # 初始化占位变量（兼容后续代码）
+        opportunity_analysis = None
+        validation_passed = True
+        phase4_result = None
 
         # ========== 【V8.3.25.10】第4.55步：提取AI洞察的参数建议 ==========
         print("\n【第4.55步：提取AI洞察的参数建议】")
@@ -23209,7 +23223,20 @@ def analyze_signal_type_performance(opportunities):
 
 def validate_params_with_overfitting_check(full_data, scalping_params, swing_params, phase2_baseline=None):
     """
-    【V8.5.2.4.11】Phase 4: 参数验证与过拟合检测
+    【DEPRECATED - V8.5.2.4.42】此函数已被phase4_validator.py替代
+    
+    新系统位于: phase4_validator.py
+    新函数: phase4_validation_and_overfitting_detection()
+    
+    新特性:
+    - 使用移动止盈止损计算利润（trailing_stop_calculator.py）
+    - 支持超短线和波段分离验证
+    - 更精确的稳定性评分算法
+    - 5种判定状态（PASSED/WARNING/UNSTABLE/OVERFITTED/FAILED）
+    
+    ---
+    
+    【V8.5.2.4.11】Phase 4: 参数验证与过拟合检测（旧版）
     
     目标：
     - 全量数据测试（14天）
@@ -23232,6 +23259,8 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
             'stability': {...},
             'recommendation': str
         }
+        
+    注意：此函数保留用于兼容性，但推荐使用新的Phase 4系统
     """
     from calculate_actual_profit import calculate_single_actual_profit
     import numpy as np
