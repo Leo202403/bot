@@ -7009,11 +7009,12 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                             continue
                         
                         # 【V8.5.2.4.58】简化逻辑：基于objective_profit判断TP/SL触发
-                        # 假设：价格从entry单调走向最高点（无逐Bar数据，使用简化判断）
+                        # 【V8.5.2.4.59】修复：ATR已经是百分比，不需要再除以100
                         
                         # 计算TP和SL相对entry的百分比
-                        tp_pct = tp * atr / 100
-                        sl_pct = sl * atr / 100
+                        # ATR在CSV中存储的是百分比值（例如1.2表示1.2%）
+                        tp_pct = tp * atr  # 例如：30 * 1.2 = 36%
+                        sl_pct = sl * atr  # 例如：1.5 * 1.2 = 1.8%
                         
                         # 判断交易结果
                         if direction == 'long':
@@ -7096,11 +7097,12 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                             continue
                         
                         # 【V8.5.2.4.58】简化逻辑：基于objective_profit判断TP/SL触发
-                        # 假设：价格从entry单调走向最高点（无逐Bar数据，使用简化判断）
+                        # 【V8.5.2.4.59】修复：ATR已经是百分比，不需要再除以100
                         
                         # 计算TP和SL相对entry的百分比
-                        tp_pct = tp * atr / 100
-                        sl_pct = sl * atr / 100
+                        # ATR在CSV中存储的是百分比值（例如1.2表示1.2%）
+                        tp_pct = tp * atr  # 例如：30 * 1.2 = 36%
+                        sl_pct = sl * atr  # 例如：1.5 * 1.2 = 1.8%
                         
                         # 判断交易结果
                         if direction == 'long':
@@ -7592,7 +7594,9 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         top5_results = []
     
     print(f"\n  ✅ 快速探索完成:")
-    print(f"     最优参数: R:R={best_params['min_risk_reward']}, 共识={best_params['min_indicator_consensus']}, ATR={best_params['atr_stop_multiplier']:.2f}")
+    # V8.5.2.4.59: 修复KeyError，atr_stop_multiplier可能不存在
+    atr_info = f", ATR={best_params['atr_stop_multiplier']:.2f}" if 'atr_stop_multiplier' in best_params else ""
+    print(f"     最优参数: R:R={best_params['min_risk_reward']}, 共识={best_params['min_indicator_consensus']}{atr_info}")
     print(f"     盈利状态: {'✅ 找到盈利' if found_profitable else '⚠️ 未找到盈利（使用最优亏损点）'}")
     
     # 【V8.5.2.4.10】计算Phase 2 baseline（供Phase 3使用）
