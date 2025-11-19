@@ -113,33 +113,22 @@ def calculate_single_actual_profit(
             hit_take_profit = max_high >= take_profit
             
             if hit_stop_loss and hit_take_profit:
-                # 🔧 【V8.5.2.4.17】同时触发：使用概率加权方法判断
-                # 原理：基于随机游走理论，价格触及两个边界的概率与距离成反比
-                distance_to_sl = abs(entry_price - stop_loss)
-                distance_to_tp = abs(take_profit - entry_price)
+                # 🔧 【V8.5.2.4.65】波动幅度判断法
+                # 原理：基于实际波动幅度判断哪个目标更可能先触发
+                # 避免距离比例导致的偏差（TP设30倍ATR，SL设1.5倍ATR时，距离比例会严重偏向SL）
                 
-                # 计算触及概率（距离越近，概率越高）
-                # 使用指数衰减模型（而非线性），更符合实际价格行为
-                prob_hit_sl_first = 1 / (1 + (distance_to_sl / distance_to_tp) ** 2)
+                # 计算实际波动幅度（百分比）
+                upward_amplitude = (max_high - entry_price) / entry_price  # 上涨幅度
+                downward_amplitude = (entry_price - min_low) / entry_price  # 下跌幅度
                 
-                # 【V8.5.2.4.17】额外考虑：趋势方向修正
-                # 如果max_high和min_low的偏离程度不对称，说明有明显趋势
-                upward_move = (max_high - entry_price) / entry_price
-                downward_move = (entry_price - min_low) / entry_price
-                trend_bias = upward_move - downward_move  # >0表示上涨趋势，<0表示下跌趋势
-                
-                # 调整概率：上涨趋势降低止损概率，下跌趋势增加止损概率
-                prob_hit_sl_first *= (1 + trend_bias * 0.5)  # ±50%调整
-                prob_hit_sl_first = max(0.1, min(0.9, prob_hit_sl_first))  # 限制在10-90%
-                
-                # 概率决策
-                if prob_hit_sl_first > 0.5:
-                    exit_price = stop_loss
-                    exit_method = f'stop_loss_prob_{prob_hit_sl_first:.0%}'  # 🔧 V8.5.2.4.64 修复：设置局部变量
+                # Long方向：上涨幅度大 → TP先触发（TP在上方）
+                if upward_amplitude > downward_amplitude:
+                    exit_price = take_profit
+                    exit_method = 'take_profit_amplitude'
                     opportunity['exit_method'] = exit_method
                 else:
-                    exit_price = take_profit
-                    exit_method = f'take_profit_prob_{1-prob_hit_sl_first:.0%}'  # 🔧 V8.5.2.4.64 修复：设置局部变量
+                    exit_price = stop_loss
+                    exit_method = 'stop_loss_amplitude'
                     opportunity['exit_method'] = exit_method
             elif hit_stop_loss:
                 exit_price = stop_loss
@@ -164,27 +153,21 @@ def calculate_single_actual_profit(
             hit_take_profit = min_low <= take_profit
             
             if hit_stop_loss and hit_take_profit:
-                # 【V8.5.2.4.17】同样使用概率加权
-                distance_to_sl = abs(stop_loss - entry_price)
-                distance_to_tp = abs(entry_price - take_profit)
+                # 🔧 【V8.5.2.4.65】波动幅度判断法
+                # 原理：基于实际波动幅度判断哪个目标更可能先触发
                 
-                prob_hit_sl_first = 1 / (1 + (distance_to_sl / distance_to_tp) ** 2)
+                # 计算实际波动幅度（百分比）
+                upward_amplitude = (max_high - entry_price) / entry_price  # 上涨幅度
+                downward_amplitude = (entry_price - min_low) / entry_price  # 下跌幅度
                 
-                # 趋势修正（空头）
-                upward_move = (max_high - entry_price) / entry_price
-                downward_move = (entry_price - min_low) / entry_price
-                trend_bias = downward_move - upward_move  # >0表示下跌趋势（对空头有利），<0表示上涨趋势
-                
-                prob_hit_sl_first *= (1 - trend_bias * 0.5)  # 下跌趋势降低止损概率
-                prob_hit_sl_first = max(0.1, min(0.9, prob_hit_sl_first))
-                
-                if prob_hit_sl_first > 0.5:
-                    exit_price = stop_loss
-                    exit_method = f'stop_loss_prob_{prob_hit_sl_first:.0%}'  # 🔧 V8.5.2.4.64 修复：设置局部变量
+                # Short方向：下跌幅度大 → TP先触发（TP在下方）
+                if downward_amplitude > upward_amplitude:
+                    exit_price = take_profit
+                    exit_method = 'take_profit_amplitude'
                     opportunity['exit_method'] = exit_method
                 else:
-                    exit_price = take_profit
-                    exit_method = f'take_profit_prob_{1-prob_hit_sl_first:.0%}'  # 🔧 V8.5.2.4.64 修复：设置局部变量
+                    exit_price = stop_loss
+                    exit_method = 'stop_loss_amplitude'
                     opportunity['exit_method'] = exit_method
             elif hit_stop_loss:
                 exit_price = stop_loss
