@@ -6938,7 +6938,232 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     else:
         print(f"     ⚠️  跳过重新计算（无最优权重或无机会数据）")
     
-    # 【V8.5.2.4.39】Phase 2核心任务4：扩展参数组合测试，覆盖更广范围
+    # 【V8.5.2.4.50】Phase 2核心任务4：测试TP/SL组合（找到最优TP/SL）
+    # 内存优化：采样 + 减少测试组合数
+    print(f"\n  🎯 【TP/SL组合测试】寻找最优止盈止损参数...")
+    print(f"     💡 目标：测试不同TP/SL组合的实际捕获利润")
+    
+    best_scalping_tp_sl = None
+    best_swing_tp_sl = None
+    
+    if confirmed_opportunities and use_confirmed_opps:
+        import random
+        import gc
+        
+        # 提取超短线和波段机会
+        scalping_opps_full = confirmed_opportunities.get('scalping', {}).get('opportunities', [])
+        swing_opps_full = confirmed_opportunities.get('swing', {}).get('opportunities', [])
+        
+        # 【内存优化】采样500个机会（避免超过1GB）
+        SAMPLE_SIZE = 500
+        scalping_sample = random.sample(scalping_opps_full, min(SAMPLE_SIZE, len(scalping_opps_full))) if scalping_opps_full else []
+        swing_sample = random.sample(swing_opps_full, min(SAMPLE_SIZE, len(swing_opps_full))) if swing_opps_full else []
+        
+        print(f"     📊 采样: 超短线{len(scalping_sample)}/{len(scalping_opps_full)}, 波段{len(swing_sample)}/{len(swing_opps_full)}")
+        
+        # 【内存优化】减少测试组合数：每个维度只取3个值
+        scalping_tp_candidates = [
+            scalping_params_range['atr_tp'][0],  # 最小值
+            scalping_params_range['atr_tp'][2],  # 中位值（100%）
+            scalping_params_range['atr_tp'][3]   # 最大值
+        ]
+        scalping_sl_candidates = [
+            scalping_params_range['atr_sl'][1],  # 2.0
+            scalping_params_range['atr_sl'][2],  # 2.5
+            scalping_params_range['atr_sl'][3]   # 3.0
+        ]
+        
+        swing_tp_candidates = [
+            swing_params_range['atr_tp'][0],  # 最小值
+            swing_params_range['atr_tp'][1],  # 中位值（100%）
+            swing_params_range['atr_tp'][3]   # 最大值
+        ]
+        swing_sl_candidates = [
+            swing_params_range['atr_sl'][0],  # 2.5
+            swing_params_range['atr_sl'][1],  # 3.0
+            swing_params_range['atr_sl'][3]   # 4.0
+        ]
+        
+        print(f"     🔬 超短线测试: TP{scalping_tp_candidates} × SL{scalping_sl_candidates} = {len(scalping_tp_candidates) * len(scalping_sl_candidates)}组")
+        print(f"     🔬 波段测试: TP{swing_tp_candidates} × SL{swing_sl_candidates} = {len(swing_tp_candidates) * len(swing_sl_candidates)}组")
+        
+        # 步骤2：测试超短线TP/SL组合
+        if scalping_sample:
+            print(f"\n     ⚡ 测试超短线TP/SL组合...")
+            scalping_tp_sl_results = []
+            
+            for tp in scalping_tp_candidates:
+                for sl in scalping_sl_candidates:
+                    # 计算这个TP/SL组合的捕获利润
+                    total_profit = 0
+                    captured_count = 0
+                    
+                    for opp in scalping_sample:
+                        # 提取机会信息
+                        entry_price = opp.get('entry_price', 0)
+                        direction = opp.get('direction', 'long')
+                        atr = opp.get('atr', 0)
+                        future_data = opp.get('future_data', {})
+                        
+                        if not entry_price or not atr or not future_data:
+                            continue
+                        
+                        # 计算TP和SL价格
+                        if direction == 'long':
+                            tp_price = entry_price * (1 + tp * atr / 100)
+                            sl_price = entry_price * (1 - sl * atr / 100)
+                            max_high = future_data.get('max_high', 0)
+                            min_low = future_data.get('min_low', 0)
+                            
+                            # 判断是否触发TP或SL
+                            if max_high >= tp_price:
+                                # 触发TP
+                                profit_pct = (tp_price - entry_price) / entry_price * 100
+                                total_profit += profit_pct
+                                captured_count += 1
+                            elif min_low <= sl_price:
+                                # 触发SL
+                                profit_pct = (sl_price - entry_price) / entry_price * 100
+                                total_profit += profit_pct
+                                captured_count += 1
+                        else:  # short
+                            tp_price = entry_price * (1 - tp * atr / 100)
+                            sl_price = entry_price * (1 + sl * atr / 100)
+                            max_high = future_data.get('max_high', 0)
+                            min_low = future_data.get('min_low', 0)
+                            
+                            if min_low <= tp_price:
+                                # 触发TP
+                                profit_pct = (entry_price - tp_price) / entry_price * 100
+                                total_profit += profit_pct
+                                captured_count += 1
+                            elif max_high >= sl_price:
+                                # 触发SL
+                                profit_pct = (entry_price - sl_price) / entry_price * 100
+                                total_profit += profit_pct
+                                captured_count += 1
+                    
+                    # 计算平均利润
+                    avg_profit = total_profit / captured_count if captured_count > 0 else 0
+                    capture_rate = captured_count / len(scalping_sample) * 100 if scalping_sample else 0
+                    
+                    scalping_tp_sl_results.append({
+                        'tp': tp,
+                        'sl': sl,
+                        'captured': captured_count,
+                        'capture_rate': capture_rate,
+                        'avg_profit': avg_profit,
+                        'total_profit': total_profit,
+                        'score': avg_profit * capture_rate / 100  # 综合得分
+                    })
+            
+            # 选择得分最高的组合
+            scalping_tp_sl_results.sort(key=lambda x: x['score'], reverse=True)
+            best_scalping_tp_sl = scalping_tp_sl_results[0] if scalping_tp_sl_results else None
+            
+            # 显示Top 3
+            print(f"        Top 3 超短线TP/SL组合:")
+            for i, result in enumerate(scalping_tp_sl_results[:3], 1):
+                print(f"        #{i} TP={result['tp']:.1f}, SL={result['sl']:.1f} | "
+                      f"捕获{result['captured']}/{len(scalping_sample)}({result['capture_rate']:.1f}%) | "
+                      f"利润{result['avg_profit']:.2f}% | 得分{result['score']:.2f}")
+            
+            if best_scalping_tp_sl:
+                print(f"        ✅ 超短线最优: TP={best_scalping_tp_sl['tp']:.1f}, SL={best_scalping_tp_sl['sl']:.1f}")
+            
+            gc.collect()
+        
+        # 步骤3：测试波段TP/SL组合
+        if swing_sample:
+            print(f"\n     🌊 测试波段TP/SL组合...")
+            swing_tp_sl_results = []
+            
+            for tp in swing_tp_candidates:
+                for sl in swing_sl_candidates:
+                    # 计算这个TP/SL组合的捕获利润
+                    total_profit = 0
+                    captured_count = 0
+                    
+                    for opp in swing_sample:
+                        # 提取机会信息
+                        entry_price = opp.get('entry_price', 0)
+                        direction = opp.get('direction', 'long')
+                        atr = opp.get('atr', 0)
+                        future_data = opp.get('future_data', {})
+                        
+                        if not entry_price or not atr or not future_data:
+                            continue
+                        
+                        # 计算TP和SL价格
+                        if direction == 'long':
+                            tp_price = entry_price * (1 + tp * atr / 100)
+                            sl_price = entry_price * (1 - sl * atr / 100)
+                            max_high = future_data.get('max_high', 0)
+                            min_low = future_data.get('min_low', 0)
+                            
+                            # 判断是否触发TP或SL
+                            if max_high >= tp_price:
+                                # 触发TP
+                                profit_pct = (tp_price - entry_price) / entry_price * 100
+                                total_profit += profit_pct
+                                captured_count += 1
+                            elif min_low <= sl_price:
+                                # 触发SL
+                                profit_pct = (sl_price - entry_price) / entry_price * 100
+                                total_profit += profit_pct
+                                captured_count += 1
+                        else:  # short
+                            tp_price = entry_price * (1 - tp * atr / 100)
+                            sl_price = entry_price * (1 + sl * atr / 100)
+                            max_high = future_data.get('max_high', 0)
+                            min_low = future_data.get('min_low', 0)
+                            
+                            if min_low <= tp_price:
+                                # 触发TP
+                                profit_pct = (entry_price - tp_price) / entry_price * 100
+                                total_profit += profit_pct
+                                captured_count += 1
+                            elif max_high >= sl_price:
+                                # 触发SL
+                                profit_pct = (entry_price - sl_price) / entry_price * 100
+                                total_profit += profit_pct
+                                captured_count += 1
+                    
+                    # 计算平均利润
+                    avg_profit = total_profit / captured_count if captured_count > 0 else 0
+                    capture_rate = captured_count / len(swing_sample) * 100 if swing_sample else 0
+                    
+                    swing_tp_sl_results.append({
+                        'tp': tp,
+                        'sl': sl,
+                        'captured': captured_count,
+                        'capture_rate': capture_rate,
+                        'avg_profit': avg_profit,
+                        'total_profit': total_profit,
+                        'score': avg_profit * capture_rate / 100  # 综合得分
+                    })
+            
+            # 选择得分最高的组合
+            swing_tp_sl_results.sort(key=lambda x: x['score'], reverse=True)
+            best_swing_tp_sl = swing_tp_sl_results[0] if swing_tp_sl_results else None
+            
+            # 显示Top 3
+            print(f"        Top 3 波段TP/SL组合:")
+            for i, result in enumerate(swing_tp_sl_results[:3], 1):
+                print(f"        #{i} TP={result['tp']:.1f}, SL={result['sl']:.1f} | "
+                      f"捕获{result['captured']}/{len(swing_sample)}({result['capture_rate']:.1f}%) | "
+                      f"利润{result['avg_profit']:.2f}% | 得分{result['score']:.2f}")
+            
+            if best_swing_tp_sl:
+                print(f"        ✅ 波段最优: TP={best_swing_tp_sl['tp']:.1f}, SL={best_swing_tp_sl['sl']:.1f}")
+            
+            gc.collect()
+        
+        gc.collect()
+    else:
+        print(f"     ⚠️  跳过TP/SL测试（无机会数据）")
+    
+    # 【V8.5.2.4.39】Phase 2核心任务5：扩展参数组合测试，覆盖更广范围
     print(f"\n  🎯 【参数组合测试】寻找捕获率最高的参数组合...")
     print(f"     💡 注意：此时使用的是优化权重计算的signal_score")
     
@@ -6993,6 +7218,24 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         'scalping': scalping_real_holding,
         'swing': swing_real_holding
     }
+    
+    # 【V8.5.2.4.50】保存最优TP/SL到meta
+    if best_scalping_tp_sl or best_swing_tp_sl:
+        test_points_meta['optimal_tp_sl'] = {}
+        if best_scalping_tp_sl:
+            test_points_meta['optimal_tp_sl']['scalping'] = {
+                'atr_tp_multiplier': best_scalping_tp_sl['tp'],
+                'atr_stop_multiplier': best_scalping_tp_sl['sl'],
+                'avg_profit': best_scalping_tp_sl['avg_profit'],
+                'capture_rate': best_scalping_tp_sl['capture_rate']
+            }
+        if best_swing_tp_sl:
+            test_points_meta['optimal_tp_sl']['swing'] = {
+                'atr_tp_multiplier': best_swing_tp_sl['tp'],
+                'atr_stop_multiplier': best_swing_tp_sl['sl'],
+                'avg_profit': best_swing_tp_sl['avg_profit'],
+                'capture_rate': best_swing_tp_sl['capture_rate']
+            }
     
     # 🔧 V8.3.31.7: use_confirmed_opps 已在函数开始处定义（避免UnboundLocalError）
     
