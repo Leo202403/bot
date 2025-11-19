@@ -7009,44 +7009,59 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                         direction = opp.get('direction', 'long')
                         atr = opp.get('atr', 0)
                         future_data = opp.get('future_data', {})
+                        objective_profit = opp.get('objective_profit', 0)  # Phase 1的最大利润
                         
                         if not entry_price or not atr or not future_data:
                             continue
                         
-                        # 计算TP和SL价格
+                        # 【V8.5.2.4.56】修改测试逻辑：计算实际能捕获的利润
+                        # 而不是只计算TP目标利润
                         if direction == 'long':
                             tp_price = entry_price * (1 + tp * atr / 100)
                             sl_price = entry_price * (1 - sl * atr / 100)
                             max_high = future_data.get('max_high', 0)
                             min_low = future_data.get('min_low', 0)
                             
-                            # 判断是否触发TP或SL
-                            if max_high >= tp_price:
-                                # 触发TP
-                                profit_pct = (tp_price - entry_price) / entry_price * 100
-                                total_profit += profit_pct
-                                captured_count += 1
-                            elif min_low <= sl_price:
-                                # 触发SL
+                            # 计算实际最高点利润
+                            actual_max_profit = (max_high - entry_price) / entry_price * 100
+                            
+                            # 判断交易结果
+                            if min_low <= sl_price:
+                                # 先触发SL
                                 profit_pct = (sl_price - entry_price) / entry_price * 100
-                                total_profit += profit_pct
-                                captured_count += 1
+                            elif max_high >= tp_price:
+                                # 触发TP，但实际利润可能更高
+                                tp_profit = (tp_price - entry_price) / entry_price * 100
+                                profit_pct = min(actual_max_profit, tp_profit)  # 取TP和实际最高点的较小值
+                            else:
+                                # 都没触发，使用实际最高点利润（Phase 1的objective_profit）
+                                profit_pct = objective_profit
+                            
+                            total_profit += profit_pct
+                            captured_count += 1
+                            
                         else:  # short
                             tp_price = entry_price * (1 - tp * atr / 100)
                             sl_price = entry_price * (1 + sl * atr / 100)
                             max_high = future_data.get('max_high', 0)
                             min_low = future_data.get('min_low', 0)
                             
-                            if min_low <= tp_price:
-                                # 触发TP
-                                profit_pct = (entry_price - tp_price) / entry_price * 100
-                                total_profit += profit_pct
-                                captured_count += 1
-                            elif max_high >= sl_price:
-                                # 触发SL
+                            # 计算实际最高点利润
+                            actual_max_profit = (entry_price - min_low) / entry_price * 100
+                            
+                            if max_high >= sl_price:
+                                # 先触发SL
                                 profit_pct = (entry_price - sl_price) / entry_price * 100
-                                total_profit += profit_pct
-                                captured_count += 1
+                            elif min_low <= tp_price:
+                                # 触发TP
+                                tp_profit = (entry_price - tp_price) / entry_price * 100
+                                profit_pct = min(actual_max_profit, tp_profit)
+                            else:
+                                # 都没触发，使用Phase 1的objective_profit
+                                profit_pct = objective_profit
+                            
+                            total_profit += profit_pct
+                            captured_count += 1
                     
                     # 计算平均利润
                     avg_profit = total_profit / captured_count if captured_count > 0 else 0
@@ -7095,44 +7110,58 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                         direction = opp.get('direction', 'long')
                         atr = opp.get('atr', 0)
                         future_data = opp.get('future_data', {})
+                        objective_profit = opp.get('objective_profit', 0)  # Phase 1的最大利润
                         
                         if not entry_price or not atr or not future_data:
                             continue
                         
-                        # 计算TP和SL价格
+                        # 【V8.5.2.4.56】修改测试逻辑：计算实际能捕获的利润
                         if direction == 'long':
                             tp_price = entry_price * (1 + tp * atr / 100)
                             sl_price = entry_price * (1 - sl * atr / 100)
                             max_high = future_data.get('max_high', 0)
                             min_low = future_data.get('min_low', 0)
                             
-                            # 判断是否触发TP或SL
-                            if max_high >= tp_price:
-                                # 触发TP
-                                profit_pct = (tp_price - entry_price) / entry_price * 100
-                                total_profit += profit_pct
-                                captured_count += 1
-                            elif min_low <= sl_price:
-                                # 触发SL
+                            # 计算实际最高点利润
+                            actual_max_profit = (max_high - entry_price) / entry_price * 100
+                            
+                            # 判断交易结果
+                            if min_low <= sl_price:
+                                # 先触发SL
                                 profit_pct = (sl_price - entry_price) / entry_price * 100
-                                total_profit += profit_pct
-                                captured_count += 1
+                            elif max_high >= tp_price:
+                                # 触发TP
+                                tp_profit = (tp_price - entry_price) / entry_price * 100
+                                profit_pct = min(actual_max_profit, tp_profit)
+                            else:
+                                # 都没触发，使用Phase 1的objective_profit
+                                profit_pct = objective_profit
+                            
+                            total_profit += profit_pct
+                            captured_count += 1
+                            
                         else:  # short
                             tp_price = entry_price * (1 - tp * atr / 100)
                             sl_price = entry_price * (1 + sl * atr / 100)
                             max_high = future_data.get('max_high', 0)
                             min_low = future_data.get('min_low', 0)
                             
-                            if min_low <= tp_price:
-                                # 触发TP
-                                profit_pct = (entry_price - tp_price) / entry_price * 100
-                                total_profit += profit_pct
-                                captured_count += 1
-                            elif max_high >= sl_price:
-                                # 触发SL
+                            # 计算实际最高点利润
+                            actual_max_profit = (entry_price - min_low) / entry_price * 100
+                            
+                            if max_high >= sl_price:
+                                # 先触发SL
                                 profit_pct = (entry_price - sl_price) / entry_price * 100
-                                total_profit += profit_pct
-                                captured_count += 1
+                            elif min_low <= tp_price:
+                                # 触发TP
+                                tp_profit = (entry_price - tp_price) / entry_price * 100
+                                profit_pct = min(actual_max_profit, tp_profit)
+                            else:
+                                # 都没触发，使用Phase 1的objective_profit
+                                profit_pct = objective_profit
+                            
+                            total_profit += profit_pct
+                            captured_count += 1
                     
                     # 计算平均利润
                     avg_profit = total_profit / captured_count if captured_count > 0 else 0
