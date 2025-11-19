@@ -655,7 +655,8 @@ def optimize_for_signal_type(
         optimal_sl = scalping_optimal.get('atr_stop_multiplier', 2.0)
         
         # 【V8.5.2.4.74】8维度筛选可选化
-        enable_advanced_filters = config.get('enable_advanced_filters', False)
+        # 从learned_features或全局配置中获取（默认关闭）
+        enable_advanced_filters = learned_features.get('enable_advanced_filters', False)
         
         # 【V8.5.2.4.73】Phase 3全维度智能筛选 + 微调TP/SL
         # 目标：在Phase 2基础上提高利润（当前6.46% → 目标10-15%）
@@ -705,7 +706,8 @@ def optimize_for_signal_type(
         optimal_sl = swing_optimal.get('atr_stop_multiplier', 2.5)
         
         # 【V8.5.2.4.74】8维度筛选可选化
-        enable_advanced_filters = config.get('enable_advanced_filters', False)
+        # 从learned_features或全局配置中获取（默认关闭）
+        enable_advanced_filters = learned_features.get('enable_advanced_filters', False)
         
         # 【V8.5.2.4.73】Phase 3全维度智能筛选 + 微调TP/SL
         # 目标：在Phase 2基础上提高利润（当前6.49% → 目标10-15%）
