@@ -10973,7 +10973,7 @@ def analyze_and_adjust_params():
                                 datetime_str = 'N/A'
                             
                             signal_score = opp.get('signal_score', 0)
-                            actual_profit = opp.get('actual_profit_pct', 0)  # 客观利润
+                            actual_profit = opp.get('objective_profit', 0)  # 【V8.5.2.4.52】修复：使用正确的字段名
                             
                             # 🔧 V7.9.2: 获取捕获利润和效率
                             old_can_entry = opp.get('old_can_entry', False)
@@ -11076,7 +11076,7 @@ def analyze_and_adjust_params():
                                 datetime_str = 'N/A'
                             
                             signal_score = opp.get('signal_score', 0)
-                            actual_profit = opp.get('actual_profit_pct', 0)
+                            actual_profit = opp.get('objective_profit', 0)  # 【V8.5.2.4.52】修复：使用正确的字段名
                             
                             # 🔧 V7.9.2: 获取捕获利润和效率
                             old_can_entry = opp.get('old_can_entry', False)
