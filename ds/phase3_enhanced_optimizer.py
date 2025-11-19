@@ -137,7 +137,7 @@ def phase3_enhanced_optimization(
     all_search_results = []
     
     for i, starting_point in enumerate(candidate_starting_points, 1):
-        print(f"\n     [{i}/{len(candidate_starting_points)}] 从"{starting_point['name']}"出发...")
+        print(f"\n     [{i}/{len(candidate_starting_points)}] 从'{starting_point['name']}'出发...")
         
         try:
             # 为这个起点做局部搜索（50组测试）

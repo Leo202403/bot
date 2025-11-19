@@ -9913,10 +9913,10 @@ def analyze_and_adjust_params():
                     
                 # 应用超短线优化结果
                 if scalping_optimization:
-                            if 'scalping_params' not in config:
-                                config['scalping_params'] = {}
-                            config['scalping_params'].update(scalping_optimization['optimized_params'])
-                            
+                    if 'scalping_params' not in config:
+                        config['scalping_params'] = {}
+                    config['scalping_params'].update(scalping_optimization['optimized_params'])
+                    
                     # 更新profit_comparison数据
                     profit_comparison['scalping'] = {
                         'name': scalping_optimization.get('name', ''),
@@ -9939,10 +9939,10 @@ def analyze_and_adjust_params():
                 
                 # 应用波段优化结果
                 if swing_optimization:
-                            if 'swing_params' not in config:
-                                config['swing_params'] = {}
-                            config['swing_params'].update(swing_optimization['optimized_params'])
-                            
+                    if 'swing_params' not in config:
+                        config['swing_params'] = {}
+                    config['swing_params'].update(swing_optimization['optimized_params'])
+                    
                     # 更新profit_comparison数据
                     profit_comparison['swing'] = {
                         'name': swing_optimization.get('name', ''),
@@ -22084,9 +22084,9 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         _, row_data = future_row
                         
                         # 计算该方向的利润进展
-                    if direction == 'long':
+                        if direction == 'long':
                             profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
-                    else:
+                        else:
                             profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
                         
                         # === 超短线跟踪 ===
