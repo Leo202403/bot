@@ -328,46 +328,105 @@ def request_ai_analysis(
     """
     【V8.5.2.4.41】请求AI分析数据并推荐最优参数
     
+    统一AI调用接口，支持deepseek和qwen
+    使用英文与AI沟通以获得更好的推理能力
+    
     Args:
         all_opportunities: 所有机会
         phase1_baseline: Phase 1基线
         phase2_baseline: Phase 2基线
         search_results: 多起点搜索结果
         matrix_results: 矩阵筛选结果
-        model_name: 模型名称
+        model_name: 模型名称 ("deepseek" 或 "qwen")
     
     Returns:
         ai_recommendation: AI推荐结果
     """
     try:
-        # 构建AI提示词
+        # 构建AI提示词（英文）
         prompt = build_ai_analysis_prompt(
             all_opportunities, phase1_baseline, phase2_baseline,
             search_results, matrix_results
         )
         
-        # 调用AI（使用系统中的AI调用函数）
-        sys.path.insert(0, str(Path(__file__).parent))
-        
-        if model_name == "deepseek":
-            from deepseek_多币种智能版 import call_deepseek_api
-            ai_response = call_deepseek_api(prompt, force_call=True)
-        else:
-            from qwen_多币种智能版 import call_qwen_api
-            ai_response = call_qwen_api(prompt, force_call=True)
+        # 统一AI调用逻辑
+        ai_response = call_ai_unified(prompt, model_name)
         
         # 解析AI响应
         recommendation = parse_ai_recommendation(ai_response)
         
-        print(f"     ✓ AI分析完成")
-        print(f"     推荐策略: {recommendation.get('strategy', 'N/A')}")
-        print(f"     理由: {recommendation.get('reason', 'N/A')[:80]}...")
+        print(f"     ✓ AI Analysis Completed")
+        print(f"     Recommended Strategy: {recommendation.get('strategy', 'N/A')}")
+        print(f"     Reason: {recommendation.get('reason', 'N/A')[:80]}...")
         
         return recommendation
         
     except Exception as e:
-        print(f"     ⚠️  AI调用失败: {e}")
+        print(f"     ⚠️  AI Call Failed: {e}")
         return {}
+
+
+def call_ai_unified(prompt: str, model_name: str) -> str:
+    """
+    【V8.5.2.4.41】统一AI调用接口
+    
+    支持deepseek和qwen，使用相同的API调用逻辑
+    
+    Args:
+        prompt: 英文提示词
+        model_name: 模型名称
+    
+    Returns:
+        ai_response: AI响应文本
+    """
+    import os
+    import requests
+    import json
+    
+    # 根据模型选择API配置
+    if model_name == "deepseek":
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        api_url = "https://api.deepseek.com/v1/chat/completions"
+        model_id = "deepseek-chat"
+    else:  # qwen
+        api_key = os.getenv("DASHSCOPE_API_KEY")
+        api_url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+        model_id = "qwen-plus"
+    
+    if not api_key:
+        raise ValueError(f"API key not found for {model_name}")
+    
+    # 构建请求
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    
+    payload = {
+        "model": model_id,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are an expert trading system optimizer. Analyze data and provide recommendations in JSON format. Always respond in English."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "temperature": 0.7,
+        "max_tokens": 2000
+    }
+    
+    # 发送请求
+    response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+    response.raise_for_status()
+    
+    # 解析响应
+    result = response.json()
+    ai_response = result["choices"][0]["message"]["content"]
+    
+    return ai_response
 
 
 def build_ai_analysis_prompt(
@@ -377,20 +436,24 @@ def build_ai_analysis_prompt(
     search_results: List[Dict],
     matrix_results: List[Dict]
 ) -> str:
-    """构建AI分析提示词"""
+    """
+    Build AI analysis prompt in English
     
-    # 统计数据
+    English prompts provide better reasoning capabilities for AI models
+    """
+    
+    # Statistics
     total_opps = len(all_opportunities)
     scalping_count = sum(1 for o in all_opportunities if o.get('signal_type') == 'scalping')
     swing_count = total_opps - scalping_count
     
-    # consensus分布
+    # Consensus distribution
     consensus_dist = {}
     for opp in all_opportunities:
         c = opp.get('indicator_consensus', 0)
         consensus_dist[c] = consensus_dist.get(c, 0) + 1
     
-    # signal_score分布
+    # Signal score distribution
     signal_score_ranges = {'0-70': 0, '70-80': 0, '80-90': 0, '90-100': 0}
     for opp in all_opportunities:
         score = opp.get('signal_score', 0)
@@ -403,65 +466,65 @@ def build_ai_analysis_prompt(
         else:
             signal_score_ranges['90-100'] += 1
     
-    prompt = f"""作为交易系统优化专家，请分析以下数据并推荐最优参数配置。
+    prompt = f"""As a trading system optimization expert, please analyze the following data and recommend optimal parameter configuration.
 
-【Phase 1客观统计】
-- 总机会数: {total_opps}个
-- 超短线: {scalping_count}个, 波段: {swing_count}个
-- 平均最大利润: {phase1_baseline.get('avg_max_profit', 0):.2f}%
+【Phase 1 Objective Statistics】
+- Total Opportunities: {total_opps}
+- Scalping: {scalping_count}, Swing: {swing_count}
+- Average Max Profit: {phase1_baseline.get('avg_max_profit', 0):.2f}%
 
-【Phase 2学习成果】
-- 最优超短线权重: {phase2_baseline.get('learned_features', {}).get('best_scalping_weights', {}).get('name', 'N/A')}
-- 最优波段权重: {phase2_baseline.get('learned_features', {}).get('best_swing_weights', {}).get('name', 'N/A')}
-- Phase 2捕获率: {phase2_baseline.get('capture_rate', 0)*100:.1f}%
-- Phase 2平均利润: {phase2_baseline.get('avg_profit', 0):.2f}%
+【Phase 2 Learning Results】
+- Best Scalping Weights: {phase2_baseline.get('learned_features', {}).get('best_scalping_weights', {}).get('name', 'N/A')}
+- Best Swing Weights: {phase2_baseline.get('learned_features', {}).get('best_swing_weights', {}).get('name', 'N/A')}
+- Phase 2 Capture Rate: {phase2_baseline.get('capture_rate', 0)*100:.1f}%
+- Phase 2 Avg Profit: {phase2_baseline.get('avg_profit', 0):.2f}%
 
-【数据分布】
-consensus分布: {consensus_dist}
-signal_score分布: {signal_score_ranges}
+【Data Distribution】
+Consensus Distribution: {consensus_dist}
+Signal Score Distribution: {signal_score_ranges}
 
-【多起点搜索结果】（Top 3）
+【Multi-Start Search Results】(Top 3)
 """
     
     for i, result in enumerate(search_results[:3], 1):
         prompt += f"""
-{i}. 起点: {result.get('starting_point', 'N/A')}
-   总利润: {result.get('total_profit', 0):.1f}%
-   捕获率: {result.get('capture_rate', 0)*100:.1f}%
-   参数: consensus>={result.get('params', {}).get('min_indicator_consensus', 'N/A')}, 
-         signal_score>={result.get('params', {}).get('min_signal_score', 'N/A')}
+{i}. Starting Point: {result.get('starting_point', 'N/A')}
+   Total Profit: {result.get('total_profit', 0):.1f}%
+   Capture Rate: {result.get('capture_rate', 0)*100:.1f}%
+   Params: consensus>={result.get('params', {}).get('min_indicator_consensus', 'N/A')}, 
+           signal_score>={result.get('params', {}).get('min_signal_score', 'N/A')}
 """
     
     prompt += f"""
-【矩阵筛选结果】（Top 3）
+【Filter Matrix Results】(Top 3)
 """
     
     for i, result in enumerate(matrix_results[:3], 1):
         prompt += f"""
 {i}. {result.get('name', 'N/A')}
    consensus>={result['min_consensus']}, signal_score>={result['min_signal_score']}
-   捕获率: {result['capture_rate']*100:.1f}%
-   平均利润: {result['avg_profit']:.2f}%
-   总利润: {result['total_profit']:.1f}%
-   综合得分: {result['score']:.1f}
+   Capture Rate: {result['capture_rate']*100:.1f}%
+   Avg Profit: {result['avg_profit']:.2f}%
+   Total Profit: {result['total_profit']:.1f}%
+   Composite Score: {result['score']:.1f}
 """
     
     prompt += """
-【请回答】
-1. 综合评估：哪个配置最优？为什么？
-2. 参数推荐：推荐的min_consensus和min_signal_score各是多少？
-3. 风险提示：这个配置有什么潜在风险？
+【Questions】
+1. Comprehensive Evaluation: Which configuration is optimal and why?
+2. Parameter Recommendation: What are the recommended min_consensus and min_signal_score?
+3. Risk Warning: What are the potential risks of this configuration?
 
-请以JSON格式回复：
+Please respond in JSON format (English):
 {
     "recommended_params": {
-        "min_indicator_consensus": <数字>,
-        "min_signal_score": <数字>,
-        "min_risk_reward": <数字>
+        "min_indicator_consensus": <number>,
+        "min_signal_score": <number>,
+        "min_risk_reward": <number>
     },
-    "strategy": "<简短描述>",
-    "reason": "<详细理由>",
-    "risks": "<潜在风险>"
+    "strategy": "<brief description>",
+    "reason": "<detailed reasoning>",
+    "risks": "<potential risks>"
 }
 """
     

@@ -7478,7 +7478,18 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
 
 def iterative_parameter_optimization_v770(data_summary, current_config, original_stats):
     """
-    V7.7.0: 多阶段盈利优先优化
+    【DEPRECATED - V8.5.2.4.41】此函数已被新的Phase 3系统替代
+    
+    新系统位于: phase3_enhanced_optimizer.py
+    新特性:
+    - 叠加Phase 2学习成果（优化权重）
+    - 多起点搜索（5起点 × 50组 = 250组）
+    - 组合筛选矩阵（9种consensus × signal_score组合）
+    - AI辅助决策（英文沟通，更好的推理能力）
+    
+    ---
+    
+    V7.7.0: 多阶段盈利优先优化（旧版）
     
     革命性改进：
     - 阶段1：盈利探索（最多8轮，确保找到盈利）
@@ -7488,6 +7499,8 @@ def iterative_parameter_optimization_v770(data_summary, current_config, original
     
     总回测：22-45组（视情况而定）
     预计耗时：2-5分钟
+    
+    注意：此函数保留用于兼容性，但推荐使用新的Phase 3系统
     """
     print(f"\n{'='*70}")
     print(f"【V7.7.0 多阶段盈利优先优化】")
