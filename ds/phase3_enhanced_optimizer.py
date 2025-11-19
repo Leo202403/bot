@@ -654,38 +654,56 @@ def optimize_for_signal_type(
         optimal_tp = scalping_optimal.get('atr_tp_multiplier', 12.0)  # Phase 2找到的最优值
         optimal_sl = scalping_optimal.get('atr_stop_multiplier', 2.0)
         
-        # 【V8.5.2.4.68】Phase 3新策略：固定TP/SL，测试signal_score和consensus矩阵
-        # 目标：在Phase 2基础上去掉杂音，提高平均利润（7% → 10-14%）
+        # 【V8.5.2.4.72】Phase 3新策略：多维度智能筛选 + 微调TP/SL
+        # 目标：在Phase 2基础上提高利润（当前6.46% → 目标8-12%）
+        # 策略：增加筛选维度 + 微调TP寻找最优组合
         param_grid = {
-            'min_indicator_consensus': [1, 2, 3],             # 扩展测试范围
-            'min_signal_score': [70, 75, 80, 85, 90],        # 扩展测试范围
-            'atr_tp_multiplier': [optimal_tp],                # ✅ 固定为Phase 2最优值
-            'atr_stop_multiplier': [optimal_sl],              # ✅ 固定为Phase 2最优值
-            'max_holding_hours': [int(avg_holding)],          # ✅ 固定为实际持仓时间
-            'min_risk_reward': [1.0, 2.0, 2.5],              # 可选的R:R筛选
-            'trailing_stop_enabled': [False]                  # 简化，先不测试移动止损
+            # 核心筛选条件（逐步提高）
+            'min_indicator_consensus': [1, 2, 3],             # 共振度：越高越可靠
+            'min_signal_score': [75, 80, 85, 90],            # 【V8.5.2.4.72】提高最低门槛70→75
+            
+            # 质量控制条件
+            'min_risk_reward': [1.5, 2.0, 2.5],              # 【V8.5.2.4.72】提高R:R要求1.0→1.5
+            'min_profit_density': [8.0, 10.0, 12.0],         # 【V8.5.2.4.72】新增：利润密度筛选（超短线特征）
+            
+            # TP/SL优化
+            'atr_tp_multiplier': [optimal_tp * 0.9, optimal_tp, optimal_tp * 1.1],  # TP微调
+            'atr_stop_multiplier': [optimal_sl],              # SL保持不变
+            'max_holding_hours': [int(avg_holding)],          # 固定为实际持仓时间
+            'trailing_stop_enabled': [False]                  # 简化
         }
-        print(f"     📐 参数网格: signal_score={param_grid['min_signal_score']}, consensus={param_grid['min_indicator_consensus']}")
-        print(f"     💡 固定Phase 2最优TP/SL(TP={optimal_tp:.1f}, SL={optimal_sl:.1f})，优化筛选条件")
-        print(f"     🎯 目标：去掉杂音，提高平均利润（预期7% → 10-14%）")
+        print(f"     📐 参数网格: score={param_grid['min_signal_score']}, consensus={param_grid['min_indicator_consensus']}")
+        print(f"     💡 【V8.5.2.4.72】多维度筛选: R:R≥{param_grid['min_risk_reward']}, 密度≥{param_grid['min_profit_density']}")
+        print(f"     🎯 TP微调（±10%）: 范围[{optimal_tp*0.9:.1f}, {optimal_tp:.1f}, {optimal_tp*1.1:.1f}], SL={optimal_sl:.1f}")
+        print(f"     🚀 目标：提高平均利润（当前6.46% → 目标8-12%），过滤低质量信号")
     else:  # swing
         # 【V8.5.2.4.68】固定Phase 2最优TP/SL，重点测试筛选条件
         swing_optimal = optimal_tp_sl.get('swing', {})
         optimal_tp = swing_optimal.get('atr_tp_multiplier', 18.0)  # Phase 2找到的最优值
         optimal_sl = swing_optimal.get('atr_stop_multiplier', 2.5)
         
-        # 【V8.5.2.4.68】Phase 3新策略：固定TP/SL，测试signal_score和consensus矩阵
+        # 【V8.5.2.4.72】Phase 3新策略：多维度智能筛选 + 微调TP/SL
+        # 目标：在Phase 2基础上提高利润（当前6.49% → 目标8-12%）
+        # 策略：增加筛选维度 + 微调TP寻找最优组合
         param_grid = {
-            'min_indicator_consensus': [1, 2, 3],             # 扩展测试范围
-            'min_signal_score': [75, 80, 85, 90, 95],        # 扩展测试范围
-            'atr_tp_multiplier': [optimal_tp],                # ✅ 固定为Phase 2最优值
-            'atr_stop_multiplier': [optimal_sl],              # ✅ 固定为Phase 2最优值
-            'max_holding_hours': [int(avg_holding)],          # ✅ 固定为实际持仓时间
-            'min_risk_reward': [1.0, 2.0, 2.5],              # 可选的R:R筛选
-            'trailing_stop_enabled': [False]                  # 简化，先不测试移动止损
+            # 核心筛选条件（逐步提高）
+            'min_indicator_consensus': [1, 2, 3],             # 共振度：越高越可靠
+            'min_signal_score': [80, 85, 90, 95],            # 【V8.5.2.4.72】提高最低门槛75→80（波段要求更高）
+            
+            # 质量控制条件
+            'min_risk_reward': [1.5, 2.0, 2.5],              # 【V8.5.2.4.72】提高R:R要求1.0→1.5
+            'min_profit_density': [0.5, 0.8, 1.0],           # 【V8.5.2.4.72】新增：利润密度筛选（波段特征）
+            
+            # TP/SL优化
+            'atr_tp_multiplier': [optimal_tp * 0.9, optimal_tp, optimal_tp * 1.1],  # TP微调
+            'atr_stop_multiplier': [optimal_sl],              # SL保持不变
+            'max_holding_hours': [int(avg_holding)],          # 固定为实际持仓时间
+            'trailing_stop_enabled': [False]                  # 简化
         }
-        print(f"     📐 参数网格: signal_score={param_grid['min_signal_score']}, consensus={param_grid['min_indicator_consensus']}")
-        print(f"     💡 固定Phase 2最优TP/SL(TP={optimal_tp:.1f}, SL={optimal_sl:.1f})，优化筛选条件")
+        print(f"     📐 参数网格: score={param_grid['min_signal_score']}, consensus={param_grid['min_indicator_consensus']}")
+        print(f"     💡 【V8.5.2.4.72】多维度筛选: R:R≥{param_grid['min_risk_reward']}, 密度≥{param_grid['min_profit_density']}")
+        print(f"     🎯 TP微调（±10%）: 范围[{optimal_tp*0.9:.1f}, {optimal_tp:.1f}, {optimal_tp*1.1:.1f}], SL={optimal_sl:.1f}")
+        print(f"     🚀 目标：提高平均利润（当前6.49% → 目标8-12%），过滤低质量信号")
         print(f"     🎯 目标：去掉杂音，提高平均利润（预期7% → 10-14%）")
     
     # 多起点搜索
@@ -698,34 +716,38 @@ def optimize_for_signal_type(
         # 由于TP/SL已固定，重点测试筛选条件组合
         test_combinations = []
         
-        # 测试所有signal_score和consensus组合
+        # 【V8.5.2.4.72】测试所有筛选条件组合
         for consensus in param_grid['min_indicator_consensus']:
             for signal_score in param_grid['min_signal_score']:
                 for risk_reward in param_grid['min_risk_reward']:
-                    test_params = {
-                        'min_indicator_consensus': consensus,
-                        'min_signal_score': signal_score,
-                        'min_risk_reward': risk_reward,
-                        'atr_tp_multiplier': param_grid['atr_tp_multiplier'][0],    # 固定值
-                        'atr_stop_multiplier': param_grid['atr_stop_multiplier'][0],  # 固定值
-                        'max_holding_hours': param_grid['max_holding_hours'][0],      # 固定值
-                        'trailing_stop_enabled': False  # 固定值
-                    }
-                    test_combinations.append(test_params)
+                    for profit_density in param_grid['min_profit_density']:
+                        for tp_multiplier in param_grid['atr_tp_multiplier']:
+                            test_params = {
+                                'min_indicator_consensus': consensus,
+                                'min_signal_score': signal_score,
+                                'min_risk_reward': risk_reward,
+                                'min_profit_density': profit_density,        # 【V8.5.2.4.72】新增
+                                'atr_tp_multiplier': tp_multiplier,          # 【V8.5.2.4.72】改为遍历
+                                'atr_stop_multiplier': param_grid['atr_stop_multiplier'][0],
+                                'max_holding_hours': param_grid['max_holding_hours'][0],
+                                'trailing_stop_enabled': False
+                            }
+                            test_combinations.append(test_params)
         
-        # 【V8.5.2.4.68】测试组合数量：5×3×3=45组（超短线），5×3×3=45组（波段）
-        # 不再限制数量，因为只测试筛选条件，速度快
-        print(f"     📊 测试组合数: {len(test_combinations)}组 (signal_score × consensus × R:R)")
+        # 【V8.5.2.4.72】测试组合数量：4×3×3×3×3=324组（score×consensus×R:R×密度×TP）
+        # 增加利润密度和TP维度，实现多维度智能筛选
+        print(f"     📊 测试组合数: {len(test_combinations)}组 (score × consensus × R:R × 密度 × TP)")
         
         # 测试每个组合
         best_for_this_start = None
         for params in test_combinations:
-            # 【V8.5.2.4.68】筛选机会：signal_score + consensus + R:R
+            # 【V8.5.2.4.72】多维度筛选：signal_score + consensus + R:R + 利润密度
             filtered_opps = [
                 opp for opp in opportunities
                 if (opp.get('consensus', 0) >= params['min_indicator_consensus'] and
                     opp.get('signal_score', 0) >= params['min_signal_score'] and
-                    opp.get('risk_reward', 0) >= params.get('min_risk_reward', 0))
+                    opp.get('risk_reward', 0) >= params.get('min_risk_reward', 0) and
+                    opp.get('profit_density', 0) >= params.get('min_profit_density', 0))  # 【V8.5.2.4.72】新增密度筛选
             ]
             
             if not filtered_opps:
