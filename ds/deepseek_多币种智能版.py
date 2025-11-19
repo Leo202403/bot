@@ -7431,6 +7431,36 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     else:
         print(f"     ℹ️  跳过验证（无验证数据或无参数）")
     
+    # 【V8.5.2.4.41】Phase 3：风险控制与利润最大化
+    phase3_result = None
+    if phase2_baseline and all_opportunities_sorted:
+        try:
+            from phase3_enhanced_optimizer import phase3_enhanced_optimization
+            
+            print(f"\n{'='*70}")
+            print(f"【🚀 Phase 3启动】")
+            print(f"{'='*70}")
+            
+            model_name = os.getenv("MODEL_NAME", "deepseek")
+            phase3_result = phase3_enhanced_optimization(
+                all_opportunities=all_opportunities_sorted,
+                phase1_baseline=phase1_baseline,
+                phase2_baseline=phase2_baseline,
+                kline_snapshots=kline_snapshots,
+                model_name=model_name
+            )
+            
+            # 如果Phase 3找到更优参数，更新best_params
+            if phase3_result and phase3_result.get('final_params'):
+                print(f"\n  ✅ Phase 3优化完成，更新参数")
+                best_params = phase3_result['final_params']
+            
+        except Exception as e:
+            print(f"\n  ⚠️  Phase 3执行失败: {e}")
+            import traceback
+            traceback.print_exc()
+            phase3_result = {'error': str(e)}
+    
     # 【V8.3.16.3】兼容后续代码：构建iterative_result格式
     return {
         'final_params': best_params,
@@ -7442,7 +7472,8 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         'rounds': [{'round_num': 1, 'improved': True, 'metric': 0.0, 'status': 'COMPLETED'}],  # V8.3.16.7: 修复rounds KeyError
         'quick_search_mode': True,
         'found_profitable': found_profitable,
-        'phase2_baseline': phase2_baseline  # 🆕 V8.5.2.4.10
+        'phase2_baseline': phase2_baseline,  # 🆕 V8.5.2.4.10
+        'phase3_result': phase3_result  # 🆕 V8.5.2.4.41
     }
 
 
