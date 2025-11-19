@@ -22334,8 +22334,8 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                                 break
                         
                         # === 波段跟踪 ===
-                        if not swing_tracking and profit_pct >= 10.0:
-                            # 触发波段跟踪（【V8.5.2.4.46】阈值从8.0%调整为10.0%，只捕捉真正的波段趋势）
+                        if not swing_tracking and profit_pct >= 7.0:
+                            # 触发波段跟踪（【V8.5.2.4.47修正3】阈值从10.0%调整为7.0%，平衡机会数和持仓时间）
                             swing_tracking = True
                             swing_trigger_bar = bar_idx
                             swing_max_profit = profit_pct
