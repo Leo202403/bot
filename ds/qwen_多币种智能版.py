@@ -22238,13 +22238,14 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     if not is_scalping and not is_swing:
                         continue
                     
-                    # 根据分类确定最终利润和持仓时间
+                    # 【V8.5.2.4.47】根据分类确定最终利润和持仓时间
+                    # 修复：holding_bars应该是从开仓点到触发点的总时间，而不是跟踪时间
                     if is_swing:
                         final_profit = swing_max_profit
-                        final_holding_bars = swing_holding_bars
+                        final_holding_bars = swing_trigger_bar + 1  # ✅ 从idx=0到触发点的总时间
                     else:  # is_scalping
                         final_profit = scalping_max_profit
-                        final_holding_bars = scalping_holding_bars
+                        final_holding_bars = scalping_trigger_bar + 1  # ✅ 从idx=0到触发点的总时间
                     
                     # 【V8.3.21】创建摘要数据代替完整DataFrame
                     future_summary = {
