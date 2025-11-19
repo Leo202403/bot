@@ -6585,30 +6585,37 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     
     print(f"  📐 测试范围: R:R [{rr_min:.2f}, {rr_max:.2f}], 共识 [{consensus_min}, {consensus_max}], 分数 [{score_min}, {score_max}]")
     
-    # 🔧 V8.5.2: 扩展参数空间 - 添加出场参数（atr_tp_multiplier, max_holding_hours）
-    # 目标：入场参数最大化捕捉机会，出场参数最大化捕捉利润
+    # 【V8.5.2.4.36】分离超短线和波段的参数优化
+    # 目标：为超短线和波段分别找到最优TP/SL参数
+    
+    # 定义超短线参数范围（快速止盈止损）
+    scalping_params_range = {
+        'atr_tp': [1.5, 2.0, 2.5, 3.0],  # 超短线TP范围
+        'atr_sl': [1.0, 1.2, 1.5, 2.0],  # 超短线SL范围
+        'max_holding': [8, 12, 16, 24]   # 超短线持仓时间（小时）
+    }
+    
+    # 定义波段参数范围（更大利润目标）
+    swing_params_range = {
+        'atr_tp': [4.0, 5.0, 6.0, 7.0],  # 波段TP范围
+        'atr_sl': [2.0, 2.5, 3.0, 3.5],  # 波段SL范围
+        'max_holding': [48, 60, 72, 96]  # 波段持仓时间（小时）
+    }
+    
     test_points = [
-        # V8.5.2.1: 针对超短线优化（TP范围2.5-6.0，提高信号质量要求）
-        # 宽松组合（高召回 + 快速止盈）
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'atr_tp_multiplier': 2.5, 'max_holding_hours': 12, 'min_signal_score': 80, 'name': '快速止盈'},
-        {'min_risk_reward': 1.8, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'atr_tp_multiplier': 3.0, 'max_holding_hours': 24, 'min_signal_score': 82, 'name': '偏宽松'},
-        
-        # 平衡组合（适中止盈 + 质量过滤）
-        {'min_risk_reward': 2.0, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'atr_tp_multiplier': 3.5, 'max_holding_hours': 36, 'min_signal_score': 85, 'name': '标准平衡'},
-        {'min_risk_reward': 2.2, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'atr_tp_multiplier': 4.0, 'max_holding_hours': 48, 'min_signal_score': 85, 'name': '高质量'},
-        
-        # 严格组合（高精准 + 中等止盈）
-        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'atr_tp_multiplier': 4.5, 'max_holding_hours': 60, 'min_signal_score': 87, 'name': '偏严格'},
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'atr_tp_multiplier': 5.0, 'max_holding_hours': 72, 'min_signal_score': 88, 'name': '严格'},
-        
-        # 超严格组合（极高精准 + 适中止盈）
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'atr_tp_multiplier': 5.5, 'max_holding_hours': 84, 'min_signal_score': 90, 'name': '超严格'},
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'atr_tp_multiplier': 6.0, 'max_holding_hours': 96, 'min_signal_score': 92, 'name': '极严格'},
-        
-        # 特殊组合（混合策略）
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'atr_tp_multiplier': 3.5, 'max_holding_hours': 24, 'min_signal_score': 88, 'name': '低R:R高共振'},
-        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'atr_tp_multiplier': 3.0, 'max_holding_hours': 18, 'min_signal_score': 82, 'name': '超快止盈'},
+        # 通用参数组（适用于超短线和波段混合优化）
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 80, 'name': '宽松'},
+        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 82, 'name': '超快止盈'},
+        {'min_risk_reward': 2.0, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 85, 'name': '标准平衡'},
+        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'min_signal_score': 87, 'name': '偏严格'},
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 88, 'name': '严格'},
     ]
+    
+    # 【V8.5.2.4.36】存储参数范围供后续使用
+    test_points_meta = {
+        'scalping_params': scalping_params_range,
+        'swing_params': swing_params_range
+    }
     
     # 🔧 V8.3.31.7: use_confirmed_opps 已在函数开始处定义（避免UnboundLocalError）
     
@@ -6673,26 +6680,29 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 from calculate_actual_profit import calculate_single_actual_profit
                 
                 for opp in captured_opps:
-                    # 【V8.5.2.4.35】根据signal_type使用差异化参数
+                    # 【V8.5.2.4.36】根据signal_type使用差异化参数（从参数范围取中位数）
                     signal_type = opp.get('signal_type', 'swing')
                     
-                    # 创建差异化的strategy_params
+                    # 获取当前test_point指定的TP/SL参数（优先）
+                    # 如果未指定，则根据signal_type使用默认值（从参数范围取中位数）
                     if signal_type == 'scalping':
-                        # 超短线：快速止盈止损
-                        strategy_params = {
-                            **config_variant,
-                            'atr_tp_multiplier': 2.0,
-                            'atr_stop_multiplier': 1.5,
-                            'max_holding_hours': 12
-                        }
+                        # 超短线：使用超短线参数范围的中位数
+                        default_tp = scalping_params_range['atr_tp'][1]  # 2.0
+                        default_sl = scalping_params_range['atr_sl'][2]  # 1.5
+                        default_holding = scalping_params_range['max_holding'][1]  # 12
                     else:  # swing
-                        # 波段：更大的利润目标
-                        strategy_params = {
-                            **config_variant,
-                            'atr_tp_multiplier': 6.0,
-                            'atr_stop_multiplier': 2.5,
-                            'max_holding_hours': 72
-                        }
+                        # 波段：使用波段参数范围的中位数
+                        default_tp = swing_params_range['atr_tp'][2]  # 6.0
+                        default_sl = swing_params_range['atr_sl'][1]  # 2.5
+                        default_holding = swing_params_range['max_holding'][2]  # 72
+                    
+                    # 创建差异化的strategy_params（优先使用test_point指定的值）
+                    strategy_params = {
+                        **config_variant,
+                        'atr_tp_multiplier': config_variant.get('atr_tp_multiplier', default_tp),
+                        'atr_stop_multiplier': config_variant.get('atr_stop_multiplier', default_sl),
+                        'max_holding_hours': config_variant.get('max_holding_hours', default_holding)
+                    }
                     
                     # 使用差异化参数计算实际利润
                     actual_profit = calculate_single_actual_profit(
@@ -6924,12 +6934,25 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             from calculate_actual_profit import calculate_single_actual_profit
             
             for opp in best_captured_opps:
-                # 【V8.5.2.4.35】根据signal_type使用差异化参数
+                # 【V8.5.2.4.36】根据signal_type使用差异化参数（从参数范围取中位数）
                 signal_type = opp.get('signal_type', 'swing')
+                
+                # 根据signal_type使用默认值（从参数范围取中位数）
                 if signal_type == 'scalping':
-                    strategy_params = {**best_params, 'atr_tp_multiplier': 2.0, 'atr_stop_multiplier': 1.5, 'max_holding_hours': 12}
+                    default_tp = scalping_params_range['atr_tp'][1]  # 2.0
+                    default_sl = scalping_params_range['atr_sl'][2]  # 1.5
+                    default_holding = scalping_params_range['max_holding'][1]  # 12
                 else:
-                    strategy_params = {**best_params, 'atr_tp_multiplier': 6.0, 'atr_stop_multiplier': 2.5, 'max_holding_hours': 72}
+                    default_tp = swing_params_range['atr_tp'][2]  # 6.0
+                    default_sl = swing_params_range['atr_sl'][1]  # 2.5
+                    default_holding = swing_params_range['max_holding'][2]  # 72
+                
+                strategy_params = {
+                    **best_params,
+                    'atr_tp_multiplier': best_params.get('atr_tp_multiplier', default_tp),
+                    'atr_stop_multiplier': best_params.get('atr_stop_multiplier', default_sl),
+                    'max_holding_hours': best_params.get('max_holding_hours', default_holding)
+                }
                 
                 actual_profit = calculate_single_actual_profit(
                     opp,
@@ -6990,12 +7013,25 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             from calculate_actual_profit import calculate_single_actual_profit
             
             for opp in val_captured_opps:
-                # 【V8.5.2.4.35】根据signal_type使用差异化参数
+                # 【V8.5.2.4.36】根据signal_type使用差异化参数（从参数范围取中位数）
                 signal_type = opp.get('signal_type', 'swing')
+                
+                # 根据signal_type使用默认值（从参数范围取中位数）
                 if signal_type == 'scalping':
-                    strategy_params = {**best_params, 'atr_tp_multiplier': 2.0, 'atr_stop_multiplier': 1.5, 'max_holding_hours': 12}
+                    default_tp = scalping_params_range['atr_tp'][1]  # 2.0
+                    default_sl = scalping_params_range['atr_sl'][2]  # 1.5
+                    default_holding = scalping_params_range['max_holding'][1]  # 12
                 else:
-                    strategy_params = {**best_params, 'atr_tp_multiplier': 6.0, 'atr_stop_multiplier': 2.5, 'max_holding_hours': 72}
+                    default_tp = swing_params_range['atr_tp'][2]  # 6.0
+                    default_sl = swing_params_range['atr_sl'][1]  # 2.5
+                    default_holding = swing_params_range['max_holding'][2]  # 72
+                
+                strategy_params = {
+                    **best_params,
+                    'atr_tp_multiplier': best_params.get('atr_tp_multiplier', default_tp),
+                    'atr_stop_multiplier': best_params.get('atr_stop_multiplier', default_sl),
+                    'max_holding_hours': best_params.get('max_holding_hours', default_holding)
+                }
                 
                 actual_profit = calculate_single_actual_profit(
                     opp,
@@ -7017,12 +7053,25 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             if train_captured_opps:
                 # 【V8.5.2.4.22】修复：重新计算训练集actual_profit（确保使用相同的参数和方法）
                 for opp in train_captured_opps:
-                    # 【V8.5.2.4.35】根据signal_type使用差异化参数
+                    # 【V8.5.2.4.36】根据signal_type使用差异化参数（从参数范围取中位数）
                     signal_type = opp.get('signal_type', 'swing')
+                    
+                    # 根据signal_type使用默认值（从参数范围取中位数）
                     if signal_type == 'scalping':
-                        strategy_params = {**best_params, 'atr_tp_multiplier': 2.0, 'atr_stop_multiplier': 1.5, 'max_holding_hours': 12}
+                        default_tp = scalping_params_range['atr_tp'][1]  # 2.0
+                        default_sl = scalping_params_range['atr_sl'][2]  # 1.5
+                        default_holding = scalping_params_range['max_holding'][1]  # 12
                     else:
-                        strategy_params = {**best_params, 'atr_tp_multiplier': 6.0, 'atr_stop_multiplier': 2.5, 'max_holding_hours': 72}
+                        default_tp = swing_params_range['atr_tp'][2]  # 6.0
+                        default_sl = swing_params_range['atr_sl'][1]  # 2.5
+                        default_holding = swing_params_range['max_holding'][2]  # 72
+                    
+                    strategy_params = {
+                        **best_params,
+                        'atr_tp_multiplier': best_params.get('atr_tp_multiplier', default_tp),
+                        'atr_stop_multiplier': best_params.get('atr_stop_multiplier', default_sl),
+                        'max_holding_hours': best_params.get('max_holding_hours', default_holding)
+                    }
                     
                     actual_profit = calculate_single_actual_profit(
                         opp,
