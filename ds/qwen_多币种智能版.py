@@ -4361,6 +4361,14 @@ def ai_optimize_parameters(trading_data_summary, learning_mode="full_optimizatio
 
 You are a professional quantitative trading parameter optimization expert. Analyze the following trading data comprehensively and propose actionable parameter adjustments.
 
+【V8.5.2.4.43】移动止盈止损决策指南：
+- 当市场波动率高、趋势明确时，建议启用移动止损（trailing_stop_enabled=true）
+- 超短线交易：适合在快速突破时使用移动止损，保护短期利润
+- 波段交易：在强趋势中使用移动止损，让利润充分奔跑
+- 震荡市场：建议使用静态止损（trailing_stop_enabled=false），避免频繁触发
+- 根据历史回测数据和当前市场状态，自主决定是否启用移动止损
+- trailing_stop_enabled参数可以在scalping_params和swing_params中独立设置
+
 {experience_context}
 
 {mode_instruction}
@@ -12081,13 +12089,17 @@ def analyze_and_adjust_params():
                     model_name=model_name
                 )
                 
-                # 🆕 V8.5.1.4: 发送详细格式的Bark推送通知
+                # 🆕 V8.5.2.4.43: 发送详细格式的Bark推送通知（含Phase 4结果）
                 try:
                     # 重新加载config获取最新优化数据
                     current_config = load_learning_config()
                     
                     # 构建详细的Bark内容（与老版本格式一致）
                     bark_content_lines = []
+                    
+                    # 🆕 V8.5.2.4.43: 检查Phase 4验证结果
+                    phase4_status = current_config.get('_phase4_status', None)
+                    phase3_applied = current_config.get('_phase3_applied', False)
                     
                     # 获取优化数据
                     v8321_insights = current_config.get('compressed_insights', {}).get('v8321_insights', {})
@@ -12126,6 +12138,18 @@ def analyze_and_adjust_params():
                     if has_scalp_data or has_swing_data:
                         # 标题行
                         bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
+                        
+                        # 🆕 V8.5.2.4.43: 添加Phase 4验证状态
+                        if phase4_status:
+                            status_emoji = {
+                                'PASSED': '✅',
+                                'WARNING': '⚠️',
+                                'UNSTABLE': '⚠️',
+                                'OVERFITTED': '❌',
+                                'FAILED': '❌'
+                            }.get(phase4_status, '❓')
+                            bark_content_lines.append(f"Phase 4: {status_emoji} {phase4_status}")
+                        
                         bark_content_lines.append("")
                         bark_content_lines.append("📊 优化后预期收益:")
                         
@@ -12137,7 +12161,10 @@ def analyze_and_adjust_params():
                             else:
                                 cap_rate = scalp_perf.get('capture_rate', 0)
                                 avg_profit = scalp_perf.get('avg_profit', 0)
-                            bark_content_lines.append(f"⚡超短线: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
+                            # 🆕 检查是否使用移动止损
+                            scalp_trailing = current_config.get('scalping_params', {}).get('trailing_stop_enabled', False)
+                            trailing_mark = "📈" if scalp_trailing else ""
+                            bark_content_lines.append(f"⚡超短线: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}% {trailing_mark}")
                         
                         # 波段数据
                         if has_swing_data:
@@ -12147,7 +12174,10 @@ def analyze_and_adjust_params():
                             else:
                                 cap_rate = swing_perf.get('capture_rate', 0)
                                 avg_profit = swing_perf.get('avg_profit', 0)
-                            bark_content_lines.append(f"🌊波段: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
+                            # 🆕 检查是否使用移动止损
+                            swing_trailing = current_config.get('swing_params', {}).get('trailing_stop_enabled', False)
+                            trailing_mark = "📈" if swing_trailing else ""
+                            bark_content_lines.append(f"🌊波段: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}% {trailing_mark}")
                     else:
                         # 没有优化数据，使用交易统计
                         if not yesterday_closed_trades.empty:
@@ -14261,6 +14291,34 @@ def classify_signal_quality(signal_score: int, ytc_signal: str, trend_alignment:
     # LOW: 其他情况
     else:
         return "LOW", SIGNAL_TIER_PARAMS["LOW"]["description"]
+
+
+def get_params_by_signal_type(signal_type: str, config: dict) -> dict:
+    """
+    【V8.5.2.4.43】根据signal_type动态选择参数
+    
+    优先级：Phase 3-4优化参数 > global参数
+    
+    Args:
+        signal_type: 'scalping' 或 'swing'
+        config: 完整配置字典
+    
+    Returns:
+        对应类型的参数字典
+    """
+    # 检查是否有Phase 3-4优化的分离参数
+    if signal_type == 'scalping' and 'scalping_params' in config:
+        params = config['scalping_params'].copy()
+        params['_source'] = 'phase3_scalping'
+    elif signal_type == 'swing' and 'swing_params' in config:
+        params = config['swing_params'].copy()
+        params['_source'] = 'phase3_swing'
+    else:
+        # fallback到global参数
+        params = config.get('global', {}).copy()
+        params['_source'] = 'global_fallback'
+    
+    return params
 
 
 def get_adjusted_params_for_signal(
