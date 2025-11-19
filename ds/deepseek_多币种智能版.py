@@ -6956,30 +6956,30 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         
         print(f"     📊 采样: 超短线{len(scalping_sample)}/{len(scalping_opps_full)}, 波段{len(swing_sample)}/{len(swing_opps_full)}")
         
-        # 【V8.5.2.4.53】基于Phase 1客观利润扩大TP测试范围
-        # 目标：让TP能够捕获接近Phase 1的15-16%客观利润
+        # 【V8.5.2.4.54】进一步扩大TP范围，目标捕获15-16%客观利润
+        # 策略：测试更激进的TP倍数（2.0x-2.5x required_tp）
         scalping_tp_candidates = [
-            scalping_params_range['atr_tp'][2],  # 100%基准（围绕required_tp）
-            round(scalping_required_tp * 1.2, 1),  # 120%（向上探索）
-            round(scalping_required_tp * 1.5, 1),  # 150%（接近客观利润）
-            min(25.0, round(scalping_required_tp * 1.8, 1))  # 180%（最大探索，不超过25）
+            round(scalping_required_tp * 1.2, 1),  # 120%
+            round(scalping_required_tp * 1.5, 1),  # 150%
+            round(scalping_required_tp * 2.0, 1),  # 200%（激进）
+            min(30.0, round(scalping_required_tp * 2.5, 1))  # 250%（最大，不超过30）
         ]
         scalping_sl_candidates = [
             scalping_params_range['atr_sl'][0],  # 1.5（最紧）
-            scalping_params_range['atr_sl'][2],  # 2.5（中等）
-            scalping_params_range['atr_sl'][3]   # 3.0（宽松）
+            scalping_params_range['atr_sl'][1],  # 2.0（中紧）
+            scalping_params_range['atr_sl'][2]   # 2.5（中等）
         ]
         
         swing_tp_candidates = [
-            swing_params_range['atr_tp'][1],  # 100%基准
             round(swing_required_tp * 1.2, 1),  # 120%
-            round(swing_required_tp * 1.5, 1),  # 150%（接近客观利润）
-            min(30.0, round(swing_required_tp * 1.8, 1))  # 180%（最大探索）
+            round(swing_required_tp * 1.5, 1),  # 150%
+            round(swing_required_tp * 2.0, 1),  # 200%（激进）
+            min(35.0, round(swing_required_tp * 2.5, 1))  # 250%（最大，不超过35）
         ]
         swing_sl_candidates = [
             swing_params_range['atr_sl'][0],  # 2.5（最紧）
             swing_params_range['atr_sl'][1],  # 3.0（中等）
-            swing_params_range['atr_sl'][3]   # 4.0（宽松）
+            swing_params_range['atr_sl'][2]   # 3.5（中宽）
         ]
         
         print(f"     🔬 超短线测试: TP{scalping_tp_candidates} × SL{scalping_sl_candidates} = {len(scalping_tp_candidates) * len(scalping_sl_candidates)}组")
@@ -7178,48 +7178,49 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     if best_scalping_tp_sl or best_swing_tp_sl:
         print(f"     💡 使用TP/SL测试找到的最优值进行计算")
     
-    # 【V8.5.2.4.39】扩展test_points，全面覆盖R:R、信号分、共振的组合空间
+    # 【V8.5.2.4.54】移除TP/SL参数，完全使用测试出的最优值
+    # test_points只控制：R:R、共识、信号分，TP/SL由best_scalping_tp_sl/best_swing_tp_sl决定
     test_points = [
         # 第一组：极宽松参数（最大化召回率，测试信号分下限）
-        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 70, 'name': '超宽松-低分'},
-        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 75, 'name': '超宽松'},
-        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 80, 'name': '超宽松-标准'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 70, 'name': '超宽松-低分'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 75, 'name': '超宽松'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '超宽松-标准'},
         
         # 第二组：宽松参数（高召回）
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 75, 'name': '极宽松'},
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 80, 'name': '宽松'},
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 85, 'name': '宽松-高分'},
-        {'min_risk_reward': 1.8, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 82, 'name': '偏宽松'},
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'min_signal_score': 75, 'name': '极宽松'},
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '宽松'},
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'min_signal_score': 85, 'name': '宽松-高分'},
+        {'min_risk_reward': 1.8, 'min_indicator_consensus': 1, 'min_signal_score': 82, 'name': '偏宽松'},
         
         # 第三组：平衡参数（R:R递增测试）
-        {'min_risk_reward': 1.8, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 80, 'name': '平衡-低R'},
-        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 82, 'name': '快速止盈'},
-        {'min_risk_reward': 2.0, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 85, 'name': '标准平衡'},
-        {'min_risk_reward': 2.2, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 85, 'name': '高质量'},
-        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 87, 'name': '高R平衡'},
+        {'min_risk_reward': 1.8, 'min_indicator_consensus': 2, 'min_signal_score': 80, 'name': '平衡-低R'},
+        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'min_signal_score': 82, 'name': '快速止盈'},
+        {'min_risk_reward': 2.0, 'min_indicator_consensus': 2, 'min_signal_score': 85, 'name': '标准平衡'},
+        {'min_risk_reward': 2.2, 'min_indicator_consensus': 2, 'min_signal_score': 85, 'name': '高质量'},
+        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'min_signal_score': 87, 'name': '高R平衡'},
         
         # 第四组：严格参数（高精准，信号分递增测试）
-        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'min_signal_score': 85, 'name': '偏严格-标准'},
-        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'min_signal_score': 87, 'name': '偏严格'},
-        {'min_risk_reward': 2.8, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 88, 'name': '严格-中R'},
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 88, 'name': '严格'},
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 90, 'name': '极严格'},
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 92, 'name': '超严格'},
+        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'min_signal_score': 85, 'name': '偏严格-标准'},
+        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'min_signal_score': 87, 'name': '偏严格'},
+        {'min_risk_reward': 2.8, 'min_indicator_consensus': 3, 'min_signal_score': 88, 'name': '严格-中R'},
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'min_signal_score': 88, 'name': '严格'},
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'min_signal_score': 90, 'name': '极严格'},
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'min_signal_score': 92, 'name': '超严格'},
         
         # 第五组：共振优先（测试高共振+低R的组合）
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 85, 'name': '低R高共振-标准'},
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 88, 'name': '低R高共振'},
-        {'min_risk_reward': 1.8, 'min_indicator_consensus': 4, 'atr_stop_multiplier': atr_max, 'min_signal_score': 85, 'name': '超高共振'},
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 3, 'min_signal_score': 85, 'name': '低R高共振-标准'},
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 3, 'min_signal_score': 88, 'name': '低R高共振'},
+        {'min_risk_reward': 1.8, 'min_indicator_consensus': 4, 'min_signal_score': 85, 'name': '超高共振'},
         
         # 第六组：信号分优先（测试高信号分+低共振的组合）
-        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 88, 'name': '高分低共振'},
-        {'min_risk_reward': 2.2, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 90, 'name': '超高分低共振'},
-        {'min_risk_reward': 2.5, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 92, 'name': '极高分低共振'},
+        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'min_signal_score': 88, 'name': '高分低共振'},
+        {'min_risk_reward': 2.2, 'min_indicator_consensus': 1, 'min_signal_score': 90, 'name': '超高分低共振'},
+        {'min_risk_reward': 2.5, 'min_indicator_consensus': 1, 'min_signal_score': 92, 'name': '极高分低共振'},
         
-        # 第七组：止损优化（测试紧止损的不同R:R）
-        {'min_risk_reward': 1.5, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 80, 'name': '紧止损-低R'},
-        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 80, 'name': '紧止损'},
-        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'atr_stop_multiplier': atr_min, 'min_signal_score': 85, 'name': '紧止损-高R'},
+        # 第七组：R:R优化（测试不同R:R）
+        {'min_risk_reward': 1.5, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '低R-标准'},
+        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '中R-标准'},
+        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'min_signal_score': 85, 'name': '高R-标准'},
     ]
     
     print(f"     📊 将测试{len(test_points)}组参数组合（覆盖R:R 1.0-3.5, 信号分70-92, 共振1-4）")
