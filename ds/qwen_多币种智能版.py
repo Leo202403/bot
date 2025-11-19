@@ -25535,11 +25535,49 @@ def analyze_exit_timing(yesterday_trades, kline_snapshots):
         
         exit_lessons.append(f"High SL Rate ({sl_rate:.0f}% SL vs {tp_rate:.0f}% TP): Require {entry_req}")
     
+    # 【V8.5.2.4.46】生成exit_table_data供邮件使用
+    exit_table_data = []
+    all_exits = suboptimal_exits + good_exits
+    for trade in all_exits:
+        # 从原始订单数据中查找对应的订单，以获取完整信息
+        matching_orders = yesterday_trades[
+            (yesterday_trades['币种'] == trade['coin']) &
+            (yesterday_trades['开仓价格'] == trade['entry_price'])
+        ]
+        
+        if not matching_orders.empty:
+            order = matching_orders.iloc[0]
+            # 构建表格数据
+            table_row = {
+                'coin': trade['coin'],
+                'entry_time': str(order.get('开仓时间', '')),
+                'pnl': trade['pnl'],
+                'exit_type': trade['exit_type'],
+                'max_potential_profit_pct': trade['max_potential_profit_pct'],
+                '信号分数': order.get('信号分数', order.get('signal_score', 0)),
+                '共振指标数': order.get('共振指标数', order.get('indicator_consensus', 0)),
+                'evaluation': '⚠️ 早平' if trade['is_premature'] else '✅ 最优',
+                'recommendation': '继续保持'
+            }
+            
+            # 根据trade类型生成建议
+            if trade['is_premature']:
+                missed = trade['missed_profit_pct']
+                if missed > 5:
+                    table_row['recommendation'] = 'TP扩大2.0倍'
+                elif missed > 3:
+                    table_row['recommendation'] = 'TP扩大1.5倍'
+                else:
+                    table_row['recommendation'] = 'TP扩大1.2倍'
+            
+            exit_table_data.append(table_row)
+    
     return {
         'exit_stats': exit_stats,
         'suboptimal_exits': suboptimal_exits[:5],  # 只保留TOP5
         'good_exits': good_exits[:3],  # 只保留TOP3
-        'exit_lessons': exit_lessons
+        'exit_lessons': exit_lessons,
+        'exit_table_data': exit_table_data  # 【V8.5.2.4.46】新增
     }
 
 
