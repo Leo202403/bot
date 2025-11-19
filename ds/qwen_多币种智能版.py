@@ -6666,21 +6666,116 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     print(f"     ⚡ 超短线权重候选: {len(scalping_weight_candidates)}组")
     print(f"     🌊 波段权重候选: {len(swing_weight_candidates)}组")
     
-    # 【V8.5.2.4.38】Phase 2核心任务3：测试权重候选，找到最优权重
+    # 【V8.5.2.4.39】Phase 2核心任务3：测试权重候选，找到最优权重
     print(f"\n  🔬 【测试权重候选】寻找最贴近Phase 1的信号分计算方式...")
+    
+    # 导入必要的函数
+    from recalculate_signal_score import recalculate_signal_score_from_snapshot
     
     # 分别测试超短线和波段的权重
     best_scalping_weights = None
     best_swing_weights = None
+    best_scalping_score = -999999
+    best_swing_score = -999999
     
-    # TODO: 实际测试逻辑将在后续实现
-    # 当前先使用默认权重
-    best_scalping_weights = scalping_weight_candidates[0]  # 默认权重
-    best_swing_weights = swing_weight_candidates[0]  # 默认权重
+    # 【V8.5.2.4.39】实际测试超短线权重
+    if confirmed_opportunities and 'scalping' in confirmed_opportunities:
+        scalping_opps = confirmed_opportunities['scalping']['opportunities']
+        phase1_scalping_count = phase1_baseline.get('scalping', {}).get('count', len(scalping_opps))
+        
+        print(f"\n  ⚡ 测试超短线权重候选（共{len(scalping_weight_candidates)}组）...")
+        
+        for idx, weight_config in enumerate(scalping_weight_candidates, 1):
+            # 重新计算这些机会的signal_score
+            recalc_count = 0
+            for opp in scalping_opps:
+                snapshot = opp.get('snapshot')
+                if snapshot:
+                    # 使用自定义权重重新计算signal_score
+                    new_score = recalculate_signal_score_from_snapshot(
+                        snapshot=snapshot,
+                        signal_type='scalping',
+                        custom_weights=weight_config
+                    )
+                    opp['_weight_test_score'] = new_score
+                    recalc_count += 1
+            
+            # 使用min_signal_score=75过滤，计算捕获率
+            # （75分是一个合理的基准，既不太严格也不太宽松）
+            captured = [o for o in scalping_opps if o.get('_weight_test_score', 0) >= 75]
+            capture_rate = len(captured) / phase1_scalping_count if phase1_scalping_count > 0 else 0
+            
+            # 计算平均利润
+            if captured:
+                avg_profit = sum(o.get('max_potential_profit', 0) for o in captured) / len(captured)
+            else:
+                avg_profit = 0
+            
+            # 综合得分：捕获率60% + 利润40%（与Phase 2评分一致）
+            phase1_avg = phase1_baseline.get('scalping', {}).get('avg_objective_profit', 1.0)
+            profit_ratio = avg_profit / phase1_avg if phase1_avg > 0 else 0
+            score = capture_rate * 0.6 + profit_ratio * 0.4
+            
+            print(f"     #{idx} {weight_config['name']:12s}: 捕获{len(captured)}/{phase1_scalping_count}({capture_rate*100:5.1f}%) | 利润{avg_profit:.2f}% | 得分{score:.3f}")
+            
+            if score > best_scalping_score:
+                best_scalping_score = score
+                best_scalping_weights = weight_config.copy()
+        
+        print(f"     ✅ 超短线最优权重: {best_scalping_weights['name']} (得分{best_scalping_score:.3f})")
+    else:
+        # 降级：使用默认权重
+        best_scalping_weights = scalping_weight_candidates[0]
+        print(f"     ⚠️  无超短线机会数据，使用默认权重: {best_scalping_weights['name']}")
     
-    print(f"     ⚡ 超短线最优权重: {best_scalping_weights['name']}")
-    print(f"     🌊 波段最优权重: {best_swing_weights['name']}")
-    print(f"     💡 注：权重优化将在V8.5.2.4.39完整实现")
+    # 【V8.5.2.4.39】实际测试波段权重
+    if confirmed_opportunities and 'swing' in confirmed_opportunities:
+        swing_opps = confirmed_opportunities['swing']['opportunities']
+        phase1_swing_count = phase1_baseline.get('swing', {}).get('count', len(swing_opps))
+        
+        print(f"\n  🌊 测试波段权重候选（共{len(swing_weight_candidates)}组）...")
+        
+        for idx, weight_config in enumerate(swing_weight_candidates, 1):
+            # 重新计算这些机会的signal_score
+            recalc_count = 0
+            for opp in swing_opps:
+                snapshot = opp.get('snapshot')
+                if snapshot:
+                    # 使用自定义权重重新计算signal_score
+                    new_score = recalculate_signal_score_from_snapshot(
+                        snapshot=snapshot,
+                        signal_type='swing',
+                        custom_weights=weight_config
+                    )
+                    opp['_weight_test_score'] = new_score
+                    recalc_count += 1
+            
+            # 使用min_signal_score=75过滤
+            captured = [o for o in swing_opps if o.get('_weight_test_score', 0) >= 75]
+            capture_rate = len(captured) / phase1_swing_count if phase1_swing_count > 0 else 0
+            
+            # 计算平均利润
+            if captured:
+                avg_profit = sum(o.get('max_potential_profit', 0) for o in captured) / len(captured)
+            else:
+                avg_profit = 0
+            
+            # 综合得分
+            phase1_avg = phase1_baseline.get('swing', {}).get('avg_objective_profit', 1.0)
+            profit_ratio = avg_profit / phase1_avg if phase1_avg > 0 else 0
+            score = capture_rate * 0.6 + profit_ratio * 0.4
+            
+            print(f"     #{idx} {weight_config['name']:12s}: 捕获{len(captured)}/{phase1_swing_count}({capture_rate*100:5.1f}%) | 利润{avg_profit:.2f}% | 得分{score:.3f}")
+            
+            if score > best_swing_score:
+                best_swing_score = score
+                best_swing_weights = weight_config.copy()
+        
+        print(f"     ✅ 波段最优权重: {best_swing_weights['name']} (得分{best_swing_score:.3f})")
+    else:
+        # 降级：使用默认权重
+        best_swing_weights = swing_weight_candidates[0]
+        print(f"     ⚠️  无波段机会数据，使用默认权重: {best_swing_weights['name']}")
     
     # 存储权重候选和最优权重
     test_points_meta['scalping_weight_candidates'] = scalping_weight_candidates
@@ -6688,32 +6783,54 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     test_points_meta['best_scalping_weights'] = best_scalping_weights
     test_points_meta['best_swing_weights'] = best_swing_weights
     
-    # 【V8.5.2.4.38】Phase 2核心任务4：测试更多参数组合，找到最佳5组
+    # 【V8.5.2.4.39】Phase 2核心任务4：扩展参数组合测试，覆盖更广范围
     print(f"\n  🎯 【参数组合测试】寻找捕获率最高的参数组合...")
     
-    # 扩展test_points，测试更多组合（不止5组）
+    # 【V8.5.2.4.39】扩展test_points，全面覆盖R:R、信号分、共振的组合空间
     test_points = [
-        # 第一组：宽松参数（高召回）
+        # 第一组：极宽松参数（最大化召回率，测试信号分下限）
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 70, 'name': '超宽松-低分'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 75, 'name': '超宽松'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 80, 'name': '超宽松-标准'},
+        
+        # 第二组：宽松参数（高召回）
         {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 75, 'name': '极宽松'},
         {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 80, 'name': '宽松'},
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 85, 'name': '宽松-高分'},
         {'min_risk_reward': 1.8, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 82, 'name': '偏宽松'},
         
-        # 第二组：平衡参数
+        # 第三组：平衡参数（R:R递增测试）
+        {'min_risk_reward': 1.8, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 80, 'name': '平衡-低R'},
         {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 82, 'name': '快速止盈'},
         {'min_risk_reward': 2.0, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 85, 'name': '标准平衡'},
         {'min_risk_reward': 2.2, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 85, 'name': '高质量'},
+        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 87, 'name': '高R平衡'},
         
-        # 第三组：严格参数（高精准）
+        # 第四组：严格参数（高精准，信号分递增测试）
+        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'min_signal_score': 85, 'name': '偏严格-标准'},
         {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'min_signal_score': 87, 'name': '偏严格'},
+        {'min_risk_reward': 2.8, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 88, 'name': '严格-中R'},
         {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 88, 'name': '严格'},
         {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 90, 'name': '极严格'},
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 92, 'name': '超严格'},
         
-        # 第四组：特殊组合
+        # 第五组：共振优先（测试高共振+低R的组合）
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 85, 'name': '低R高共振-标准'},
         {'min_risk_reward': rr_min, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 88, 'name': '低R高共振'},
+        {'min_risk_reward': 1.8, 'min_indicator_consensus': 4, 'atr_stop_multiplier': atr_max, 'min_signal_score': 85, 'name': '超高共振'},
+        
+        # 第六组：信号分优先（测试高信号分+低共振的组合）
+        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 88, 'name': '高分低共振'},
+        {'min_risk_reward': 2.2, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 90, 'name': '超高分低共振'},
+        {'min_risk_reward': 2.5, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 92, 'name': '极高分低共振'},
+        
+        # 第七组：止损优化（测试紧止损的不同R:R）
+        {'min_risk_reward': 1.5, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 80, 'name': '紧止损-低R'},
         {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 80, 'name': '紧止损'},
+        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'atr_stop_multiplier': atr_min, 'min_signal_score': 85, 'name': '紧止损-高R'},
     ]
     
-    print(f"     📊 将测试{len(test_points)}组参数组合")
+    print(f"     📊 将测试{len(test_points)}组参数组合（覆盖R:R 1.0-3.5, 信号分70-92, 共振1-4）")
     
     # 【V8.5.2.4.37】存储参数范围和真实数据供后续使用
     test_points_meta = {
@@ -6732,13 +6849,13 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         raise ValueError("【V8.5.2.3】quick_global_search_v8316必须提供confirmed_opportunities，不再支持降级使用market_snapshots")
     
     # 🔧 V8.5.2.4.33: 修复all_opportunities变量未定义 - 正确的缩进
-    print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
-    # 合并超短线和波段机会
-    all_opportunities = (
-        confirmed_opportunities['scalping']['opportunities'] + 
-        confirmed_opportunities['swing']['opportunities']
-    )
-    print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
+        print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
+        # 合并超短线和波段机会
+        all_opportunities = (
+            confirmed_opportunities['scalping']['opportunities'] + 
+            confirmed_opportunities['swing']['opportunities']
+        )
+        print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
     
     # 【V8.5.2.4.18】前向验证：分割训练集和验证集
     print(f"\n  📊 【前向验证】数据分割（70%训练/30%验证）...")
@@ -9666,10 +9783,10 @@ def analyze_and_adjust_params():
                     
                 # 应用超短线优化结果
                 if scalping_optimization:
-                    if 'scalping_params' not in config:
-                        config['scalping_params'] = {}
-                    config['scalping_params'].update(scalping_optimization['optimized_params'])
-                    
+                            if 'scalping_params' not in config:
+                                config['scalping_params'] = {}
+                            config['scalping_params'].update(scalping_optimization['optimized_params'])
+                            
                     # 更新profit_comparison数据
                     profit_comparison['scalping'] = {
                         'name': scalping_optimization.get('name', ''),
@@ -9692,10 +9809,10 @@ def analyze_and_adjust_params():
                 
                 # 应用波段优化结果
                 if swing_optimization:
-                    if 'swing_params' not in config:
-                        config['swing_params'] = {}
-                    config['swing_params'].update(swing_optimization['optimized_params'])
-                    
+                            if 'swing_params' not in config:
+                                config['swing_params'] = {}
+                            config['swing_params'].update(swing_optimization['optimized_params'])
+                            
                     # 更新profit_comparison数据
                     profit_comparison['swing'] = {
                         'name': swing_optimization.get('name', ''),
@@ -21701,9 +21818,9 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         _, row_data = future_row
                         
                         # 计算该方向的利润进展
-                        if direction == 'long':
+                    if direction == 'long':
                             profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
-                        else:
+                    else:
                             profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
                         
                         # === 超短线跟踪 ===
@@ -23467,9 +23584,10 @@ def optimize_strategy_with_risk_control(strategy_data, strategy_type, phase1_bas
             phase2_params['min_indicator_consensus'] = dynamic_min_consensus
             print(f"     📝 更新phase2_params['min_indicator_consensus'] = {dynamic_min_consensus}")
     
-    # 【V8.5.2.4.12】调用optimize_params_v8321_lightweight
+    # 【V8.5.2.4.39】调用optimize_params_v8321_lightweight（增加测试组合数）
     print(f"\n  🚀 使用optimize_params_v8321_lightweight进行11维度搜索...")
-    print(f"     • 测试组数: 100组（vs 旧版4组）")
+    print(f"     • 测试组数: 200组（V8.5.2.4.39扩大，原100组）")
+    print(f"     • 搜索空间: 扩大（TP 0.8-7.0, SL 0.8-3.0, Holding 2-120h）")
     print(f"     • 评分方式: 多目标评分（期望收益+盈亏比+胜率+回撤）")
     print(f"     • 异常检测: 自动检测过拟合风险")
     if dynamic_min_score or dynamic_min_consensus:
@@ -23487,7 +23605,7 @@ def optimize_strategy_with_risk_control(strategy_data, strategy_type, phase1_bas
                 'min_indicator_consensus': 2
             },
             signal_type=strategy_type,
-            max_combinations=100,  # 4组→100组
+            max_combinations=200,  # 【V8.5.2.4.39】100组→200组
             ai_suggested_params=ai_suggested_params
         )
         

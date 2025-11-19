@@ -274,7 +274,7 @@ def define_param_grid_v8321(signal_type: str, baseline_params: Dict = None) -> D
         参数搜索空间字典
     """
     
-    # 【V8.4.4】定义固定基准和绝对边界
+    # 【V8.5.2.4.39】扩大参数搜索空间（用户反馈：扩大范围，更好地找到最优参数）
     if signal_type == 'scalping':
         # 超短线固定基准
         baseline = {
@@ -283,12 +283,12 @@ def define_param_grid_v8321(signal_type: str, baseline_params: Dict = None) -> D
             'max_holding_hours': 8,
             'min_risk_reward': 1.0  # 【V8.4.7】从1.5降到1.0（匹配实际R:R分布）
         }
-        # 绝对边界（硬约束，防止极端值）
+        # 【V8.5.2.4.39】绝对边界扩大（硬约束，但允许更广范围探索）
         bounds = {
-            'atr_tp_multiplier': (1.0, 3.0),      # 不允许>3.0
-            'atr_stop_multiplier': (1.0, 2.0),
-            'max_holding_hours': (4, 16),
-            'min_risk_reward': (0.5, 2.5)  # 【V8.4.7】下限从0.8降到0.5
+            'atr_tp_multiplier': (0.8, 4.0),      # 扩大：1.0-3.0 → 0.8-4.0
+            'atr_stop_multiplier': (0.8, 2.5),    # 扩大：1.0-2.0 → 0.8-2.5
+            'max_holding_hours': (2, 24),         # 扩大：4-16 → 2-24
+            'min_risk_reward': (0.5, 3.5)         # 扩大：0.5-2.5 → 0.5-3.5
         }
     else:  # swing
         # 波段固定基准
@@ -298,12 +298,12 @@ def define_param_grid_v8321(signal_type: str, baseline_params: Dict = None) -> D
             'max_holding_hours': 60,
             'min_risk_reward': 1.2  # 【V8.4.7】从1.5降到1.2（更接近实际）
         }
-        # 绝对边界
+        # 【V8.5.2.4.39】绝对边界扩大
         bounds = {
-            'atr_tp_multiplier': (2.0, 5.0),      # 不允许>5.0（防止6.0这样的极端值）
-            'atr_stop_multiplier': (1.0, 2.5),
-            'max_holding_hours': (36, 96),
-            'min_risk_reward': (0.5, 3.0)  # 【V8.4.7】下限从0.8降到0.5
+            'atr_tp_multiplier': (1.5, 7.0),      # 扩大：2.0-5.0 → 1.5-7.0
+            'atr_stop_multiplier': (0.8, 3.0),    # 扩大：1.0-2.5 → 0.8-3.0
+            'max_holding_hours': (24, 120),       # 扩大：36-96 → 24-120
+            'min_risk_reward': (0.5, 4.0)         # 扩大：0.5-3.0 → 0.5-4.0
         }
     
     # 【V8.4.4】如果提供了baseline_params，用它作为搜索中心（但仍受边界限制）
