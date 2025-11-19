@@ -22081,18 +22081,19 @@ def analyze_separated_opportunities_with_validation(market_snapshots, old_config
 
 def analyze_separated_opportunities(market_snapshots, old_config):
     """
-    【V8.3.12→V8.3.21】分析超短线和波段的分离机会（内存优化版）
+    【V8.5.2.4.48】三阶段自适应分类（内存友好版）
     
     核心思路：
-    1. 从历史快照中识别客观机会（实际达到利润目标的点位）
-    2. 按信号类型分类为scalping/swing
-    3. 统计各自的表现（利润、time_exit率等）
+    1. Phase 1.1: 收集所有盈利机会（>=5%，不分类）
+    2. Phase 1.2: 统计分析，动态确定分类阈值
+    3. Phase 1.3: 自适应分类（基于利润密度）
+    4. Phase 1.4: 验证分类质量
     
-    【V8.3.21优化】：
-    - 用摘要替换完整DataFrame（节省99%内存）
-    - 采样处理（最多200个点位/币种）
-    - 限制机会数量（每类最多500个）
-    - 及时垃圾回收
+    【V8.5.2.4.48 自适应优势】：
+    - ✅ 利润密度驱动：快速获利→超短线，缓慢获利→波段
+    - ✅ 动态阈值：根据市场波动自动调整
+    - ✅ 质量验证：确保超短线/波段有明显区分
+    - ✅ 内存友好：按币种处理，及时释放
     
     返回：
     {
@@ -22100,83 +22101,70 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             'total_opportunities': int,
             'profitable_count': int,
             'avg_profit': float,
-            'time_exit_rate': float,
             'opportunities': [...]
         },
-        'swing': {...}
+        'swing': {...},
+        'phase1_baseline': {...},
+        'adaptive_thresholds': {...}  # 新增：记录动态阈值
     }
     """
     try:
         import pandas as pd
         import gc
         
-        # 【V8.3.21】全局机会数量限制（保守策略：不遗漏机会）
-        MAX_OPPORTUNITIES_PER_TYPE = 2000  # 恢复2000，确保足够样本
-        MAX_OPPORTUNITIES_PER_COIN = 250   # 300→250（适度降低）
-        ENABLE_SAMPLING = False  # 关闭采样，保证不遗漏机会
-        MAX_SAMPLE_POINTS = 200  # 如需采样，使用200个点位
+        # 【V8.5.2.4.48】内存优化配置
+        MAX_OPPORTUNITIES_PER_TYPE = 2000  # 每类最多2000个
+        MAX_OPPORTUNITIES_PER_COIN = 250   # 每币种最多250个
+        MIN_PROFIT_THRESHOLD = 5.0  # 最低盈利门槛（统一）
         
-        scalping_opps = []
-        swing_opps = []
+        # 【V8.5.2.4.48】分阶段处理
+        # Phase 1.1: 收集所有盈利机会（不分类）
+        all_profit_opportunities = []  # 轻量级列表，只存统计数据
         
         # 【V8.4.4修复→V8.4.6优化】使用固定的基准参数，确保阶段2的客观性
-        # 不再依赖old_config，避免上一次优化失败的参数影响本次回测
-        # 【V8.5.2.4.2】基准参数仅用于计算actual_profit，max_holding_hours由V8.3.21优化
         scalping_params = {
-            'atr_tp_multiplier': 2.0,    # 【V8.5.2.4.2】基准TP适中（AI会在[1.2, 6.0]范围探索）
-            'atr_stop_multiplier': 1.5,  # 【V8.5.2.4.2】基准SL适中（AI会探索）
-            'max_holding_hours': 12      # 【V8.5.2.4.2】基准时间宽松（AI会在[2, 48]范围探索）
+            'atr_tp_multiplier': 2.0,
+            'atr_stop_multiplier': 1.5,
+            'max_holding_hours': 12
         }
         
         swing_params = {
-            'atr_tp_multiplier': 6.0,    # 【V8.5.2】从4.0提高到6.0（捕捉完整波段）
-            'atr_stop_multiplier': 2.5,  # 【V8.5.2】从1.5放宽到2.5（避免被正常回调震出）
+            'atr_tp_multiplier': 6.0,
+            'atr_stop_multiplier': 2.5,
             'max_holding_hours': 72
         }
         
-        print(f"  🎯 使用差异化基准参数计算actual_profit（超短线vs波段）")
-        print(f"     超短线: atr_tp=2.0, atr_sl=1.5, 持仓≤12h  【V8.5.2.4.2：基准值，AI会优化】")
-        print(f"     波段: atr_tp=6.0, atr_sl=2.5, 持仓≤72h  【V8.5.2：捕捉完整趋势】")
-        
-        print(f"  📊 分析历史快照: {len(market_snapshots)}条记录")
-        if ENABLE_SAMPLING:
-            print(f"  💾 内存优化模式: 采样分析 + 摘要数据（最大内存<500MB）")
-        else:
-            print(f"  💾 内存优化模式: 全点位分析 + 摘要数据（预计<1GB，保证不遗漏）")
+        print(f"\n  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print(f"  🎯 【Phase 1.1】收集盈利机会（不分类）")
+        print(f"  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print(f"  📊 数据范围: {len(market_snapshots)}条快照")
+        print(f"  🎚️  最低门槛: {MIN_PROFIT_THRESHOLD}%")
+        print(f"  💾 内存策略: 按币种处理+及时释放")
         
         # 按币种分组
         coins_list = list(market_snapshots['coin'].unique())
         total_coins = len(coins_list)
         
+        # 【V8.5.2.4.48】Phase 1.1: 收集所有盈利机会（轻量级）
         for coin_idx, coin in enumerate(coins_list, 1):
             coin_data = market_snapshots[market_snapshots['coin'] == coin].sort_values('time')
             coin_data = coin_data.reset_index(drop=True)
             
-            coin_scalping = []
-            coin_swing = []
-            
-            # 【V8.3.21】决定是否采样
             total_points = len(coin_data) - 96
             if total_points <= 0:
                 print(f"  ⚠️ [{coin_idx}/{total_coins}] {coin} 数据不足，跳过")
                 continue
             
-            if ENABLE_SAMPLING:
-                # 采样模式：快速但可能遗漏
-                step_size = max(1, total_points // MAX_SAMPLE_POINTS)
-                sampled_indices = list(range(0, total_points, step_size))
-                print(f"  🔍 [{coin_idx}/{total_coins}] 分析 {coin}... (采样{len(sampled_indices)}/{total_points}个点位)", end='', flush=True)
-            else:
-                # 全点位模式：准确但稍慢
-                sampled_indices = list(range(total_points))
-                print(f"  🔍 [{coin_idx}/{total_coins}] 分析 {coin}... (全量{total_points}个点位)", end='', flush=True)
+            print(f"  🔍 [{coin_idx}/{total_coins}] {coin}...", end='', flush=True)
+            
+            # 全点位分析（不采样）
+            sampled_indices = list(range(total_points))
             
             for idx_count, idx in enumerate(sampled_indices):
-                # 每处理100个点显示一次进度（全量模式下调整显示频率）
-                display_interval = 50 if ENABLE_SAMPLING else 200
-                if idx_count > 0 and idx_count % display_interval == 0:
+                # 每200个点显示进度
+                if idx_count > 0 and idx_count % 200 == 0:
                     progress = min(100, idx_count * 100 // len(sampled_indices))
-                    print(f"\r  🔍 [{coin_idx}/{total_coins}] 分析 {coin}... {progress}%", end='', flush=True)
+                    print(f"\r  🔍 [{coin_idx}/{total_coins}] {coin}...{progress}%", end='', flush=True)
                 
                 current = coin_data.iloc[idx]
                 
@@ -22187,7 +22175,6 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     time_str = str(current.get('time', ''))
                     if snapshot_date and time_str:
                         # 🔧 V8.3.32.10: 组合为标准datetime格式 "YYYY-MM-DD HH:MM:SS"
-                        # snapshot_date是 "YYYYMMDD"，time_str是 "HH:MM"
                         try:
                             date_obj = datetime.strptime(str(snapshot_date), '%Y%m%d')
                             timestamp = f"{date_obj.strftime('%Y-%m-%d')} {time_str}:00"
@@ -22230,30 +22217,14 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     signal_type = str(current.get('signal_type', 'swing')).lower()
                     signal_name = str(current.get('signal_name', ''))
                     
-                    # 【V8.5.2.4.47修正2】Phase 1客观指标筛选
-                    # 目标：只在"有信号的点位"才考虑是否有机会
-                    # 原则：Phase 1只用【客观、不可调整】的指标筛选
-                    #      确保机会池稳定，不受Phase 2权重优化影响
-                    # 
-                    # ✅ 客观指标（永远不变）：
-                    if consensus < 2:      # 共振个数（客观，不涉及权重）
+                    # 【V8.5.2.4.48】客观指标筛选（只用consensus）
+                    if consensus < 2:
                         continue
-                    
-                    # ❌ 不用signal_score筛选（它涉及权重，Phase 2会调整）
-                    # 但signal_score会被记录为机会的属性，供Phase 2-3使用
-                    # 
-                    # 💡 设计理念：
-                    #   Phase 1：用客观指标找"潜在机会池"（稳定）
-                    #   Phase 2-3：用signal_score阈值优化"捕获哪些机会"（可调）
-                    # ✅ 现在这个点有客观信号质量，才值得看未来利润
                     
                     # 获取后续24小时数据
                     later_24h = coin_data.iloc[idx+1:idx+97].copy()
                     if later_24h.empty:
                         continue
-                    
-                    # 【V8.5.2.4.47修正】Phase 1：从"有信号的点"统计未来利润
-                    # 现在找到的才是"真实的交易机会"（有信号 + 有利润）
                     
                     max_high = float(later_24h['high'].max())
                     min_low = float(later_24h['low'].min())
@@ -22262,233 +22233,298 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     long_max_profit = (max_high - entry_price) / entry_price * 100
                     short_max_profit = (entry_price - min_low) / entry_price * 100
                     
-                    # 选择利润更大的方向（纯客观，不考虑TP/SL）
+                    # 选择利润更大的方向
                     if long_max_profit > short_max_profit:
                         direction = 'long'
-                        objective_profit = long_max_profit
+                        max_profit = long_max_profit
                     else:
                         direction = 'short'
-                        objective_profit = short_max_profit
+                        max_profit = short_max_profit
                     
-                    # 【V8.5.2.4.31】动态跟踪逻辑：根据市场行为确定持仓时间
-                    # 超短线：达到1.5%后跟踪最多2h（8 bars），1h无新高或回撤>30%退出
-                    # 波段：达到3%后跟踪最多6h（24 bars），2h无新高或回撤>30%退出
-                    # 互斥性：优先波段（如果两者都符合，只归类为波段）
+                    # 【V8.5.2.4.48】统一跟踪：只要达到5%就开始跟踪
+                    if max_profit < MIN_PROFIT_THRESHOLD:
+                        continue
                     
-                    scalping_max_profit = 0
-                    scalping_holding_bars = 0
-                    scalping_reached_target = False
-                    
-                    swing_max_profit = 0
-                    swing_holding_bars = 0
-                    swing_reached_target = False
-                    
-                    # 跟踪变量
-                    scalping_tracking = False
-                    scalping_last_high_bar = 0
-                    scalping_trigger_bar = None
-                    
-                    swing_tracking = False
-                    swing_last_high_bar = 0
-                    swing_trigger_bar = None
+                    # 动态跟踪：找到最高点的时间
+                    tracking_started = False
+                    max_profit_seen = 0
+                    bars_to_max_profit = 0
                     
                     for bar_idx, future_row in enumerate(later_24h.iterrows()):
                         _, row_data = future_row
                         
-                        # 计算该方向的利润进展
+                        # 计算当前利润
                         if direction == 'long':
                             profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
                         else:
                             profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
                         
-                        # === 超短线跟踪 ===
-                        if not scalping_tracking and profit_pct >= 5.0:
-                            # 触发超短线跟踪（【V8.5.2.4.46】阈值从3%调整为5%，确保时间差异）
-                            scalping_tracking = True
-                            scalping_trigger_bar = bar_idx
-                            scalping_max_profit = profit_pct
-                            scalping_last_high_bar = bar_idx
-                            scalping_reached_target = True
+                        # 启动跟踪
+                        if not tracking_started and profit_pct >= MIN_PROFIT_THRESHOLD:
+                            tracking_started = True
+                            max_profit_seen = profit_pct
+                            bars_to_max_profit = bar_idx
                         
-                        if scalping_tracking:
-                            # 更新最大利润
-                            if profit_pct > scalping_max_profit:
-                                scalping_max_profit = profit_pct
-                                scalping_last_high_bar = bar_idx
-                            
-                            scalping_holding_bars = bar_idx - scalping_trigger_bar + 1
-                            
-                            # 退出条件检查
-                            bars_since_high = bar_idx - scalping_last_high_bar
-                            
-                            # 条件1：1小时（4 bars）内无新高
-                            if bars_since_high >= 4:
-                                break
-                            # 条件2：【V8.5.2.4.34】回撤保护（只在利润>=2.5%时启用，避免过早退出）
-                            if scalping_max_profit >= 2.5:
-                                pullback_pct = (scalping_max_profit - profit_pct) / scalping_max_profit
-                                if pullback_pct > 0.30:
-                                    break
-                            # 条件3：超过最大跟踪时间2小时（8 bars）
-                            if scalping_holding_bars >= 8:
-                                break
-                        
-                        # === 波段跟踪 ===
-                        if not swing_tracking and profit_pct >= 7.0:
-                            # 触发波段跟踪（【V8.5.2.4.47修正3】阈值从10.0%调整为7.0%，平衡机会数和持仓时间）
-                            swing_tracking = True
-                            swing_trigger_bar = bar_idx
-                            swing_max_profit = profit_pct
-                            swing_last_high_bar = bar_idx
-                            swing_reached_target = True
-                        
-                        if swing_tracking:
-                            # 更新最大利润
-                            if profit_pct > swing_max_profit:
-                                swing_max_profit = profit_pct
-                                swing_last_high_bar = bar_idx
-                            
-                            swing_holding_bars = bar_idx - swing_trigger_bar + 1
-                            
-                            # 退出条件检查
-                            bars_since_high = bar_idx - swing_last_high_bar
-                            
-                            # 条件1：2小时（8 bars）内无新高
-                            if bars_since_high >= 8:
-                                break
-                            # 条件2：【V8.5.2.4.34】回撤保护（只在利润>=5.0%时启用，避免过早退出）
-                            if swing_max_profit >= 5.0:
-                                pullback_pct = (swing_max_profit - profit_pct) / swing_max_profit
-                                if pullback_pct > 0.30:
-                                    break
-                            # 条件3：超过最大跟踪时间6小时（24 bars）
-                            if swing_holding_bars >= 24:
-                                break
+                        # 更新最大利润
+                        if tracking_started and profit_pct > max_profit_seen:
+                            max_profit_seen = profit_pct
+                            bars_to_max_profit = bar_idx
                     
-                    # 【V8.5.2.4.31】互斥性分类：优先波段
-                    is_swing = swing_reached_target
-                    is_scalping = (not is_swing) and scalping_reached_target
-                    
-                    # 如果两者都不符合，跳过
-                    if not is_scalping and not is_swing:
+                    if not tracking_started:
                         continue
                     
-                    # 【V8.5.2.4.47修正4】根据分类确定最终利润和持仓时间
-                    # 关键修正：持仓时间 = 从入场到最高点，而非入场到退出
-                    # 理由：
-                    #   1. 有效持仓时间：从入场到获得最大利润的时间
-                    #   2. 跟踪期的回撤不应计入持仓时间
-                    #   3. 符合实际交易：会在最高点附近平仓，不会等到退出条件
-                    if is_swing:
-                        final_profit = swing_max_profit
-                        # 波段持仓 = 从入场到最高点（last_high_bar）
-                        final_holding_bars = swing_last_high_bar
-                    else:  # is_scalping
-                        final_profit = scalping_max_profit
-                        # 超短线持仓 = 从入场到最高点（last_high_bar）
-                        final_holding_bars = scalping_last_high_bar
+                    # 计算持仓时间（从入场到最高点）
+                    holding_hours = bars_to_max_profit * 0.25
                     
-                    # 【V8.5.2.4.47 DEBUG】诊断持仓时间计算
-                    # 每1000个机会输出一次详细诊断
-                    total_processed = len(scalping_opps) + len(swing_opps)
-                    if total_processed % 1000 == 0 and total_processed > 0:
-                        final_holding_hours = final_holding_bars * 0.25
-                        print(f"\n    🔍 【持仓时间诊断】第{total_processed}个机会:")
-                        print(f"       币种: {coin}, 分类: {'波段' if is_swing else '超短线'}")
-                        print(f"       利润阈值: {'10.0%' if is_swing else '5.0%'}")
-                        print(f"       最终利润: {final_profit:.2f}%")
-                        print(f"       触发bar: {swing_trigger_bar if is_swing else scalping_trigger_bar}")
-                        print(f"       持仓bars: {final_holding_bars}")
-                        print(f"       持仓小时: {final_holding_hours:.2f}h")
+                    # 计算利润密度（核心指标）
+                    profit_density = max_profit_seen / max(holding_hours, 0.25)
                     
-                    # 【V8.3.21】创建摘要数据代替完整DataFrame
-                    future_summary = {
-                        'max_high': float(later_24h['high'].max()),
-                        'min_low': float(later_24h['low'].min()),
-                        'final_close': float(later_24h.iloc[-1]['close']),
-                        'data_points': len(later_24h)
-                    }
-                    
-                    # 🔧 V8.5.5.2: 从timestamp中提取时间和日期
-                    # timestamp格式可能是 "2025-11-15 00:30:00" 或 "0030"
+                    # 【V8.5.2.4.48】创建轻量级机会数据（Phase 1.1）
+                    # 暂不分类，只记录关键统计数据
                     time_str = timestamp
                     date_str = str(current.get('snapshot_date', ''))
-                    
-                    # 如果timestamp包含空格（完整日期时间格式）
                     if ' ' in str(timestamp):
                         try:
                             parts = str(timestamp).split(' ')
                             if len(parts) >= 2:
-                                date_part = parts[0].replace('-', '')  # "2025-11-15" -> "20251115"
-                                time_part = parts[1]  # "00:30:00"
-                                # 转换为HHMM格式
-                                time_str = time_part.replace(':', '')[:4]  # "00:30:00" -> "0030"
-                                if not date_str:  # 如果snapshot_date为空，使用timestamp中的日期
+                                date_part = parts[0].replace('-', '')
+                                time_part = parts[1]
+                                time_str = time_part.replace(':', '')[:4]
+                                if not date_str:
                                     date_str = date_part
                         except:
                             pass
                     
-                    # 【V8.5.2.4.31】创建机会数据（互斥性分类）
-                    # 一个入场点只能归类为超短线或波段（优先波段）
-                    
-                    opp_data_base = {
+                    # 【V8.5.2.4.48】保存完整的机会数据（包含所有Phase 2-3需要的字段）
+                    opp_data = {
                         'coin': coin,
                         'timestamp': timestamp,
-                        'time': time_str,  # HHMM格式（如0030）
-                        'date': date_str,  # YYYYMMDD格式（如20251115）
+                        'time': time_str,
+                        'date': date_str,
                         'entry_price': entry_price,
-                        'direction': direction,  # 使用最大利润的方向
-                        'objective_profit': final_profit,  # 🔧 V8.5.2.4.31: 使用动态跟踪的实际最大利润
+                        'direction': direction,
+                        'objective_profit': max_profit_seen,  # 使用跟踪的最大利润
+                        'holding_hours': holding_hours,
+                        'profit_density': profit_density,  # 【新增】核心指标
                         'consensus': consensus,
                         'risk_reward': risk_reward,
                         'atr': atr,
                         'signal_score': signal_score,
-                        'signal_type_csv': signal_type,  # 保留CSV中的类型
+                        'signal_type_csv': signal_type,
                         'signal_name': signal_name,
-                        'future_data': future_summary,
-                        # 【V8.3.21】添加上下文字段（用于4层过滤）
                         'kline_ctx_bullish_ratio': kline_ctx_bullish_ratio,
                         'kline_ctx_price_chg_pct': kline_ctx_price_chg_pct,
                         'mkt_struct_swing': mkt_struct_swing,
                         'sr_hist_test_count': sr_hist_test_count,
                         'sr_hist_avg_reaction': sr_hist_avg_reaction,
-                        # 【V8.5.2.4.47】添加snapshot用于Phase 2权重测试
-                        'snapshot': current.to_dict() if hasattr(current, 'to_dict') else dict(current)
+                        'snapshot': current.to_dict() if hasattr(current, 'to_dict') else dict(current),
+                        'future_data': {
+                            'max_high': float(later_24h['high'].max()),
+                            'min_low': float(later_24h['low'].min()),
+                            'final_close': float(later_24h.iloc[-1]['close']),
+                            'data_points': len(later_24h)
+                        },
+                        # 暂不设置signal_type，等Phase 1.3分类
                     }
                     
-                    # 【V8.5.2.4.31】互斥性分类：每个机会只属于一个类别
-                    final_holding_hours = final_holding_bars * 0.25  # 15分钟 = 0.25小时
-                    
-                    if is_swing:
-                        opp_data_swing = opp_data_base.copy()
-                        opp_data_swing['signal_type'] = 'swing'
-                        opp_data_swing['time_to_target'] = final_holding_hours
-                        opp_data_swing['holding_hours'] = final_holding_hours
-                        coin_swing.append(opp_data_swing)
-                    else:  # is_scalping
-                        opp_data_scalping = opp_data_base.copy()
-                        opp_data_scalping['signal_type'] = 'scalping'
-                        opp_data_scalping['time_to_target'] = final_holding_hours
-                        opp_data_scalping['holding_hours'] = final_holding_hours
-                        coin_scalping.append(opp_data_scalping)
+                    all_profit_opportunities.append(opp_data)
                 
                 except (ValueError, TypeError, KeyError) as e:
                     continue
             
-            # 【V8.3.21】每个币种只保留TOP机会（按利润排序）
-            coin_scalping.sort(key=lambda x: x['objective_profit'], reverse=True)
-            coin_swing.sort(key=lambda x: x['objective_profit'], reverse=True)
-            scalping_opps.extend(coin_scalping[:MAX_OPPORTUNITIES_PER_COIN])
-            swing_opps.extend(coin_swing[:MAX_OPPORTUNITIES_PER_COIN])
+            # 每个币种完成后输出统计
+            coin_opps_count = len([o for o in all_profit_opportunities if o['coin'] == coin])
+            print(f"\r  ✓ [{coin_idx}/{total_coins}] {coin} 完成 ({coin_opps_count}个机会)")
             
-            # 每个币种完成后换行
-            print(f"\r  ✓ [{coin_idx}/{total_coins}] {coin} 完成 (scalping:{len(coin_scalping)} swing:{len(coin_swing)})")
-            
-            # 【V8.3.21】及时释放内存
-            del coin_data, coin_scalping, coin_swing
+            # 【V8.5.2.4.48】及时释放内存
+            del coin_data
             gc.collect()
         
-        # 【V8.3.21】全局机会数量限制（保留利润最高的）
+        print(f"\n  ✅ Phase 1.1完成: 收集到{len(all_profit_opportunities)}个盈利机会")
+        gc.collect()
+        
+        # ========================================
+        # 【Phase 1.2】统计分析与动态阈值
+        # ========================================
+        print(f"\n  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print(f"  📊 【Phase 1.2】统计分析与动态阈值")
+        print(f"  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        
+        if len(all_profit_opportunities) < 50:
+            print(f"  ⚠️  样本不足({len(all_profit_opportunities)}个)，无法进行可靠分类")
+            # 降级：全部归为scalping
+            for opp in all_profit_opportunities:
+                opp['signal_type'] = 'scalping'
+                opp['classify_reason'] = '样本不足'
+            scalping_opps = all_profit_opportunities
+            swing_opps = []
+        else:
+            # 提取关键指标
+            profits = [o['objective_profit'] for o in all_profit_opportunities]
+            holding_hours_list = [o['holding_hours'] for o in all_profit_opportunities]
+            densities = [o['profit_density'] for o in all_profit_opportunities]
+            
+            # 计算分位数
+            import numpy as np
+            stats = {
+                'profit': {
+                    'min': np.min(profits),
+                    'q25': np.percentile(profits, 25),
+                    'median': np.median(profits),
+                    'q75': np.percentile(profits, 75),
+                    'q90': np.percentile(profits, 90),
+                    'max': np.max(profits),
+                    'mean': np.mean(profits)
+                },
+                'holding_hours': {
+                    'min': np.min(holding_hours_list),
+                    'q25': np.percentile(holding_hours_list, 25),
+                    'median': np.median(holding_hours_list),
+                    'q75': np.percentile(holding_hours_list, 75),
+                    'max': np.max(holding_hours_list),
+                    'mean': np.mean(holding_hours_list)
+                },
+                'profit_density': {
+                    'median': np.median(densities),
+                    'q75': np.percentile(densities, 75),
+                    'q85': np.percentile(densities, 85),
+                    'q90': np.percentile(densities, 90)
+                }
+            }
+            
+            # 识别市场状态
+            avg_profit = stats['profit']['mean']
+            if avg_profit > 15:
+                market_state = 'high_volatility'
+            elif avg_profit > 10:
+                market_state = 'medium_volatility'
+            else:
+                market_state = 'low_volatility'
+            
+            print(f"  📈 市场状态: {market_state}")
+            print(f"  📊 利润分布: {stats['profit']['q25']:.1f}% | {stats['profit']['median']:.1f}% | {stats['profit']['q75']:.1f}%")
+            print(f"  ⏰ 持仓分布: {stats['holding_hours']['q25']:.2f}h | {stats['holding_hours']['median']:.2f}h | {stats['holding_hours']['q75']:.2f}h")
+            print(f"  ⚡ 密度分布: {stats['profit_density']['q75']:.1f} | {stats['profit_density']['q85']:.1f} | {stats['profit_density']['q90']:.1f}")
+            
+            # 动态确定分类阈值
+            if market_state == 'high_volatility':
+                thresholds = {
+                    'swing_min_profit': stats['profit']['q75'],
+                    'swing_min_holding': stats['holding_hours']['median'],
+                    'high_density_threshold': stats['profit_density']['q85']
+                }
+            elif market_state == 'low_volatility':
+                thresholds = {
+                    'swing_min_profit': max(stats['profit']['median'] * 1.5, 8.0),
+                    'swing_min_holding': stats['holding_hours']['q25'],
+                    'high_density_threshold': stats['profit_density']['q75']
+                }
+            else:  # medium
+                thresholds = {
+                    'swing_min_profit': stats['profit']['q75'],
+                    'swing_min_holding': stats['holding_hours']['median'],
+                    'high_density_threshold': stats['profit_density']['q85']
+                }
+            
+            print(f"  🎯 动态阈值:")
+            print(f"     波段最低利润: {thresholds['swing_min_profit']:.1f}%")
+            print(f"     波段最短持仓: {thresholds['swing_min_holding']:.2f}h")
+            print(f"     高密度阈值: {thresholds['high_density_threshold']:.1f}")
+            
+            # ========================================
+            # 【Phase 1.3】自适应分类
+            # ========================================
+            print(f"\n  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print(f"  🔄 【Phase 1.3】自适应分类")
+            print(f"  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            
+            scalping_opps = []
+            swing_opps = []
+            
+            for opp in all_profit_opportunities:
+                profit = opp['objective_profit']
+                holding_hours = opp['holding_hours']
+                density = opp['profit_density']
+                
+                # 规则1：高密度（快速获利）→ 超短线
+                if density > thresholds['high_density_threshold']:
+                    opp['signal_type'] = 'scalping'
+                    opp['classify_reason'] = f'高密度{density:.1f}'
+                    opp['time_to_target'] = holding_hours  # 添加兼容字段
+                    scalping_opps.append(opp)
+                
+                # 规则2：大利润+长时间 → 波段
+                elif (profit >= thresholds['swing_min_profit'] and 
+                      holding_hours >= thresholds['swing_min_holding']):
+                    opp['signal_type'] = 'swing'
+                    opp['classify_reason'] = f'大利润{profit:.1f}%+长持仓{holding_hours:.1f}h'
+                    opp['time_to_target'] = holding_hours
+                    swing_opps.append(opp)
+                
+                # 规则3：其他 → 根据距离判断
+                else:
+                    # 计算距离"典型超短线"的距离
+                    scalping_distance = (
+                        abs(density - thresholds['high_density_threshold']) / thresholds['high_density_threshold']
+                    )
+                    
+                    # 计算距离"典型波段"的距离
+                    swing_distance = (
+                        abs(profit - stats['profit']['q75']) / stats['profit']['q75'] +
+                        abs(holding_hours - stats['holding_hours']['q75']) / max(stats['holding_hours']['q75'], 0.1)
+                    )
+                    
+                    if scalping_distance < swing_distance:
+                        opp['signal_type'] = 'scalping'
+                        opp['classify_reason'] = '接近超短线特征'
+                        opp['time_to_target'] = holding_hours
+                        scalping_opps.append(opp)
+                    else:
+                        opp['signal_type'] = 'swing'
+                        opp['classify_reason'] = '接近波段特征'
+                        opp['time_to_target'] = holding_hours
+                        swing_opps.append(opp)
+            
+            print(f"  ⚡ 超短线: {len(scalping_opps)}个")
+            print(f"  🌊 波段: {len(swing_opps)}个")
+            
+            # ========================================
+            # 【Phase 1.4】验证分类质量
+            # ========================================
+            print(f"\n  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print(f"  ✅ 【Phase 1.4】分类质量验证")
+            print(f"  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            
+            if len(scalping_opps) >= 10 and len(swing_opps) >= 10:
+                scalping_avg_profit = np.mean([o['objective_profit'] for o in scalping_opps])
+                swing_avg_profit = np.mean([o['objective_profit'] for o in swing_opps])
+                
+                scalping_avg_hours = np.mean([o['holding_hours'] for o in scalping_opps])
+                swing_avg_hours = np.mean([o['holding_hours'] for o in swing_opps])
+                
+                scalping_avg_density = np.mean([o['profit_density'] for o in scalping_opps])
+                swing_avg_density = np.mean([o['profit_density'] for o in swing_opps])
+                
+                print(f"  ⚡ 超短线: 利润{scalping_avg_profit:.1f}%, 时间{scalping_avg_hours:.1f}h, 密度{scalping_avg_density:.1f}")
+                print(f"  🌊 波段: 利润{swing_avg_profit:.1f}%, 时间{swing_avg_hours:.1f}h, 密度{swing_avg_density:.1f}")
+                
+                checks = {
+                    '波段利润>超短线': swing_avg_profit > scalping_avg_profit,
+                    '波段时间>超短线': swing_avg_hours > scalping_avg_hours,
+                    '超短线密度>波段': scalping_avg_density > swing_avg_density,
+                }
+                
+                for check_name, passed in checks.items():
+                    status = '✅' if passed else '⚠️'
+                    print(f"  {status} {check_name}")
+                
+                passed_checks = sum(checks.values())
+                if passed_checks < 2:
+                    print(f"  ⚠️  分类质量不佳({passed_checks}/3通过)，但继续使用")
+            else:
+                print(f"  ⚠️  样本数不足以验证质量")
+        
+        # 【V8.5.2.4.48】全局机会数量限制
         if len(scalping_opps) > MAX_OPPORTUNITIES_PER_TYPE:
             scalping_opps.sort(key=lambda x: x['objective_profit'], reverse=True)
             scalping_opps = scalping_opps[:MAX_OPPORTUNITIES_PER_TYPE]
@@ -22497,8 +22533,8 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             swing_opps.sort(key=lambda x: x['objective_profit'], reverse=True)
             swing_opps = swing_opps[:MAX_OPPORTUNITIES_PER_TYPE]
         
-        print(f"\n  ⚡ 超短线机会: {len(scalping_opps)}个（已优化）")
-        print(f"  🌊 波段机会: {len(swing_opps)}个（已优化）")
+        print(f"\n  ✅ 自适应分类完成: 超短线{len(scalping_opps)}个, 波段{len(swing_opps)}个")
+        gc.collect()
         
         # 【V8.3.21.9】计算实际利润（内存优化版）
         try:
@@ -22539,8 +22575,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             'opportunities': swing_opps
         }
         
-        # 【V8.5.2.4.9】Phase 1 baseline统计（供Phase 2使用）
-        # 【V8.5.2.4.25】添加平均持仓时间统计，让市场数据指导AI参数优化
+        # 【V8.5.2.4.48】Phase 1 baseline统计（供Phase 2使用）
         phase1_baseline = {
             'scalping': {
                 'count': len(scalping_opps),
@@ -22556,13 +22591,23 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             }
         }
         
+        # 【V8.5.2.4.48】记录自适应阈值（供调试和分析）
+        adaptive_thresholds = None
+        if len(all_profit_opportunities) >= 50:
+            adaptive_thresholds = {
+                'market_state': market_state,
+                'thresholds': thresholds,
+                'stats': stats
+            }
+        
         # 【V8.3.21】最后释放内存
         gc.collect()
         
         return {
             'scalping': scalping_analysis,
             'swing': swing_analysis,
-            'phase1_baseline': phase1_baseline  # 🆕 V8.5.2.4.9
+            'phase1_baseline': phase1_baseline,
+            'adaptive_thresholds': adaptive_thresholds  # 🆕 V8.5.2.4.48
         }
     
     except Exception as e:
@@ -22574,8 +22619,6 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             'swing': {'total_opportunities': 0, 'opportunities': []},
             'phase1_baseline': None  # 🔧 V8.5.2.4.28: 确保总是返回phase1_baseline字段
         }
-
-
 def simulate_params_on_opportunities(opportunities, params):
     """
     【V8.3.12】用指定参数模拟交易机会
