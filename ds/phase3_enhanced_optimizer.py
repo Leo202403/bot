@@ -654,56 +654,79 @@ def optimize_for_signal_type(
         optimal_tp = scalping_optimal.get('atr_tp_multiplier', 12.0)  # Phase 2找到的最优值
         optimal_sl = scalping_optimal.get('atr_stop_multiplier', 2.0)
         
-        # 【V8.5.2.4.72】Phase 3新策略：多维度智能筛选 + 微调TP/SL
-        # 目标：在Phase 2基础上提高利润（当前6.46% → 目标8-12%）
-        # 策略：增加筛选维度 + 微调TP寻找最优组合
+        # 【V8.5.2.4.73】Phase 3全维度智能筛选 + 微调TP/SL
+        # 目标：在Phase 2基础上提高利润（当前6.46% → 目标10-15%）
+        # 策略：K线形态+趋势强度+支撑阻力+利润密度+微调TP
         param_grid = {
-            # 核心筛选条件（逐步提高）
-            'min_indicator_consensus': [1, 2, 3],             # 共振度：越高越可靠
-            'min_signal_score': [75, 80, 85, 90],            # 【V8.5.2.4.72】提高最低门槛70→75
+            # 核心筛选条件
+            'min_indicator_consensus': [1, 2, 3],             # 共振度
+            'min_signal_score': [75, 80, 85],                # 信号分（减少1个，因为增加其他维度）
             
             # 质量控制条件
-            'min_risk_reward': [1.5, 2.0, 2.5],              # 【V8.5.2.4.72】提高R:R要求1.0→1.5
-            'min_profit_density': [8.0, 10.0, 12.0],         # 【V8.5.2.4.72】新增：利润密度筛选（超短线特征）
+            'min_risk_reward': [1.5, 2.0],                   # R:R（减少1个）
+            'min_profit_density': [8.0, 10.0, 12.0],         # 利润密度（超短线）
+            
+            # 【V8.5.2.4.73】新增：K线形态筛选
+            'require_strong_pattern': [False, True],          # 是否必须有强K线形态
+            # 强形态定义：pin_bar或engulfing或breakout
+            
+            # 【V8.5.2.4.73】新增：趋势强度筛选  
+            'min_trend_strength': ['any', 'normal', 'strong'],  # 趋势强度要求
+            # any=不限制, normal=至少有趋势, strong=强势趋势
+            
+            # 【V8.5.2.4.73】新增：支撑/阻力位筛选
+            'require_near_sr': [False, True],                 # 是否必须靠近支撑/阻力位
+            # 定义：价格在S/R的±3%范围内
             
             # TP/SL优化
-            'atr_tp_multiplier': [optimal_tp * 0.9, optimal_tp, optimal_tp * 1.1],  # TP微调
-            'atr_stop_multiplier': [optimal_sl],              # SL保持不变
-            'max_holding_hours': [int(avg_holding)],          # 固定为实际持仓时间
-            'trailing_stop_enabled': [False]                  # 简化
+            'atr_tp_multiplier': [optimal_tp * 0.9, optimal_tp, optimal_tp * 1.1],
+            'atr_stop_multiplier': [optimal_sl],
+            'max_holding_hours': [int(avg_holding)],
+            'trailing_stop_enabled': [False]
         }
-        print(f"     📐 参数网格: score={param_grid['min_signal_score']}, consensus={param_grid['min_indicator_consensus']}")
-        print(f"     💡 【V8.5.2.4.72】多维度筛选: R:R≥{param_grid['min_risk_reward']}, 密度≥{param_grid['min_profit_density']}")
+        print(f"     📐 基础条件: score≥{param_grid['min_signal_score']}, consensus≥{param_grid['min_indicator_consensus']}")
+        print(f"     💡 质量控制: R:R≥{param_grid['min_risk_reward']}, 密度≥{param_grid['min_profit_density']}")
+        print(f"     🎨 【V8.5.2.4.73】K线形态: {param_grid['require_strong_pattern']}, 趋势强度: {param_grid['min_trend_strength']}, S/R: {param_grid['require_near_sr']}")
         print(f"     🎯 TP微调（±10%）: 范围[{optimal_tp*0.9:.1f}, {optimal_tp:.1f}, {optimal_tp*1.1:.1f}], SL={optimal_sl:.1f}")
-        print(f"     🚀 目标：提高平均利润（当前6.46% → 目标8-12%），过滤低质量信号")
+        print(f"     🚀 目标：全维度筛选，提高平均利润（当前6.46% → 目标10-15%）")
     else:  # swing
         # 【V8.5.2.4.68】固定Phase 2最优TP/SL，重点测试筛选条件
         swing_optimal = optimal_tp_sl.get('swing', {})
         optimal_tp = swing_optimal.get('atr_tp_multiplier', 18.0)  # Phase 2找到的最优值
         optimal_sl = swing_optimal.get('atr_stop_multiplier', 2.5)
         
-        # 【V8.5.2.4.72】Phase 3新策略：多维度智能筛选 + 微调TP/SL
-        # 目标：在Phase 2基础上提高利润（当前6.49% → 目标8-12%）
-        # 策略：增加筛选维度 + 微调TP寻找最优组合
+        # 【V8.5.2.4.73】Phase 3全维度智能筛选 + 微调TP/SL
+        # 目标：在Phase 2基础上提高利润（当前6.49% → 目标10-15%）
+        # 策略：K线形态+趋势强度+支撑阻力+利润密度+微调TP
         param_grid = {
-            # 核心筛选条件（逐步提高）
-            'min_indicator_consensus': [1, 2, 3],             # 共振度：越高越可靠
-            'min_signal_score': [80, 85, 90, 95],            # 【V8.5.2.4.72】提高最低门槛75→80（波段要求更高）
+            # 核心筛选条件
+            'min_indicator_consensus': [1, 2, 3],             # 共振度
+            'min_signal_score': [80, 85, 90],                # 信号分（减少1个）
             
             # 质量控制条件
-            'min_risk_reward': [1.5, 2.0, 2.5],              # 【V8.5.2.4.72】提高R:R要求1.0→1.5
-            'min_profit_density': [0.5, 0.8, 1.0],           # 【V8.5.2.4.72】新增：利润密度筛选（波段特征）
+            'min_risk_reward': [1.5, 2.0],                   # R:R（减少1个）
+            'min_profit_density': [0.5, 0.8, 1.0],           # 利润密度（波段）
+            
+            # 【V8.5.2.4.73】新增：K线形态筛选
+            'require_strong_pattern': [False, True],          # 是否必须有强K线形态
+            
+            # 【V8.5.2.4.73】新增：趋势强度筛选
+            'min_trend_strength': ['any', 'normal', 'strong'],  # 趋势强度要求
+            
+            # 【V8.5.2.4.73】新增：支撑/阻力位筛选
+            'require_near_sr': [False, True],                 # 是否必须靠近S/R
             
             # TP/SL优化
-            'atr_tp_multiplier': [optimal_tp * 0.9, optimal_tp, optimal_tp * 1.1],  # TP微调
-            'atr_stop_multiplier': [optimal_sl],              # SL保持不变
-            'max_holding_hours': [int(avg_holding)],          # 固定为实际持仓时间
-            'trailing_stop_enabled': [False]                  # 简化
+            'atr_tp_multiplier': [optimal_tp * 0.9, optimal_tp, optimal_tp * 1.1],
+            'atr_stop_multiplier': [optimal_sl],
+            'max_holding_hours': [int(avg_holding)],
+            'trailing_stop_enabled': [False]
         }
-        print(f"     📐 参数网格: score={param_grid['min_signal_score']}, consensus={param_grid['min_indicator_consensus']}")
-        print(f"     💡 【V8.5.2.4.72】多维度筛选: R:R≥{param_grid['min_risk_reward']}, 密度≥{param_grid['min_profit_density']}")
+        print(f"     📐 基础条件: score≥{param_grid['min_signal_score']}, consensus≥{param_grid['min_indicator_consensus']}")
+        print(f"     💡 质量控制: R:R≥{param_grid['min_risk_reward']}, 密度≥{param_grid['min_profit_density']}")
+        print(f"     🎨 【V8.5.2.4.73】K线形态: {param_grid['require_strong_pattern']}, 趋势强度: {param_grid['min_trend_strength']}, S/R: {param_grid['require_near_sr']}")
         print(f"     🎯 TP微调（±10%）: 范围[{optimal_tp*0.9:.1f}, {optimal_tp:.1f}, {optimal_tp*1.1:.1f}], SL={optimal_sl:.1f}")
-        print(f"     🚀 目标：提高平均利润（当前6.49% → 目标8-12%），过滤低质量信号")
+        print(f"     🚀 目标：全维度筛选，提高平均利润（当前6.49% → 目标10-15%）")
         print(f"     🎯 目标：去掉杂音，提高平均利润（预期7% → 10-14%）")
     
     # 多起点搜索
@@ -716,39 +739,89 @@ def optimize_for_signal_type(
         # 由于TP/SL已固定，重点测试筛选条件组合
         test_combinations = []
         
-        # 【V8.5.2.4.72】测试所有筛选条件组合
+        # 【V8.5.2.4.73】测试所有筛选条件组合（8维度）
         for consensus in param_grid['min_indicator_consensus']:
             for signal_score in param_grid['min_signal_score']:
                 for risk_reward in param_grid['min_risk_reward']:
                     for profit_density in param_grid['min_profit_density']:
-                        for tp_multiplier in param_grid['atr_tp_multiplier']:
-                            test_params = {
-                                'min_indicator_consensus': consensus,
-                                'min_signal_score': signal_score,
-                                'min_risk_reward': risk_reward,
-                                'min_profit_density': profit_density,        # 【V8.5.2.4.72】新增
-                                'atr_tp_multiplier': tp_multiplier,          # 【V8.5.2.4.72】改为遍历
-                                'atr_stop_multiplier': param_grid['atr_stop_multiplier'][0],
-                                'max_holding_hours': param_grid['max_holding_hours'][0],
-                                'trailing_stop_enabled': False
-                            }
-                            test_combinations.append(test_params)
+                        for require_pattern in param_grid['require_strong_pattern']:
+                            for trend_strength in param_grid['min_trend_strength']:
+                                for require_sr in param_grid['require_near_sr']:
+                                    for tp_multiplier in param_grid['atr_tp_multiplier']:
+                                        test_params = {
+                                            'min_indicator_consensus': consensus,
+                                            'min_signal_score': signal_score,
+                                            'min_risk_reward': risk_reward,
+                                            'min_profit_density': profit_density,
+                                            'require_strong_pattern': require_pattern,    # 【V8.5.2.4.73】新增
+                                            'min_trend_strength': trend_strength,         # 【V8.5.2.4.73】新增
+                                            'require_near_sr': require_sr,                # 【V8.5.2.4.73】新增
+                                            'atr_tp_multiplier': tp_multiplier,
+                                            'atr_stop_multiplier': param_grid['atr_stop_multiplier'][0],
+                                            'max_holding_hours': param_grid['max_holding_hours'][0],
+                                            'trailing_stop_enabled': False
+                                        }
+                                        test_combinations.append(test_params)
         
-        # 【V8.5.2.4.72】测试组合数量：4×3×3×3×3=324组（score×consensus×R:R×密度×TP）
-        # 增加利润密度和TP维度，实现多维度智能筛选
-        print(f"     📊 测试组合数: {len(test_combinations)}组 (score × consensus × R:R × 密度 × TP)")
+        # 【V8.5.2.4.73】测试组合数量：3×3×2×3×2×3×2×3=1944组（8维度全面测试）
+        # 维度：score×consensus×R:R×密度×K线形态×趋势强度×S/R×TP
+        print(f"     📊 测试组合数: {len(test_combinations)}组 (8维度：基础+形态+趋势+S/R+TP)")
         
         # 测试每个组合
         best_for_this_start = None
         for params in test_combinations:
-            # 【V8.5.2.4.72】多维度筛选：signal_score + consensus + R:R + 利润密度
-            filtered_opps = [
-                opp for opp in opportunities
-                if (opp.get('consensus', 0) >= params['min_indicator_consensus'] and
-                    opp.get('signal_score', 0) >= params['min_signal_score'] and
-                    opp.get('risk_reward', 0) >= params.get('min_risk_reward', 0) and
-                    opp.get('profit_density', 0) >= params.get('min_profit_density', 0))  # 【V8.5.2.4.72】新增密度筛选
-            ]
+            # 【V8.5.2.4.73】全维度智能筛选：基础条件 + K线形态 + 趋势强度 + 支撑阻力
+            filtered_opps = []
+            for opp in opportunities:
+                # 基础条件
+                if opp.get('consensus', 0) < params['min_indicator_consensus']:
+                    continue
+                if opp.get('signal_score', 0) < params['min_signal_score']:
+                    continue
+                if opp.get('risk_reward', 0) < params.get('min_risk_reward', 0):
+                    continue
+                if opp.get('profit_density', 0) < params.get('min_profit_density', 0):
+                    continue
+                
+                # 【V8.5.2.4.73】K线形态筛选
+                if params.get('require_strong_pattern', False):
+                    snapshot = opp.get('snapshot', {})
+                    has_pin_bar = snapshot.get('has_pin_bar', False)
+                    has_engulfing = snapshot.get('has_engulfing', False)
+                    has_breakout = snapshot.get('has_breakout', False)
+                    if not (has_pin_bar or has_engulfing or has_breakout):
+                        continue  # 必须有强K线形态
+                
+                # 【V8.5.2.4.73】趋势强度筛选
+                min_strength = params.get('min_trend_strength', 'any')
+                if min_strength != 'any':
+                    snapshot = opp.get('snapshot', {})
+                    trend_4h_strength = snapshot.get('trend_4h_strength', 'weak')
+                    if min_strength == 'strong' and trend_4h_strength != 'strong':
+                        continue  # 必须是强势趋势
+                    elif min_strength == 'normal' and trend_4h_strength == 'weak':
+                        continue  # 至少有正常趋势
+                
+                # 【V8.5.2.4.73】支撑/阻力位筛选
+                if params.get('require_near_sr', False):
+                    snapshot = opp.get('snapshot', {})
+                    # 检查价格是否在S/R的±3%范围内
+                    current_price = snapshot.get('current_price', 0)
+                    if current_price > 0:
+                        sr = snapshot.get('support_resistance', {})
+                        nearest_support = sr.get('nearest_support') or {}
+                        nearest_resistance = sr.get('nearest_resistance') or {}
+                        support_price = nearest_support.get('price', 0)
+                        resistance_price = nearest_resistance.get('price', 0)
+                        
+                        near_support = support_price > 0 and abs(current_price - support_price) / current_price < 0.03
+                        near_resistance = resistance_price > 0 and abs(current_price - resistance_price) / current_price < 0.03
+                        
+                        if not (near_support or near_resistance):
+                            continue  # 必须靠近S/R
+                
+                # 通过所有筛选条件
+                filtered_opps.append(opp)
             
             if not filtered_opps:
                 continue
