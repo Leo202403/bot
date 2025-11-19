@@ -135,8 +135,9 @@ def validate_signal_type(
     # 4️⃣ 稳定性评分
     stability_score = calculate_stability_score(full_test, overfitting)
     
-    # 5️⃣ 最终判定
-    status = determine_status(full_test, overfitting, stability_score)
+    # 5️⃣ 最终判定（传入Phase 1的baseline利润）
+    phase2_baseline = phase1_stats.get('avg_profit', 0)
+    status = determine_status(full_test, overfitting, stability_score, phase2_baseline)
     
     return {
         'full_test': full_test,
@@ -144,7 +145,8 @@ def validate_signal_type(
         'late_period': late_period,
         'overfitting': overfitting,
         'stability_score': stability_score,
-        'status': status
+        'status': status,
+        'phase2_baseline_profit': phase2_baseline
     }
 
 
@@ -355,10 +357,13 @@ def calculate_stability_score(
 def determine_status(
     full_test: Dict,
     overfitting: Dict,
-    stability_score: float
+    stability_score: float,
+    phase2_baseline_profit: float = 0
 ) -> str:
     """
-    最终判定
+    【V8.5.2.4.74】最终判定（优化版）
+    
+    允许Phase 3利润略低于Phase 2（容忍-10%），只有严重下降才回退
     
     Returns:
         status: 'PASSED', 'WARNING', 'OVERFITTED', 'FAILED', 'UNSTABLE'
@@ -366,33 +371,51 @@ def determine_status(
     avg_profit = full_test.get('avg_profit', 0)
     is_overfitted = overfitting.get('is_overfitted', False)
     
-    if avg_profit <= 0:
+    # 计算相对Phase 2的利润变化
+    if phase2_baseline_profit > 0:
+        profit_change = (avg_profit - phase2_baseline_profit) / phase2_baseline_profit
+    else:
+        profit_change = 0
+    
+    # 【V8.5.2.4.74】新判定逻辑
+    reason = ""
+    
+    if avg_profit < 0:
+        # 绝对亏损
         status = "FAILED"
+        reason = f"参数测试出现亏损（{avg_profit:.2f}%）"
+    elif phase2_baseline_profit > 0 and profit_change < -0.2:
+        # 相对Phase 2下降超过20%
+        status = "FAILED"
+        reason = f"相对Phase 2下降{abs(profit_change)*100:.1f}%（超过20%阈值）"
     elif is_overfitted:
         status = "OVERFITTED"
+        reason = "参数过拟合（前后期差异过大）"
+    elif phase2_baseline_profit > 0 and -0.2 <= profit_change < -0.1:
+        # 下降10-20%，警告但不回退
+        status = "WARNING"
+        reason = f"相对Phase 2下降{abs(profit_change)*100:.1f}%（10-20%，可接受）"
     elif stability_score >= 70:
         status = "PASSED"
+        if phase2_baseline_profit > 0 and profit_change > 0:
+            reason = f"参数泛化能力良好，利润提升{profit_change*100:.1f}%"
+        else:
+            reason = "参数泛化能力良好"
     elif stability_score >= 50:
         status = "WARNING"
+        reason = "稳定性一般，建议监控"
     else:
         status = "UNSTABLE"
+        reason = "稳定性不足"
     
     print(f"\n  5️⃣ 最终判定: {status}", end="")
     if status == "PASSED":
         print(" ✅")
-        print(f"     参数泛化能力良好，可用于实盘交易")
     elif status == "WARNING":
         print(" ⚠️")
-        print(f"     参数基本可用，但建议监控稳定性")
-    elif status == "OVERFITTED":
+    else:
         print(" ❌")
-        print(f"     参数过拟合，建议回退到Phase 2参数")
-    elif status == "FAILED":
-        print(" ❌")
-        print(f"     参数测试失败（负利润），回退到保守参数")
-    else:  # UNSTABLE
-        print(" ⚠️")
-        print(f"     参数不稳定，建议使用保守配置")
+    print(f"     原因: {reason}")
     
     return status
 

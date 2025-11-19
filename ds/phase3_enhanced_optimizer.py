@@ -654,6 +654,9 @@ def optimize_for_signal_type(
         optimal_tp = scalping_optimal.get('atr_tp_multiplier', 12.0)  # Phase 2找到的最优值
         optimal_sl = scalping_optimal.get('atr_stop_multiplier', 2.0)
         
+        # 【V8.5.2.4.74】8维度筛选可选化
+        enable_advanced_filters = config.get('enable_advanced_filters', False)
+        
         # 【V8.5.2.4.73】Phase 3全维度智能筛选 + 微调TP/SL
         # 目标：在Phase 2基础上提高利润（当前6.46% → 目标10-15%）
         # 策略：K线形态+趋势强度+支撑阻力+利润密度+微调TP
@@ -666,34 +669,43 @@ def optimize_for_signal_type(
             'min_risk_reward': [1.5, 2.0],                   # R:R（减少1个）
             'min_profit_density': [8.0, 10.0, 12.0],         # 利润密度（超短线）
             
-            # 【V8.5.2.4.73】新增：K线形态筛选
-            'require_strong_pattern': [False, True],          # 是否必须有强K线形态
-            # 强形态定义：pin_bar或engulfing或breakout
-            
-            # 【V8.5.2.4.73】新增：趋势强度筛选  
-            'min_trend_strength': ['any', 'normal', 'strong'],  # 趋势强度要求
-            # any=不限制, normal=至少有趋势, strong=强势趋势
-            
-            # 【V8.5.2.4.73】新增：支撑/阻力位筛选
-            'require_near_sr': [False, True],                 # 是否必须靠近支撑/阻力位
-            # 定义：价格在S/R的±3%范围内
-            
             # TP/SL优化
             'atr_tp_multiplier': [optimal_tp * 0.9, optimal_tp, optimal_tp * 1.1],
             'atr_stop_multiplier': [optimal_sl],
             'max_holding_hours': [int(avg_holding)],
-            'trailing_stop_enabled': [False]
         }
+        
+        # 【V8.5.2.4.74】高级筛选（仅在启用时添加）
+        if enable_advanced_filters:
+            param_grid.update({
+                'require_strong_pattern': [False, True],
+                'min_trend_strength': ['any', 'normal', 'strong'],
+                'require_near_sr': [False, True],
+                'trailing_stop_enabled': [False, True],
+            })
+            print(f"     🎨 【V8.5.2.4.74】高级筛选已启用（8维度探索+移动止损）")
+        else:
+            # 【V8.5.2.4.74】默认启用移动止损，但不启用其他高级筛选
+            param_grid.update({
+                'require_strong_pattern': [False],
+                'min_trend_strength': ['any'],
+                'require_near_sr': [False],
+                'trailing_stop_enabled': [True],
+            })
+            print(f"     🎯 【V8.5.2.4.74】使用标准筛选+移动止损（5维度：基础+质量+TP）")
+        
         print(f"     📐 基础条件: score≥{param_grid['min_signal_score']}, consensus≥{param_grid['min_indicator_consensus']}")
         print(f"     💡 质量控制: R:R≥{param_grid['min_risk_reward']}, 密度≥{param_grid['min_profit_density']}")
-        print(f"     🎨 【V8.5.2.4.73】K线形态: {param_grid['require_strong_pattern']}, 趋势强度: {param_grid['min_trend_strength']}, S/R: {param_grid['require_near_sr']}")
         print(f"     🎯 TP微调（±10%）: 范围[{optimal_tp*0.9:.1f}, {optimal_tp:.1f}, {optimal_tp*1.1:.1f}], SL={optimal_sl:.1f}")
-        print(f"     🚀 目标：全维度筛选，提高平均利润（当前6.46% → 目标10-15%）")
+        print(f"     🚀 目标：{'全维度筛选' if enable_advanced_filters else '标准筛选+移动止损'}，提高平均利润（当前6.46% → 目标10-15%）")
     else:  # swing
         # 【V8.5.2.4.68】固定Phase 2最优TP/SL，重点测试筛选条件
         swing_optimal = optimal_tp_sl.get('swing', {})
         optimal_tp = swing_optimal.get('atr_tp_multiplier', 18.0)  # Phase 2找到的最优值
         optimal_sl = swing_optimal.get('atr_stop_multiplier', 2.5)
+        
+        # 【V8.5.2.4.74】8维度筛选可选化
+        enable_advanced_filters = config.get('enable_advanced_filters', False)
         
         # 【V8.5.2.4.73】Phase 3全维度智能筛选 + 微调TP/SL
         # 目标：在Phase 2基础上提高利润（当前6.49% → 目标10-15%）
@@ -707,26 +719,35 @@ def optimize_for_signal_type(
             'min_risk_reward': [1.5, 2.0],                   # R:R（减少1个）
             'min_profit_density': [0.5, 0.8, 1.0],           # 利润密度（波段）
             
-            # 【V8.5.2.4.73】新增：K线形态筛选
-            'require_strong_pattern': [False, True],          # 是否必须有强K线形态
-            
-            # 【V8.5.2.4.73】新增：趋势强度筛选
-            'min_trend_strength': ['any', 'normal', 'strong'],  # 趋势强度要求
-            
-            # 【V8.5.2.4.73】新增：支撑/阻力位筛选
-            'require_near_sr': [False, True],                 # 是否必须靠近S/R
-            
             # TP/SL优化
             'atr_tp_multiplier': [optimal_tp * 0.9, optimal_tp, optimal_tp * 1.1],
             'atr_stop_multiplier': [optimal_sl],
             'max_holding_hours': [int(avg_holding)],
-            'trailing_stop_enabled': [False]
         }
+        
+        # 【V8.5.2.4.74】高级筛选（仅在启用时添加）
+        if enable_advanced_filters:
+            param_grid.update({
+                'require_strong_pattern': [False, True],
+                'min_trend_strength': ['any', 'normal', 'strong'],
+                'require_near_sr': [False, True],
+                'trailing_stop_enabled': [False, True],
+            })
+            print(f"     🎨 【V8.5.2.4.74】高级筛选已启用（8维度探索+移动止损）")
+        else:
+            # 【V8.5.2.4.74】默认启用移动止损，但不启用其他高级筛选
+            param_grid.update({
+                'require_strong_pattern': [False],
+                'min_trend_strength': ['any'],
+                'require_near_sr': [False],
+                'trailing_stop_enabled': [True],
+            })
+            print(f"     🎯 【V8.5.2.4.74】使用标准筛选+移动止损（5维度：基础+质量+TP）")
+        
         print(f"     📐 基础条件: score≥{param_grid['min_signal_score']}, consensus≥{param_grid['min_indicator_consensus']}")
         print(f"     💡 质量控制: R:R≥{param_grid['min_risk_reward']}, 密度≥{param_grid['min_profit_density']}")
-        print(f"     🎨 【V8.5.2.4.73】K线形态: {param_grid['require_strong_pattern']}, 趋势强度: {param_grid['min_trend_strength']}, S/R: {param_grid['require_near_sr']}")
         print(f"     🎯 TP微调（±10%）: 范围[{optimal_tp*0.9:.1f}, {optimal_tp:.1f}, {optimal_tp*1.1:.1f}], SL={optimal_sl:.1f}")
-        print(f"     🚀 目标：全维度筛选，提高平均利润（当前6.49% → 目标10-15%）")
+        print(f"     🚀 目标：{'全维度筛选' if enable_advanced_filters else '标准筛选+移动止损'}，提高平均利润（当前6.49% → 目标10-15%）")
         print(f"     🎯 目标：去掉杂音，提高平均利润（预期7% → 10-14%）")
     
     # 多起点搜索

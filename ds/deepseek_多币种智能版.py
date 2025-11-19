@@ -20694,6 +20694,22 @@ def execute_portfolio_actions(
                 (m for m in market_data_list if m["symbol"] == symbol), None
             )
 
+            # 【V8.5.2.4.69 DEBUG】单个开仓信号分支验证market_data
+            print(f"  📊 【DEBUG】单个开仓信号分支获取market_data:")
+            print(f"     - symbol: {symbol}")
+            print(f"     - market_data_list长度: {len(market_data_list) if market_data_list else 0}")
+            print(f"     - market_data存在: {market_data is not None}")
+            if market_data:
+                print(f"     - indicator_consensus字段: {'indicator_consensus' in market_data}")
+                print(f"     - indicators字段: {'indicators' in market_data}")
+                print(f"     - consensus字段: {'consensus' in market_data}")
+                if 'indicator_consensus' in market_data:
+                    print(f"       → indicator_consensus值: {market_data['indicator_consensus']}")
+                if 'indicators' in market_data and isinstance(market_data.get('indicators'), dict):
+                    print(f"       → indicators.consensus值: {market_data['indicators'].get('consensus', 'MISSING')}")
+                if 'consensus' in market_data:
+                    print(f"       → consensus值: {market_data['consensus']}")
+
             if market_data:
                 signal_score, _, _, signal_classification = calculate_signal_score(market_data)
                 _execute_single_open_action_v55(
