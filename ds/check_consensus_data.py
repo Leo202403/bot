@@ -33,7 +33,8 @@ def check_consensus_data():
     snapshot_dir = data_dir / "market_snapshots"
     yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
     
-    snapshot_file = snapshot_dir / f"kline_snapshots_{yesterday}.csv"
+    # 【修复】实际文件名是 {date}.csv，而不是 kline_snapshots_{date}.csv
+    snapshot_file = snapshot_dir / f"{yesterday}.csv"
     if snapshot_file.exists():
         print(f"✓ 找到文件: {snapshot_file}")
         df = pd.read_csv(snapshot_file)
@@ -81,16 +82,26 @@ def check_consensus_data():
     else:
         print(f"✗ 文件不存在: {snapshot_file}")
     
-    # 检查2：昨日订单CSV
-    print(f"\n📊 检查2：昨日订单CSV文件")
+    # 检查2：交易历史CSV
+    print(f"\n📊 检查2：交易历史CSV文件")
     print("-" * 70)
     
-    orders_file = data_dir / f"orders_{yesterday}.csv"
+    # 【修复】实际文件是 trades_history.csv，不是按日期分开的
+    orders_file = data_dir / "trades_history.csv"
     if orders_file.exists():
         print(f"✓ 找到文件: {orders_file}")
         df = pd.read_csv(orders_file, encoding='utf-8-sig')
         print(f"  总行数: {len(df)}")
         print(f"  总列数: {len(df.columns)}")
+        
+        # 筛选昨日交易（开仓时间或平仓时间在昨日）
+        yesterday_formatted = f"{yesterday[:4]}-{yesterday[4:6]}-{yesterday[6:]}"
+        if '开仓时间' in df.columns:
+            yesterday_trades = df[
+                (df['开仓时间'].astype(str).str.contains(yesterday_formatted, na=False)) |
+                (df['平仓时间'].astype(str).str.contains(yesterday_formatted, na=False))
+            ]
+            print(f"  昨日交易: {len(yesterday_trades)}笔")
         
         # 检查关键字段
         print(f"\n  关键字段检查:")
@@ -111,10 +122,11 @@ def check_consensus_data():
             else:
                 print(f"    ✗ {field:25s}: 缺失 ⚠️")
         
-        # 显示前3行数据
-        print(f"\n  前3笔订单数据:")
-        for i in range(min(3, len(df))):
-            row = df.iloc[i]
+        # 显示昨日前3笔交易数据
+        print(f"\n  昨日前3笔交易数据:")
+        display_df = yesterday_trades if 'yesterday_trades' in locals() and len(yesterday_trades) > 0 else df
+        for i in range(min(3, len(display_df))):
+            row = display_df.iloc[i]
             coin = row.get('币种', 'N/A')
             
             # 尝试读取共振值（中文和英文）
@@ -132,17 +144,24 @@ def check_consensus_data():
             print(f"        signal_score: {score_en}")
         
         # 统计共振值分布（如果字段存在）
-        if '共振指标数' in df.columns:
-            print(f"\n  共振值分布（'共振指标数'）:")
-            consensus_counts = df['共振指标数'].value_counts().sort_index()
+        if 'yesterday_trades' in locals() and len(yesterday_trades) > 0:
+            stat_df = yesterday_trades
+            stat_label = "昨日交易"
+        else:
+            stat_df = df
+            stat_label = "全部交易"
+            
+        if '共振指标数' in stat_df.columns:
+            print(f"\n  共振值分布（'共振指标数' - {stat_label}）:")
+            consensus_counts = stat_df['共振指标数'].value_counts().sort_index()
             for value, count in consensus_counts.items():
-                percentage = count / len(df) * 100
+                percentage = count / len(stat_df) * 100
                 print(f"    {value}: {count:4d}笔 ({percentage:5.1f}%)")
-        elif 'indicator_consensus' in df.columns:
-            print(f"\n  共振值分布（'indicator_consensus'）:")
-            consensus_counts = df['indicator_consensus'].value_counts().sort_index()
+        elif 'indicator_consensus' in stat_df.columns:
+            print(f"\n  共振值分布（'indicator_consensus' - {stat_label}）:")
+            consensus_counts = stat_df['indicator_consensus'].value_counts().sort_index()
             for value, count in consensus_counts.items():
-                percentage = count / len(df) * 100
+                percentage = count / len(stat_df) * 100
                 print(f"    {value}: {count:4d}笔 ({percentage:5.1f}%)")
         else:
             print(f"\n  ⚠️ 两个共振字段都不存在！")
@@ -154,8 +173,8 @@ def check_consensus_data():
     print("-" * 70)
     
     if snapshot_dir.exists():
-        # 找到最新的CSV文件
-        csv_files = sorted(snapshot_dir.glob("kline_snapshots_*.csv"), reverse=True)
+        # 找到最新的CSV文件（文件名格式：YYYYMMDD.csv）
+        csv_files = sorted(snapshot_dir.glob("*.csv"), reverse=True)
         if csv_files:
             latest_file = csv_files[0]
             print(f"✓ 最新文件: {latest_file.name}")
