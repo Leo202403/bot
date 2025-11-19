@@ -19768,6 +19768,31 @@ def _execute_single_open_action_v55(
         take_profit = action.get("take_profit_price", 0)
 
         side = "long" if operation == "OPEN_LONG" else "short"
+        
+        # 🆕 V8.5.2.4.74: 修正AI返回的止损止盈位置错误
+        # 检查并自动修正止损止盈位置（如果AI搞反了）
+        if side == "short":
+            # 做空：止损应该 > 入场价，止盈应该 < 入场价
+            if stop_loss < entry_price and take_profit < entry_price:
+                # 如果止损也在入场价下方，说明位置可能搞反了
+                # 比较：较高的价格应该是止损，较低的应该是止盈
+                if stop_loss > take_profit:
+                    # 止损比止盈高，但都低于入场价 → 交换
+                    print(f"⚠️ 检测到止损止盈位置错误（做空时止损应高于入场价），自动修正")
+                    print(f"   修正前: 止损=${stop_loss:.2f}, 止盈=${take_profit:.2f}")
+                    stop_loss, take_profit = take_profit, stop_loss
+                    print(f"   修正后: 止损=${stop_loss:.2f}, 止盈=${take_profit:.2f}")
+        elif side == "long":
+            # 做多：止损应该 < 入场价，止盈应该 > 入场价
+            if stop_loss > entry_price and take_profit > entry_price:
+                # 如果止损也在入场价上方，说明位置可能搞反了
+                if stop_loss < take_profit:
+                    # 止损比止盈低，但都高于入场价 → 交换
+                    print(f"⚠️ 检测到止损止盈位置错误（做多时止损应低于入场价），自动修正")
+                    print(f"   修正前: 止损=${stop_loss:.2f}, 止盈=${take_profit:.2f}")
+                    stop_loss, take_profit = take_profit, stop_loss
+                    print(f"   修正后: 止损=${stop_loss:.2f}, 止盈=${take_profit:.2f}")
+        
         risk_reward = calculate_risk_reward_ratio(
             entry_price, stop_loss, take_profit, side
         )
@@ -20891,17 +20916,32 @@ def execute_portfolio_actions(
                     
                     # 🆕 V8.5.1.8.1: 获取信号数据
                     market_data = next((m for m in market_data_list if m["symbol"] == symbol), None) if market_data_list else None
+                    
+                    # 【V8.5.2.4.69 DEBUG】老逻辑OPEN_LONG分支添加DEBUG
+                    print(f"  📊 【DEBUG】老逻辑OPEN_LONG获取market_data:")
+                    print(f"     - market_data_list存在: {market_data_list is not None}")
+                    print(f"     - market_data存在: {market_data is not None}")
+                    if market_data:
+                        print(f"     - indicator_consensus字段: {'indicator_consensus' in market_data}")
+                        print(f"     - indicators字段: {'indicators' in market_data}")
+                    
                     if market_data:
                         score, _, _, _ = calculate_signal_score(market_data)
                         # 【V8.5.2.4.3】修复：多级回退获取consensus
                         indicator_consensus = 0
                         if 'indicators' in market_data and isinstance(market_data['indicators'], dict):
                             indicator_consensus = market_data['indicators'].get('consensus', 0)
+                            print(f"     ✓ 从indicators.consensus获取: {indicator_consensus}")
                         elif 'indicator_consensus' in market_data:
                             indicator_consensus = market_data.get('indicator_consensus', 0)
+                            print(f"     ✓ 从indicator_consensus获取: {indicator_consensus}")
                         elif 'consensus' in market_data:
                             indicator_consensus = market_data.get('consensus', 0)
+                            print(f"     ✓ 从consensus获取: {indicator_consensus}")
+                        else:
+                            print(f"     ❌ 所有共振字段都不存在！")
                     else:
+                        print(f"     ❌ market_data为None！")
                         score = 0
                         indicator_consensus = 0
                     
@@ -20992,17 +21032,32 @@ def execute_portfolio_actions(
                     
                     # 🆕 V8.5.1.8.1: 获取信号数据
                     market_data = next((m for m in market_data_list if m["symbol"] == symbol), None) if market_data_list else None
+                    
+                    # 【V8.5.2.4.69 DEBUG】老逻辑OPEN_SHORT分支添加DEBUG
+                    print(f"  📊 【DEBUG】老逻辑OPEN_SHORT获取market_data:")
+                    print(f"     - market_data_list存在: {market_data_list is not None}")
+                    print(f"     - market_data存在: {market_data is not None}")
+                    if market_data:
+                        print(f"     - indicator_consensus字段: {'indicator_consensus' in market_data}")
+                        print(f"     - indicators字段: {'indicators' in market_data}")
+                    
                     if market_data:
                         score, _, _, _ = calculate_signal_score(market_data)
                         # 【V8.5.2.4.3】修复：多级回退获取consensus
                         indicator_consensus = 0
                         if 'indicators' in market_data and isinstance(market_data['indicators'], dict):
                             indicator_consensus = market_data['indicators'].get('consensus', 0)
+                            print(f"     ✓ 从indicators.consensus获取: {indicator_consensus}")
                         elif 'indicator_consensus' in market_data:
                             indicator_consensus = market_data.get('indicator_consensus', 0)
+                            print(f"     ✓ 从indicator_consensus获取: {indicator_consensus}")
                         elif 'consensus' in market_data:
                             indicator_consensus = market_data.get('consensus', 0)
+                            print(f"     ✓ 从consensus获取: {indicator_consensus}")
+                        else:
+                            print(f"     ❌ 所有共振字段都不存在！")
                     else:
+                        print(f"     ❌ market_data为None！")
                         score = 0
                         indicator_consensus = 0
                     
