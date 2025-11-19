@@ -141,11 +141,12 @@ def phase3_enhanced_optimization(
         
         try:
             # 为这个起点做局部搜索（50组测试）
+            # 【V8.5.2.4.47修复】使用current_params代替starting_params，添加signal_type
             search_result = optimize_params_v8321_lightweight(
                 opportunities=all_opportunities,
-                starting_params=starting_point['params'],
-                max_combinations=50,
-                search_mode='local'  # 局部搜索模式
+                current_params=starting_point['params'],
+                signal_type='swing',  # 默认使用swing（或根据实际情况判断）
+                max_combinations=50
             )
             
             if search_result:
@@ -188,9 +189,10 @@ def phase3_enhanced_optimization(
     
     for combo in filter_combinations:
         # 过滤机会
+        # 【V8.5.2.4.47修复】字段名统一为consensus（Phase 1设置的字段名）
         filtered_opps = [
             opp for opp in all_opportunities
-            if (opp.get('indicator_consensus', 0) >= combo['min_consensus'] and
+            if (opp.get('consensus', 0) >= combo['min_consensus'] and
                 opp.get('signal_score', 0) >= combo['min_signal_score'])
         ]
         
@@ -471,7 +473,7 @@ def build_ai_analysis_prompt(
     # Consensus distribution
     consensus_dist = {}
     for opp in all_opportunities:
-        c = opp.get('indicator_consensus', 0)
+        c = opp.get('consensus', 0)  # 【V8.5.2.4.47修复】字段名统一
         consensus_dist[c] = consensus_dist.get(c, 0) + 1
     
     # Signal score distribution
@@ -655,7 +657,8 @@ def optimize_for_signal_type(
             # 筛选机会
             filtered_opps = [
                 opp for opp in opportunities
-                if (opp.get('indicator_consensus', 0) >= params['min_indicator_consensus'] and
+                # 【V8.5.2.4.47修复】字段名统一为consensus
+                if (opp.get('consensus', 0) >= params['min_indicator_consensus'] and
                     opp.get('signal_score', 0) >= params['min_signal_score'])
             ]
             
