@@ -20682,6 +20682,84 @@ def analyze_trade_performance(trade, kline_snapshots):
         return {"error": f"分析失败: {str(e)}"}
 
 
+def recalculate_consensus_from_snapshot(snapshot_row):
+    """
+    【V8.5.2.4.40新增】从历史快照重新计算indicator_consensus
+    
+    用途：
+    - 兼容旧版CSV（可能缺trend_1h或indicator_consensus字段）
+    - 确保consensus计算逻辑与export_historical_data.py一致
+    
+    Args:
+        snapshot_row: 历史快照的一行数据（pd.Series或dict）
+    
+    Returns:
+        int: indicator_consensus (0-5)
+    """
+    def safe_float(value, default=0):
+        """安全地转换为浮点数"""
+        if value is None or value == '' or value == 'N/A' or value == '-':
+            return default
+        try:
+            import math
+            if isinstance(value, float) and math.isnan(value):
+                return default
+            return float(value)
+        except:
+            return default
+    
+    def safe_str(value, default=''):
+        """安全地转换为字符串"""
+        if value is None or value == '' or value == 'N/A' or value == '-':
+            return default
+        return str(value)
+    
+    try:
+        indicator_consensus = 0
+        
+        # 1. EMA发散 >= 2.0%
+        ema20 = safe_float(snapshot_row.get('ema20_1h', 0))
+        ema50 = safe_float(snapshot_row.get('ema50_1h', 0))
+        if ema20 > 0 and ema50 > 0:
+            divergence = abs(ema20 - ema50) / ema50 * 100
+            if divergence >= 2.0:
+                indicator_consensus += 1
+        
+        # 2. MACD >= 0.01
+        macd_hist = safe_float(snapshot_row.get('macd_histogram', 0))
+        if abs(macd_hist) >= 0.01:
+            indicator_consensus += 1
+        
+        # 3. RSI极端或中性
+        rsi_14 = safe_float(snapshot_row.get('rsi_14', 50))
+        if rsi_14 > 70 or rsi_14 < 30 or (45 <= rsi_14 <= 55):
+            indicator_consensus += 1
+        
+        # 4. 放量 >= 1.5倍（简化判断：volume_ratio如果在CSV中）
+        # 注意：这个条件在CSV中难以重新计算（需要历史均值）
+        # 简化方案：如果CSV有volume_ratio字段，使用它；否则跳过
+        volume_ratio = safe_float(snapshot_row.get('volume_ratio', 0))
+        if volume_ratio >= 1.5:
+            indicator_consensus += 1
+        
+        # 5. 三周期趋势一致
+        trend_15m = safe_str(snapshot_row.get('trend_15m', ''))
+        trend_1h = safe_str(snapshot_row.get('trend_1h', ''))
+        trend_4h = safe_str(snapshot_row.get('trend_4h', ''))
+        
+        is_all_bullish = ("多头" in trend_15m and "多头" in trend_1h and "多头" in trend_4h)
+        is_all_bearish = ("空头" in trend_15m and "空头" in trend_1h and "空头" in trend_4h)
+        
+        if is_all_bullish or is_all_bearish:
+            indicator_consensus += 1
+        
+        return indicator_consensus
+    
+    except Exception as e:
+        # 出错时返回0（保守策略）
+        return 0
+
+
 def recalculate_signal_score_from_snapshot(snapshot_row, signal_type, learning_config=None):
     """
     【V8.5.2.3升级】从历史快照真正重新计算signal_score（支持权重配置）
@@ -21748,7 +21826,15 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     if entry_price <= 0:
                         continue
                     
-                    consensus = int(float(current.get('indicator_consensus', 0)))
+                    # 【V8.5.2.4.40】智能读取consensus（优先CSV，兼容旧数据）
+                    consensus_from_csv = int(float(current.get('indicator_consensus', 0)))
+                    
+                    # 如果CSV中consensus=0且缺少trend_1h字段，尝试重新计算
+                    if consensus_from_csv == 0 and 'trend_1h' not in current:
+                        consensus = recalculate_consensus_from_snapshot(current)
+                    else:
+                        consensus = consensus_from_csv
+                    
                     risk_reward = float(current.get('risk_reward', 0))
                     atr = float(current.get('atr', 0))
                     

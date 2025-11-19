@@ -903,7 +903,10 @@ def export_date(date_str, output_dirs):
                 'volume': round(row.volume, 3),
                 'price': round(row.close, 8),
                 'trend_4h': row.trend_4h,
+                'trend_1h': row.trend_1h,  # 【V8.5.2.4.40】添加trend_1h（consensus计算需要）
                 'trend_15m': row.trend_15m,
+                'ema20_1h': round(row.ema20_1h, 8) if pd.notna(row.ema20_1h) else row.close,  # 【V8.5.2.4.40】添加EMA（consensus计算需要）
+                'ema50_1h': round(row.ema50_1h, 8) if pd.notna(row.ema50_1h) else row.close,  # 【V8.5.2.4.40】添加EMA（consensus计算需要）
                 'rsi_14': round(row.rsi_14, 8) if pd.notna(row.rsi_14) else 50,
                 'rsi_7': round(row.rsi_7, 8) if pd.notna(row.rsi_7) else 50,
                 'macd_line': round(row.macd_line, 8) if pd.notna(row.macd_line) else 0,
