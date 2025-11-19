@@ -10136,49 +10136,49 @@ def analyze_and_adjust_params():
         #         traceback.print_exc()
         # ========== 【V8.5.2.4.47】旧Phase 3代码注释结束 ==========
         
-            # 保存到config供邮件使用
-            config['_v854_profit_comparison'] = profit_comparison
-            
-            # 【V8.5.2.4.21】Phase 3阶段总结输出
-            if profit_comparison.get('has_data') and phase2_baseline_result:
-                try:
-                    from phase_output_formatter import print_phase3_summary
-                    
-                    # 构建对比数据
-                    phase2_params = phase2_baseline_result.get('params', {})
-                    phase3_params = config.get('scalping_params', {})  # 使用超短线参数作为代表
-                    
-                    scalp_data = profit_comparison.get('scalping', {})
-                    swing_data = profit_comparison.get('swing', {})
-                    
-                    comparison_data = {
-                        'scalping': {
-                            'phase2_capture_rate': phase2_baseline_result.get('capture_rate', 0),
-                            'phase3_capture_rate': scalp_data.get('capture_rate', 0),
-                            'phase2_profit': phase2_baseline_result.get('avg_profit', 0),
-                            'phase3_profit': scalp_data.get('avg_profit', 0),
-                            'phase2_winrate': phase2_baseline_result.get('win_rate', 0),
-                            'phase3_winrate': scalp_data.get('win_rate', 0)
-                        },
-                        'swing': {
-                            'phase2_capture_rate': phase2_baseline_result.get('capture_rate', 0),
-                            'phase3_capture_rate': swing_data.get('capture_rate', 0),
-                            'phase2_profit': phase2_baseline_result.get('avg_profit', 0),
-                            'phase3_profit': swing_data.get('avg_profit', 0),
-                            'phase2_winrate': phase2_baseline_result.get('win_rate', 0),
-                            'phase3_winrate': swing_data.get('win_rate', 0)
-                        },
+        # 保存到config供邮件使用
+        config['_v854_profit_comparison'] = profit_comparison
+        
+        # 【V8.5.2.4.21】Phase 3阶段总结输出
+        if profit_comparison.get('has_data') and phase2_baseline_result:
+            try:
+                from phase_output_formatter import print_phase3_summary
+                
+                # 构建对比数据
+                phase2_params = phase2_baseline_result.get('params', {})
+                phase3_params = config.get('scalping_params', {})  # 使用超短线参数作为代表
+                
+                scalp_data = profit_comparison.get('scalping', {})
+                swing_data = profit_comparison.get('swing', {})
+                
+                comparison_data = {
+                    'scalping': {
+                        'phase2_capture_rate': phase2_baseline_result.get('capture_rate', 0),
+                        'phase3_capture_rate': scalp_data.get('capture_rate', 0),
+                        'phase2_profit': phase2_baseline_result.get('avg_profit', 0),
+                        'phase3_profit': scalp_data.get('avg_profit', 0),
+                        'phase2_winrate': phase2_baseline_result.get('win_rate', 0),
+                        'phase3_winrate': scalp_data.get('win_rate', 0)
+                    },
+                    'swing': {
+                        'phase2_capture_rate': phase2_baseline_result.get('capture_rate', 0),
+                        'phase3_capture_rate': swing_data.get('capture_rate', 0),
+                        'phase2_profit': phase2_baseline_result.get('avg_profit', 0),
+                        'phase3_profit': swing_data.get('avg_profit', 0),
+                        'phase2_winrate': phase2_baseline_result.get('win_rate', 0),
+                        'phase3_winrate': swing_data.get('win_rate', 0)
+                    },
                     'capture_rate_change': (scalp_data.get('capture_rate', 0) - phase2_baseline_result.get('capture_rate', 0)),
                     'profit_change': ((scalp_data.get('avg_profit', 0) - phase2_baseline_result.get('avg_profit', 0)) / phase2_baseline_result.get('avg_profit', 0.01) if phase2_baseline_result.get('avg_profit', 0) != 0 else 0)
                 }
-                    
-                    print_phase3_summary(
-                        phase2_params=phase2_params,
-                        phase3_params=phase3_params,
-                        comparison_data=comparison_data
-                    )
-                except Exception as summary_err:
-                    print(f"⚠️  Phase 3总结输出失败: {summary_err}")
+                
+                print_phase3_summary(
+                    phase2_params=phase2_params,
+                    phase3_params=phase3_params,
+                    comparison_data=comparison_data
+                )
+            except Exception as summary_err:
+                print(f"⚠️  Phase 3总结输出失败: {summary_err}")
         
         
         # ========== 【V8.5.2.4.10】Phase 3重构完成 ==========
