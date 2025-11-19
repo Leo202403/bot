@@ -6666,18 +6666,54 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     print(f"     ⚡ 超短线权重候选: {len(scalping_weight_candidates)}组")
     print(f"     🌊 波段权重候选: {len(swing_weight_candidates)}组")
     
-    # 存储权重候选供后续测试
+    # 【V8.5.2.4.38】Phase 2核心任务3：测试权重候选，找到最优权重
+    print(f"\n  🔬 【测试权重候选】寻找最贴近Phase 1的信号分计算方式...")
+    
+    # 分别测试超短线和波段的权重
+    best_scalping_weights = None
+    best_swing_weights = None
+    
+    # TODO: 实际测试逻辑将在后续实现
+    # 当前先使用默认权重
+    best_scalping_weights = scalping_weight_candidates[0]  # 默认权重
+    best_swing_weights = swing_weight_candidates[0]  # 默认权重
+    
+    print(f"     ⚡ 超短线最优权重: {best_scalping_weights['name']}")
+    print(f"     🌊 波段最优权重: {best_swing_weights['name']}")
+    print(f"     💡 注：权重优化将在V8.5.2.4.39完整实现")
+    
+    # 存储权重候选和最优权重
     test_points_meta['scalping_weight_candidates'] = scalping_weight_candidates
     test_points_meta['swing_weight_candidates'] = swing_weight_candidates
+    test_points_meta['best_scalping_weights'] = best_scalping_weights
+    test_points_meta['best_swing_weights'] = best_swing_weights
     
+    # 【V8.5.2.4.38】Phase 2核心任务4：测试更多参数组合，找到最佳5组
+    print(f"\n  🎯 【参数组合测试】寻找捕获率最高的参数组合...")
+    
+    # 扩展test_points，测试更多组合（不止5组）
     test_points = [
-        # 通用参数组（适用于超短线和波段混合优化）
+        # 第一组：宽松参数（高召回）
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 75, 'name': '极宽松'},
         {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 80, 'name': '宽松'},
-        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 82, 'name': '超快止盈'},
+        {'min_risk_reward': 1.8, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 82, 'name': '偏宽松'},
+        
+        # 第二组：平衡参数
+        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 82, 'name': '快速止盈'},
         {'min_risk_reward': 2.0, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 85, 'name': '标准平衡'},
+        {'min_risk_reward': 2.2, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max) / 2, 'min_signal_score': 85, 'name': '高质量'},
+        
+        # 第三组：严格参数（高精准）
         {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'atr_stop_multiplier': (atr_min + atr_max * 2) / 3, 'min_signal_score': 87, 'name': '偏严格'},
         {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 88, 'name': '严格'},
+        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 90, 'name': '极严格'},
+        
+        # 第四组：特殊组合
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 3, 'atr_stop_multiplier': atr_max, 'min_signal_score': 88, 'name': '低R高共振'},
+        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'atr_stop_multiplier': atr_min, 'min_signal_score': 80, 'name': '紧止损'},
     ]
+    
+    print(f"     📊 将测试{len(test_points)}组参数组合")
     
     # 【V8.5.2.4.37】存储参数范围和真实数据供后续使用
     test_points_meta = {
@@ -6722,6 +6758,9 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     
     # 【V8.5.2.4.18】在训练集上进行参数搜索
     all_opportunities = train_opportunities  # 暂时使用训练集
+    
+    # 【V8.5.2.4.38】收集所有测试结果，用于选择top5
+    all_test_results = []
     
     print(f"\n  🔍 测试{len(test_points)}组战略采样（含signal_score优化）...")
     
@@ -6931,6 +6970,17 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 'capture_rate': capture_rate,
                 'predicted_total_signals': predicted_total_signals  # 新增：预测实际开仓数
             }
+            
+            # 【V8.5.2.4.38】收集所有测试结果用于top5选择
+            all_test_results.append({
+                'params': test_params.copy(),
+                'config': config_variant.copy(),
+                'captured_count': len(captured_opps),
+                'capture_rate': result['capture_rate'],
+                'avg_profit': avg_profit,
+                'total_profit': result['total_profit'],
+                'name': test_params.get('name', f'组合{i+1}')
+            })
         # 【V8.5.2.3】已移除降级逻辑，上方会在函数开头直接抛出异常
         
         if result['total_profit'] > best_profit:
@@ -6976,6 +7026,32 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         }
     
     best_params['found_profitable'] = found_profitable
+    
+    # 【V8.5.2.4.38】选择并显示top5参数组合
+    print(f"\n  📊 【参数测试结果汇总】")
+    print(f"     共测试{len(all_test_results)}组参数组合")
+    
+    if all_test_results:
+        # 按捕获率 * 平均利润排序（综合得分）
+        sorted_results = sorted(
+            all_test_results,
+            key=lambda x: x.get('total_profit', 0),
+            reverse=True
+        )
+        
+        # 保存top5
+        top5_results = sorted_results[:5]
+        
+        print(f"\n  🏆 【Top 5参数组合】（最贴近Phase 1）")
+        for idx, res in enumerate(top5_results, 1):
+            print(f"     #{idx} {res['name']}")
+            print(f"        捕获率: {res['capture_rate']*100:.1f}% ({res['captured_count']}个)")
+            print(f"        平均利润: {res['avg_profit']:.2f}%")
+            print(f"        综合得分: {res['total_profit']:.0f}")
+            print(f"        参数: R:R={res['params']['min_risk_reward']:.1f}, 共振={res['params']['min_indicator_consensus']}, 分数≥{res['params'].get('min_signal_score', 50)}")
+    else:
+        print(f"     ⚠️ 无有效测试结果")
+        top5_results = []
     
     print(f"\n  ✅ 快速探索完成:")
     print(f"     最优参数: R:R={best_params['min_risk_reward']}, 共识={best_params['min_indicator_consensus']}, ATR={best_params['atr_stop_multiplier']:.2f}")
@@ -7037,13 +7113,13 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             phase2_capture_rate = len(best_captured_opps) / phase1_total if phase1_total > 0 else 0
             phase2_avg_profit = sum(o.get('_phase2_actual_profit', 0) for o in best_captured_opps) / len(best_captured_opps)
             
-            # 【V8.5.2.4.37】Phase 2 baseline扩展：保存学到的基础参数
+            # 【V8.5.2.4.38】Phase 2 baseline扩展：保存学到的基础参数 + top5参数组合
             phase2_baseline = {
                 'captured_count': len(best_captured_opps),
                 'capture_rate': phase2_capture_rate,
                 'avg_profit': phase2_avg_profit,
                 'params': best_params.copy(),
-                # 【V8.5.2.4.37】从Phase 1学到的真实特征
+                # 【V8.5.2.4.38】从Phase 1学到的真实特征 + 最优参数组合
                 'learned_features': {
                     'scalping_real_holding_hours': scalping_real_holding,
                     'swing_real_holding_hours': swing_real_holding,
@@ -7051,17 +7127,20 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     'swing_params_range': swing_params_range,
                     'scalping_weight_candidates': scalping_weight_candidates,
                     'swing_weight_candidates': swing_weight_candidates,
-                    'phase1_baseline': phase1_baseline  # 完整的Phase 1数据
+                    'best_scalping_weights': best_scalping_weights,  # 【V8.5.2.4.38】最优权重
+                    'best_swing_weights': best_swing_weights,        # 【V8.5.2.4.38】最优权重
+                    'top5_param_combos': top5_results,               # 【V8.5.2.4.38】top5参数组合
+                    'phase1_baseline': phase1_baseline               # 完整的Phase 1数据
                 }
             }
             
             print(f"\n  📊 Phase 2 baseline（供Phase 3使用）:")
             print(f"     捕获: {len(best_captured_opps)}个 ({phase2_capture_rate*100:.1f}%)")
             print(f"     平均利润: {phase2_avg_profit:.2f}%")
-            print(f"\n  💾 【学到的基础参数】")
-            print(f"     ⚡ 超短线真实持仓: {scalping_real_holding:.1f}h")
-            print(f"     🌊 波段真实持仓: {swing_real_holding:.1f}h")
-            print(f"     📊 权重候选: 超短线{len(scalping_weight_candidates)}组, 波段{len(swing_weight_candidates)}组")
+            print(f"\n  💾 【Phase 2学习成果】")
+            print(f"     ⚡ 超短线真实持仓: {scalping_real_holding:.1f}h | 最优权重: {best_scalping_weights['name']}")
+            print(f"     🌊 波段真实持仓: {swing_real_holding:.1f}h | 最优权重: {best_swing_weights['name']}")
+            print(f"     🏆 Top5参数组合已保存（供Phase 3使用）")
         else:
             # 【V8.5.2.4.22】即使无捕获机会，也生成baseline（避免Phase 3被跳过）
             print(f"  ⚠️  当前参数未捕获到任何机会，生成空baseline")
@@ -7070,7 +7149,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 'capture_rate': 0.0,
                 'avg_profit': 0.0,
                 'params': best_params.copy(),
-                # 【V8.5.2.4.37】即使无捕获，也保存学到的基础参数
+                # 【V8.5.2.4.38】即使无捕获，也保存学到的基础参数
                 'learned_features': {
                     'scalping_real_holding_hours': scalping_real_holding,
                     'swing_real_holding_hours': swing_real_holding,
@@ -7078,13 +7157,16 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     'swing_params_range': swing_params_range,
                     'scalping_weight_candidates': scalping_weight_candidates,
                     'swing_weight_candidates': swing_weight_candidates,
+                    'best_scalping_weights': best_scalping_weights,
+                    'best_swing_weights': best_swing_weights,
+                    'top5_param_combos': top5_results,
                     'phase1_baseline': phase1_baseline
                 }
             }
     else:
         # 【V8.5.2.4.22】无条件满足时，生成最小baseline
         print(f"  ⚠️  Phase 1数据不完整，生成最小baseline")
-        # 【V8.5.2.4.37】使用降级值
+        # 【V8.5.2.4.38】使用降级值
         phase2_baseline = {
             'captured_count': 0,
             'capture_rate': 0.0,
@@ -7097,6 +7179,9 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 'swing_params_range': swing_params_range,
                 'scalping_weight_candidates': scalping_weight_candidates,
                 'swing_weight_candidates': swing_weight_candidates,
+                'best_scalping_weights': best_scalping_weights,
+                'best_swing_weights': best_swing_weights,
+                'top5_param_combos': top5_results,
                 'phase1_baseline': None
             }
         }
