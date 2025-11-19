@@ -70,10 +70,11 @@ def calculate_single_actual_profit(
         data_points = future_data.get('data_points', 96)  # 默认24小时=96个15分钟K线
         
         # 🔧 V8.5.2.4.61 调试：检查future_data有效性
-        if debug_mode and (max_high == entry_price or min_low == entry_price):
-            print(f"  🐛 future_data无效: max_high={max_high}, min_low={min_low}, entry={entry_price}")
-            if not future_data:
-                print(f"     future_data为空dict")
+        if debug_mode:
+            if max_high == entry_price or min_low == entry_price:
+                print(f"  🐛 future_data无效: max_high={max_high}, min_low={min_low}, entry={entry_price}")
+                if not future_data:
+                    print(f"     future_data为空dict")
         
         # 3. 计算止盈止损价格
         atr_stop_mult = strategy_params.get('atr_stop_multiplier', 1.5)
@@ -97,6 +98,11 @@ def calculate_single_actual_profit(
         else:  # short
             stop_loss = entry_price + (atr * atr_stop_mult)
             take_profit = entry_price - (atr * atr_tp_mult)
+        
+        # 🔧 V8.5.2.4.63 调试：打印TP/SL价格
+        if debug_mode:
+            print(f"     SL价格: {stop_loss:.2f}, TP价格: {take_profit:.2f}")
+            print(f"     max_high: {max_high:.2f}, min_low: {min_low:.2f}, final_close: {final_close:.2f}")
         
         # 4. 模拟交易结果
         # 【V8.5.2.4.17】改进：使用概率加权方法判断TP/SL触发顺序
@@ -135,13 +141,20 @@ def calculate_single_actual_profit(
                     opportunity['exit_method'] = f'take_profit_prob_{1-prob_hit_sl_first:.0%}'
             elif hit_stop_loss:
                 exit_price = stop_loss
+                exit_method = 'stop_loss'
             elif hit_take_profit:
                 exit_price = take_profit
+                exit_method = 'take_profit'
             else:
                 # 超时退出（按最终收盘价）
                 exit_price = final_close
+                exit_method = 'timeout'
             
             profit_pct = (exit_price - entry_price) / entry_price * 100
+            
+            # 🔧 V8.5.2.4.63 调试：打印退出方式和利润
+            if debug_mode:
+                print(f"     退出方式: {exit_method}, 退出价: {exit_price:.2f}, 利润: {profit_pct:.2f}%")
         
         else:  # short
             # Short: 止损在上方，止盈在下方
@@ -171,13 +184,20 @@ def calculate_single_actual_profit(
                     opportunity['exit_method'] = f'take_profit_prob_{1-prob_hit_sl_first:.0%}'
             elif hit_stop_loss:
                 exit_price = stop_loss
+                exit_method = 'stop_loss'
             elif hit_take_profit:
                 exit_price = take_profit
+                exit_method = 'take_profit'
             else:
                 # 超时退出
                 exit_price = final_close
+                exit_method = 'timeout'
             
             profit_pct = (entry_price - exit_price) / entry_price * 100
+            
+            # 🔧 V8.5.2.4.63 调试：打印退出方式和利润
+            if debug_mode:
+                print(f"     退出方式: {exit_method}, 退出价: {exit_price:.2f}, 利润: {profit_pct:.2f}%")
         
         # 5. 考虑超时退出的限制
         # 如果未触发止盈止损，但持仓时间超过max_holding_hours，强制平仓
