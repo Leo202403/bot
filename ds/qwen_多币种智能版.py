@@ -7430,8 +7430,10 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     else:
         print(f"     ℹ️  跳过验证（无验证数据或无参数）")
     
-    # 【V8.5.2.4.41】Phase 3：风险控制与利润最大化
+    # 【V8.5.2.4.42】Phase 3：分离优化（超短线+波段）
     phase3_result = None
+    phase4_result = None
+    
     if phase2_baseline and all_opportunities_sorted:
         try:
             from phase3_enhanced_optimizer import phase3_enhanced_optimization
@@ -7449,16 +7451,40 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 model_name=model_name
             )
             
-            # 如果Phase 3找到更优参数，更新best_params
-            if phase3_result and phase3_result.get('final_params'):
-                print(f"\n  ✅ Phase 3优化完成，更新参数")
-                best_params = phase3_result['final_params']
-            
         except Exception as e:
             print(f"\n  ⚠️  Phase 3执行失败: {e}")
             import traceback
             traceback.print_exc()
             phase3_result = {'error': str(e)}
+    
+    # 【V8.5.2.4.42】Phase 4：参数验证与过拟合检测
+    if phase3_result and not phase3_result.get('error'):
+        try:
+            from phase4_validator import phase4_validation_and_overfitting_detection
+            
+            phase4_result = phase4_validation_and_overfitting_detection(
+                phase3_result=phase3_result,
+                all_opportunities=all_opportunities_sorted,
+                phase1_baseline=phase1_baseline
+            )
+            
+            # 根据Phase 4验证结果决定参数
+            overall_status = phase4_result.get('overall_status', 'FAILED')
+            
+            if overall_status in ['PASSED', 'WARNING']:
+                # 验证通过，使用Phase 3的分离参数
+                print(f"\n  ✅ Phase 4验证通过，使用Phase 3优化参数")
+                # 这里保留best_params为Phase 2，因为实盘会根据signal_type动态选择
+                # Phase 3-4的结果保存在phase3_result和phase4_result中供后续使用
+            else:
+                # 验证失败，回退到Phase 2参数
+                print(f"\n  ⚠️  Phase 4验证失败（{overall_status}），保持Phase 2参数")
+            
+        except Exception as e:
+            print(f"\n  ⚠️  Phase 4执行失败: {e}")
+            import traceback
+            traceback.print_exc()
+            phase4_result = {'error': str(e)}
     
     # 【V8.3.16.3】兼容后续代码：构建iterative_result格式
     return {
@@ -7472,7 +7498,8 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         'quick_search_mode': True,
         'found_profitable': found_profitable,
         'phase2_baseline': phase2_baseline,  # 🆕 V8.5.2.4.10
-        'phase3_result': phase3_result  # 🆕 V8.5.2.4.41
+        'phase3_result': phase3_result,  # 🆕 V8.5.2.4.41
+        'phase4_result': phase4_result  # 🆕 V8.5.2.4.42
     }
 
 

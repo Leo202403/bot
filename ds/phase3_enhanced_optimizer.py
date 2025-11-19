@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-【V8.5.2.4.41】Phase 3增强优化器
+【V8.5.2.4.42】Phase 3增强优化器
 
 核心功能:
 1. 叠加Phase 2的learned_features（signal_score权重、top5参数组合）
@@ -9,6 +9,8 @@
 3. 多起点搜索（AI建议 + Phase2最优 + Top5组合）
 4. 组合筛选测试（consensus × signal_score矩阵）
 5. AI协助分析和推荐最优参数
+6. 【V8.5.2.4.42新增】分离优化超短线和波段参数
+7. 【V8.5.2.4.42新增】测试移动止盈止损效果
 """
 
 import json
@@ -270,37 +272,56 @@ def phase3_enhanced_optimization(
         model_name=model_name
     )
     
-    # 【步骤6】综合决策
-    print(f"\n  🎯 【综合决策】")
+    # 【步骤6】分离优化超短线和波段
+    print(f"\n  📊 【分离优化】")
+    print(f"     分别为超短线和波段寻找最大利润参数...")
     
-    # 优先级：AI推荐 > 最佳搜索结果 > 最佳矩阵组合 > Phase 2参数
-    if ai_recommendation and ai_recommendation.get('recommended_params'):
-        final_params = ai_recommendation['recommended_params']
-        decision_source = 'AI推荐'
-    elif best_search_result:
-        final_params = best_search_result.get('params', {})
-        decision_source = f"多起点搜索（{best_search_result.get('starting_point')}）"
-    elif best_matrix_combo:
-        final_params = {
-            **phase2_baseline.get('params', {}),
-            'min_indicator_consensus': best_matrix_combo['min_consensus'],
-            'min_signal_score': best_matrix_combo['min_signal_score']
-        }
-        decision_source = f"矩阵筛选（{best_matrix_combo['name']}）"
-    else:
-        final_params = phase2_baseline.get('params', {})
-        decision_source = 'Phase 2最优'
+    # 分离机会
+    scalping_opps = [o for o in all_opportunities if o.get('signal_type') == 'scalping']
+    swing_opps = [o for o in all_opportunities if o.get('signal_type') == 'swing']
     
-    print(f"     决策来源: {decision_source}")
-    print(f"     关键参数:")
-    print(f"       - min_consensus: {final_params.get('min_indicator_consensus', 'N/A')}")
-    print(f"       - min_signal_score: {final_params.get('min_signal_score', 'N/A')}")
-    print(f"       - min_risk_reward: {final_params.get('min_risk_reward', 'N/A')}")
+    print(f"     超短线机会: {len(scalping_opps)}个")
+    print(f"     波段机会: {len(swing_opps)}个")
     
-    # 返回Phase 3结果
+    # 优化超短线参数
+    scalping_result = optimize_for_signal_type(
+        opportunities=scalping_opps,
+        signal_type='scalping',
+        learned_features=learned_features,
+        starting_points=candidate_starting_points,
+        kline_snapshots=kline_snapshots
+    )
+    
+    # 优化波段参数
+    swing_result = optimize_for_signal_type(
+        opportunities=swing_opps,
+        signal_type='swing',
+        learned_features=learned_features,
+        starting_points=candidate_starting_points,
+        kline_snapshots=kline_snapshots
+    )
+    
+    print(f"\n  ✅ Phase 3优化完成")
+    print(f"     超短线: 捕获率{scalping_result['capture_rate']*100:.1f}%, 平均利润{scalping_result['avg_profit']:.2f}%")
+    print(f"     波段: 捕获率{swing_result['capture_rate']*100:.1f}%, 平均利润{swing_result['avg_profit']:.2f}%")
+    
+    # 【V8.5.2.4.42】返回分离的Phase 3结果
     return {
-        'final_params': final_params,
-        'decision_source': decision_source,
+        'scalping': {
+            'params': scalping_result['best_params'],
+            'capture_rate': scalping_result['capture_rate'],
+            'avg_profit': scalping_result['avg_profit'],
+            'total_profit': scalping_result['total_profit'],
+            'captured_count': scalping_result['captured_count']
+        },
+        'swing': {
+            'params': swing_result['best_params'],
+            'capture_rate': swing_result['capture_rate'],
+            'avg_profit': swing_result['avg_profit'],
+            'total_profit': swing_result['total_profit'],
+            'captured_count': swing_result['captured_count']
+        },
+        'decision_source': 'Multi-start search with trailing stop',
         'learned_features': learned_features,
         'multi_start_search': {
             'starting_points': len(candidate_starting_points),
@@ -546,4 +567,145 @@ def parse_ai_recommendation(ai_response: str) -> Dict:
     except Exception as e:
         print(f"⚠️  解析AI响应失败: {e}")
         return {}
+
+
+def optimize_for_signal_type(
+    opportunities: List[Dict],
+    signal_type: str,
+    learned_features: Dict,
+    starting_points: List[Dict],
+    kline_snapshots=None
+) -> Dict:
+    """
+    【V8.5.2.4.42】为特定信号类型优化参数
+    
+    分别为超短线和波段寻找最优参数配置（包括移动止损）
+    
+    Args:
+        opportunities: 该信号类型的机会列表
+        signal_type: 'scalping' 或 'swing'
+        learned_features: Phase 2学习的特征
+        starting_points: 候选起点列表
+        kline_snapshots: 市场快照数据
+    
+    Returns:
+        result: {
+            'best_params': {...},
+            'capture_rate': float,
+            'avg_profit': float,
+            'total_profit': float,
+            'captured_count': int
+        }
+    """
+    from trailing_stop_calculator import batch_calculate_profits
+    
+    print(f"\n  🎯 【{signal_type.upper()}参数优化】")
+    print(f"     机会数量: {len(opportunities)}个")
+    
+    # 参数搜索空间（包括移动止损）
+    if signal_type == 'scalping':
+        param_grid = {
+            'min_indicator_consensus': [1, 2, 3],
+            'min_signal_score': [80, 85, 90],
+            'atr_tp_multiplier': [1.5, 2.0, 2.5, 3.0],
+            'atr_stop_multiplier': [1.0, 1.5, 2.0],
+            'max_holding_hours': [4, 8, 12, 16],
+            'trailing_stop_enabled': [True, False]
+        }
+    else:  # swing
+        param_grid = {
+            'min_indicator_consensus': [2, 3, 4],
+            'min_signal_score': [85, 88, 90],
+            'atr_tp_multiplier': [4.0, 5.0, 6.0, 7.0],
+            'atr_stop_multiplier': [2.0, 2.5, 3.0],
+            'max_holding_hours': [48, 72, 96],
+            'trailing_stop_enabled': [True, False]
+        }
+    
+    # 多起点搜索
+    all_results = []
+    
+    for sp_idx, starting_point in enumerate(starting_points, 1):
+        print(f"     [{sp_idx}/{len(starting_points)}] 从'{starting_point['name']}'出发...")
+        
+        # 围绕起点生成测试组合（简化版：使用grid的中心值）
+        test_combinations = []
+        
+        # 生成测试组合（每个维度取2-3个值）
+        for consensus in param_grid['min_indicator_consensus']:
+            for signal_score in param_grid['min_signal_score'][:2]:  # 每个起点只测试2个值
+                for tp_mult in param_grid['atr_tp_multiplier'][::2]:  # 每隔一个取
+                    for sl_mult in param_grid['atr_stop_multiplier'][:2]:
+                        for trailing in param_grid['trailing_stop_enabled']:
+                            test_params = {
+                                'min_indicator_consensus': consensus,
+                                'min_signal_score': signal_score,
+                                'atr_tp_multiplier': tp_mult,
+                                'atr_stop_multiplier': sl_mult,
+                                'max_holding_hours': param_grid['max_holding_hours'][1],  # 使用中间值
+                                'trailing_stop_enabled': trailing
+                            }
+                            test_combinations.append(test_params)
+        
+        # 限制测试数量（每个起点最多50组）
+        test_combinations = test_combinations[:50]
+        
+        # 测试每个组合
+        for params in test_combinations:
+            # 筛选机会
+            filtered_opps = [
+                opp for opp in opportunities
+                if (opp.get('indicator_consensus', 0) >= params['min_indicator_consensus'] and
+                    opp.get('signal_score', 0) >= params['min_signal_score'])
+            ]
+            
+            if not filtered_opps:
+                continue
+            
+            # 计算利润（使用移动止损）
+            profit_results = batch_calculate_profits(filtered_opps, params)
+            
+            # 统计
+            captured_count = len(filtered_opps)
+            capture_rate = captured_count / len(opportunities) if opportunities else 0
+            total_profit = sum(r['profit'] for r in profit_results)
+            avg_profit = total_profit / captured_count if captured_count > 0 else 0
+            
+            all_results.append({
+                'params': params,
+                'starting_point': starting_point['name'],
+                'captured_count': captured_count,
+                'capture_rate': capture_rate,
+                'avg_profit': avg_profit,
+                'total_profit': total_profit
+            })
+    
+    if not all_results:
+        print(f"     ⚠️  未找到有效结果")
+        return {
+            'best_params': {},
+            'capture_rate': 0,
+            'avg_profit': 0,
+            'total_profit': 0,
+            'captured_count': 0
+        }
+    
+    # 选择总利润最高的组合
+    best_result = max(all_results, key=lambda x: x['total_profit'])
+    
+    print(f"     ✓ 最优参数找到！")
+    print(f"        起点: {best_result['starting_point']}")
+    print(f"        捕获率: {best_result['capture_rate']*100:.1f}% ({best_result['captured_count']}/{len(opportunities)})")
+    print(f"        平均利润: {best_result['avg_profit']:.2f}%")
+    print(f"        总利润: {best_result['total_profit']:.1f}%")
+    print(f"        移动止损: {'✅ 启用' if best_result['params']['trailing_stop_enabled'] else '❌ 禁用'}")
+    
+    return {
+        'best_params': best_result['params'],
+        'capture_rate': best_result['capture_rate'],
+        'avg_profit': best_result['avg_profit'],
+        'total_profit': best_result['total_profit'],
+        'captured_count': best_result['captured_count'],
+        'starting_point': best_result['starting_point']
+    }
 
