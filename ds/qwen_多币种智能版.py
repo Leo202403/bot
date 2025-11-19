@@ -22383,7 +22383,9 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         'kline_ctx_price_chg_pct': kline_ctx_price_chg_pct,
                         'mkt_struct_swing': mkt_struct_swing,
                         'sr_hist_test_count': sr_hist_test_count,
-                        'sr_hist_avg_reaction': sr_hist_avg_reaction
+                        'sr_hist_avg_reaction': sr_hist_avg_reaction,
+                        # 【V8.5.2.4.47】添加snapshot用于Phase 2权重测试
+                        'snapshot': current.to_dict() if hasattr(current, 'to_dict') else dict(current)
                     }
                     
                     # 【V8.5.2.4.31】互斥性分类：每个机会只属于一个类别
