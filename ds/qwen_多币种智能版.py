@@ -6695,6 +6695,16 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         scalping_opps = confirmed_opportunities['scalping']['opportunities']
         phase1_scalping_count = phase1_baseline.get('scalping', {}).get('count', len(scalping_opps))
         
+        # 【V8.5.2.4.47 DEBUG】检查数据结构
+        print(f"\n  🔍 【DEBUG】超短线机会数据检查:")
+        print(f"     总数: {len(scalping_opps)}")
+        if scalping_opps:
+            first_opp = scalping_opps[0]
+            print(f"     第一个机会字段: {list(first_opp.keys())[:10]}")
+            print(f"     是否有snapshot: {'snapshot' in first_opp}")
+            if 'snapshot' in first_opp:
+                print(f"     snapshot类型: {type(first_opp['snapshot'])}")
+        
         print(f"\n  ⚡ 测试超短线权重候选（共{len(scalping_weight_candidates)}组）...")
         
         for idx, weight_config in enumerate(scalping_weight_candidates, 1):
@@ -7541,16 +7551,16 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             overall_status = phase4_result.get('overall_status', 'FAILED')
             
             if overall_status in ['PASSED', 'WARNING']:
-                # 验证通过，应用Phase 3的分离参数到config
+                # 验证通过，应用Phase 3的分离参数到current_config
                 print(f"\n  ✅ Phase 4验证通过，应用Phase 3优化参数")
                 
                 # 应用scalping参数
                 scalping_params = phase3_result.get('scalping', {}).get('params', {})
                 if scalping_params:
-                    # 确保config中有scalping_params字段
-                    if 'scalping_params' not in config:
-                        config['scalping_params'] = {}
-                    config['scalping_params'].update(scalping_params)
+                    # 确保current_config中有scalping_params字段
+                    if 'scalping_params' not in current_config:
+                        current_config['scalping_params'] = {}
+                    current_config['scalping_params'].update(scalping_params)
                     print(f"     🎯 超短线参数已更新:")
                     print(f"        TP倍数: {scalping_params.get('atr_tp_multiplier', 'N/A')}")
                     print(f"        SL倍数: {scalping_params.get('atr_stop_multiplier', 'N/A')}")
@@ -7562,10 +7572,10 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 # 应用swing参数
                 swing_params = phase3_result.get('swing', {}).get('params', {})
                 if swing_params:
-                    # 确保config中有swing_params字段
-                    if 'swing_params' not in config:
-                        config['swing_params'] = {}
-                    config['swing_params'].update(swing_params)
+                    # 确保current_config中有swing_params字段
+                    if 'swing_params' not in current_config:
+                        current_config['swing_params'] = {}
+                    current_config['swing_params'].update(swing_params)
                     print(f"     🌊 波段参数已更新:")
                     print(f"        TP倍数: {swing_params.get('atr_tp_multiplier', 'N/A')}")
                     print(f"        SL倍数: {swing_params.get('atr_stop_multiplier', 'N/A')}")
@@ -7574,17 +7584,17 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     print(f"        共振阈值: {swing_params.get('min_indicator_consensus', 'N/A')}")
                     print(f"        信号分阈值: {swing_params.get('min_signal_score', 'N/A')}")
                 
-                # 保存Phase 4验证状态到config
-                config['_phase4_status'] = overall_status
-                config['_phase4_validation'] = phase4_result
-                config['_phase3_applied'] = True
+                # 保存Phase 4验证状态到current_config
+                current_config['_phase4_status'] = overall_status
+                current_config['_phase4_validation'] = phase4_result
+                current_config['_phase3_applied'] = True
                 
             else:
                 # 验证失败，回退到Phase 2参数
                 print(f"\n  ⚠️  Phase 4验证失败（{overall_status}），保持Phase 2参数")
-                config['_phase4_status'] = overall_status
-                config['_phase4_rollback'] = True
-                config['_phase3_applied'] = False
+                current_config['_phase4_status'] = overall_status
+                current_config['_phase4_rollback'] = True
+                current_config['_phase3_applied'] = False
             
         except Exception as e:
             print(f"\n  ⚠️  Phase 4执行失败: {e}")
@@ -7605,7 +7615,8 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         'found_profitable': found_profitable,
         'phase2_baseline': phase2_baseline,  # 🆕 V8.5.2.4.10
         'phase3_result': phase3_result,  # 🆕 V8.5.2.4.41
-        'phase4_result': phase4_result  # 🆕 V8.5.2.4.42
+        'phase4_result': phase4_result,  # 🆕 V8.5.2.4.42
+        'all_opportunities_sorted': all_opportunities_sorted if 'all_opportunities_sorted' in locals() else []  # 🆕 V8.5.2.4.47: 供邮件使用
     }
 
 
@@ -9541,6 +9552,8 @@ def analyze_and_adjust_params():
             # 【V8.5.2.4.46】提取Phase 3-4结果（供opportunity_analysis使用）
             phase3_result_extracted = iterative_result.get('phase3_result')
             phase4_result_extracted = iterative_result.get('phase4_result')
+            # 【V8.5.2.4.47】提取all_opportunities_sorted（供邮件使用）
+            all_opportunities_sorted = iterative_result.get('all_opportunities_sorted', [])
             
             # 【V8.5.2.4.21】Phase 2阶段总结输出
             if global_initial_params and phase2_baseline_result:
