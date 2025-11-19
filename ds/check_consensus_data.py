@@ -66,8 +66,8 @@ def check_consensus_data():
             print(f"\n  前3行indicator_consensus值:")
             for i in range(min(3, len(df))):
                 row = df.iloc[i]
-                coin = row.get('coin', 'N/A')
-                time = row.get('time', 'N/A')
+                coin = str(row.get('coin', 'N/A'))
+                time = str(row.get('time', 'N/A'))
                 consensus = row.get('indicator_consensus', 0)
                 print(f"    [{i+1}] {coin:8s} {time:10s} consensus={consensus}")
             
@@ -127,7 +127,7 @@ def check_consensus_data():
         display_df = yesterday_trades if 'yesterday_trades' in locals() and len(yesterday_trades) > 0 else df
         for i in range(min(3, len(display_df))):
             row = display_df.iloc[i]
-            coin = row.get('币种', 'N/A')
+            coin = str(row.get('币种', 'N/A'))
             
             # 尝试读取共振值（中文和英文）
             consensus_cn = row.get('共振指标数', 'N/A')
@@ -191,8 +191,8 @@ def check_consensus_data():
                 print(f"\n  最后3行数据:")
                 for i in range(max(0, len(df)-3), len(df)):
                     row = df.iloc[i]
-                    coin = row.get('coin', 'N/A')
-                    time = row.get('time', 'N/A')
+                    coin = str(row.get('coin', 'N/A'))
+                    time = str(row.get('time', 'N/A'))
                     consensus = row.get('indicator_consensus', 0)
                     print(f"    {coin:8s} {time:10s} consensus={consensus}")
             else:
