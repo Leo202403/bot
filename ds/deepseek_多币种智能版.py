@@ -6806,8 +6806,58 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     test_points_meta['best_scalping_weights'] = best_scalping_weights
     test_points_meta['best_swing_weights'] = best_swing_weights
     
+    # 【V8.5.2.4.47】Phase 2核心任务3.5：使用最优权重重新计算signal_score
+    # 这样后续的min_signal_score阈值测试才有意义
+    print(f"\n  🔄 【应用最优权重】使用最优权重重新计算所有机会的signal_score...")
+    
+    if confirmed_opportunities and (best_scalping_weights or best_swing_weights):
+        # 合并超短线和波段机会
+        all_opps_for_recalc = (
+            confirmed_opportunities.get('scalping', {}).get('opportunities', []) +
+            confirmed_opportunities.get('swing', {}).get('opportunities', [])
+        )
+        
+        recalc_count = 0
+        for opp in all_opps_for_recalc:
+            signal_type = opp.get('signal_type', 'swing')
+            snapshot = opp.get('snapshot')
+            
+            if not snapshot:
+                continue
+            
+            # 选择对应类型的最优权重
+            if signal_type == 'scalping' and best_scalping_weights:
+                learning_config = {
+                    'scalping_score_weights': {k: v for k, v in best_scalping_weights.items() if k != 'name'}
+                }
+            elif signal_type == 'swing' and best_swing_weights:
+                learning_config = {
+                    'swing_score_weights': {k: v for k, v in best_swing_weights.items() if k != 'name'}
+                }
+            else:
+                continue
+            
+            # 重新计算signal_score
+            new_score = recalculate_signal_score_from_snapshot(
+                snapshot_row=snapshot,
+                signal_type=signal_type,
+                learning_config=learning_config
+            )
+            
+            # 保存旧值（调试用）并更新
+            opp['_original_signal_score'] = opp.get('signal_score', 0)
+            opp['signal_score'] = new_score
+            recalc_count += 1
+        
+        print(f"     ✅ 重新计算: {recalc_count}个机会的signal_score")
+        print(f"        ⚡ 超短线使用: {best_scalping_weights.get('name', 'N/A')}权重")
+        print(f"        🌊 波段使用: {best_swing_weights.get('name', 'N/A')}权重")
+    else:
+        print(f"     ⚠️  跳过重新计算（无最优权重或无机会数据）")
+    
     # 【V8.5.2.4.39】Phase 2核心任务4：扩展参数组合测试，覆盖更广范围
     print(f"\n  🎯 【参数组合测试】寻找捕获率最高的参数组合...")
+    print(f"     💡 注意：此时使用的是优化权重计算的signal_score")
     
     # 【V8.5.2.4.39】扩展test_points，全面覆盖R:R、信号分、共振的组合空间
     test_points = [
