@@ -21441,14 +21441,15 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                             
                             # 退出条件检查
                             bars_since_high = bar_idx - scalping_last_high_bar
-                            pullback_pct = (scalping_max_profit - profit_pct) / scalping_max_profit if scalping_max_profit > 0 else 0
                             
                             # 条件1：1小时（4 bars）内无新高
                             if bars_since_high >= 4:
                                 break
-                            # 条件2：回撤超过30%
-                            if pullback_pct > 0.30:
-                                break
+                            # 条件2：【V8.5.2.4.34】回撤保护（只在利润>=2.5%时启用，避免过早退出）
+                            if scalping_max_profit >= 2.5:
+                                pullback_pct = (scalping_max_profit - profit_pct) / scalping_max_profit
+                                if pullback_pct > 0.30:
+                                    break
                             # 条件3：超过最大跟踪时间2小时（8 bars）
                             if scalping_holding_bars >= 8:
                                 break
@@ -21472,14 +21473,15 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                             
                             # 退出条件检查
                             bars_since_high = bar_idx - swing_last_high_bar
-                            pullback_pct = (swing_max_profit - profit_pct) / swing_max_profit if swing_max_profit > 0 else 0
                             
                             # 条件1：2小时（8 bars）内无新高
                             if bars_since_high >= 8:
                                 break
-                            # 条件2：回撤超过30%
-                            if pullback_pct > 0.30:
-                                break
+                            # 条件2：【V8.5.2.4.34】回撤保护（只在利润>=5.0%时启用，避免过早退出）
+                            if swing_max_profit >= 5.0:
+                                pullback_pct = (swing_max_profit - profit_pct) / swing_max_profit
+                                if pullback_pct > 0.30:
+                                    break
                             # 条件3：超过最大跟踪时间6小时（24 bars）
                             if swing_holding_bars >= 24:
                                 break
