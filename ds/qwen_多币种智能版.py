@@ -10600,11 +10600,11 @@ def analyze_and_adjust_params():
         # print("\n【第3步：Phase 3风险控制优化】")  ← 已删除
         scalping_optimization = None
         swing_optimization = None
-            profit_comparison = {
-                'has_data': False,
-                'scalping': {},
-                'swing': {}
-            }
+        profit_comparison = {
+            'has_data': False,
+            'scalping': {},
+            'swing': {}
+        }
             
         # ========== 【V8.5.2.4.47】DEPRECATED - 旧Phase 3代码已被phase3_enhanced_optimizer.py替代 ==========
         # 此段代码导致Phase 3重复执行（新Phase 3在quick_global_search_v8316中执行）
