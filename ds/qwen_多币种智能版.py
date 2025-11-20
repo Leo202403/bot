@@ -12521,81 +12521,18 @@ def analyze_and_adjust_params():
                 except Exception as e:
                     print(f"⚠️ 生成交易员摘要失败: {e}")
                 
-                # 【V7.9新增】分Scalping/Swing参数对比
-                # 【V8.5.1修复】从正确的位置读取参数
-                type_params_html = ""
+                # 【V8.5.2.4.89.3】移除旧的type_params_html，避免与params_comparison_html重复
+                # params_comparison_html（来自email_bark_formatter.py）已经包含完整的参数对比信息（含密度）
+                # 保留调试输出，移除HTML生成
+                type_params_html = ""  # 置空，不再生成旧版表格
                 try:
-                    # 【V8.5.2.4.89】避免重复加载config，直接使用内存中的config
-                    current_config = config  # 使用已有的config，避免内存浪费
-                    if current_config:
-                        # 🆕 V8.5.1.4: 修复参数读取逻辑
-                        # V8.5之后，参数存储在config['scalping_params']和config['swing_params']中
-                        scalping_params = current_config.get('scalping_params', {})
-                        swing_params = current_config.get('swing_params', {})
-                        
-                        # 如果没有，尝试从global中读取（向后兼容）
-                        if not scalping_params and 'global' in current_config:
-                            scalping_params = current_config['global'].get('scalping_params', {})
-                        if not swing_params and 'global' in current_config:
-                            swing_params = current_config['global'].get('swing_params', {})
-                        
-                        # 调试输出
-                        print(f"[参数调试] scalping_params keys: {list(scalping_params.keys()) if scalping_params else 'None'}")
-                        print(f"[参数调试] swing_params keys: {list(swing_params.keys()) if swing_params else 'None'}")
-                        
-                        if scalping_params and swing_params:
-                            type_params_html = """
-    <div class="summary-box" style="background: #fff3e0; border: 2px solid #ff9800;">
-        <h2>⚡🌊 超短线/波段 参数配置</h2>
-        <table style="width:100%; border-collapse: collapse; margin-top:15px;">
-            <tr style="background: #ff9800; color: white;">
-                <th style="padding:10px; border:1px solid #ddd;">参数</th>
-                <th style="padding:10px; border:1px solid #ddd;">⚡超短线</th>
-                <th style="padding:10px; border:1px solid #ddd;">🌊波段</th>
-            </tr>
-"""
-                            # 🔧 V8.5.1.7: 只显示优化后的参数，移除固定配置
-                            params_to_show = [
-                                ('min_risk_reward', '最小盈亏比', ':.1f'),
-                                ('min_signal_score', '最低信号分数', ':.0f'),
-                                ('max_holding_hours', '最长持仓(小时)', ':.1f'),
-                                ('atr_tp_multiplier', '止盈ATR倍数', ':.1f'),
-                                ('atr_stop_multiplier', '止损ATR倍数', ':.1f'),
-                                ('min_consensus', '最小共振指标数', ':.0f'),
-                            ]
-                            
-                            for param_key, param_name, param_format in params_to_show:
-                                # 🔧 V8.5.1.7: 所有参数都从优化后的config读取
-                                scalp_val = scalping_params.get(param_key, 0)
-                                swing_val = swing_params.get(param_key, 0)
-                                
-                                # 所有参数都是数字格式，直接使用format
-                                if isinstance(scalp_val, (int, float)):
-                                    scalp_display = ('{' + param_format + '}').format(scalp_val)
-                                else:
-                                    scalp_display = str(scalp_val)
-                                
-                                if isinstance(swing_val, (int, float)):
-                                    swing_display = ('{' + param_format + '}').format(swing_val)
-                                else:
-                                    swing_display = str(swing_val)
-                                
-                                type_params_html += f"""
-            <tr>
-                <td style="padding:10px; border:1px solid #ddd;"><b>{param_name}</b></td>
-                <td style="padding:10px; border:1px solid #ddd; text-align:center;">{scalp_display}</td>
-                <td style="padding:10px; border:1px solid #ddd; text-align:center;">{swing_display}</td>
-            </tr>
-"""
-                            type_params_html += """
-        </table>
-        <p style="margin-top:15px; color:#666; font-size:0.9em;">
-            💡 这些参数可通过AI回测学习自动优化，保存在learning_config.json中
-        </p>
-    </div>
-"""
+                    # 调试输出：验证参数读取正确
+                    scalping_params = config.get('scalping_params', {})
+                    swing_params = config.get('swing_params', {})
+                    print(f"[参数调试] scalping_params keys: {list(scalping_params.keys()) if scalping_params else 'None'}")
+                    print(f"[参数调试] swing_params keys: {list(swing_params.keys()) if swing_params else 'None'}")
                 except Exception as e:
-                    print(f"⚠️ 生成分类型参数对比失败: {e}")
+                    print(f"⚠️ 参数调试失败: {e}")
                 
                 # 拼接主体内容（使用字符串拼接避免f-string嵌套）
                 # 🆕 V8.5.5: 调整邮件顺序 - 最重要信息在最前
