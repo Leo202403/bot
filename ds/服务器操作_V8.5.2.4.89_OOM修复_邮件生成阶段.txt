@@ -1,0 +1,93 @@
+================================================================
+V8.5.2.4.89 OOM修复 - 邮件生成阶段修复 (2025-11-20)
+================================================================
+
+问题诊断：
+----------
+服务器持续OOM，诊断发现在邮件生成阶段发生：
+- Phase 1-4 全部成功完成
+- 在 [参数变化检测] config_changed = True 之后立即被Killed
+- 短时间内3次加载learning_config.json（每次10MB+）
+- 累积内存峰值超过1.6GB限制
+
+根本原因：
+----------
+在同一个函数（analyze_and_adjust_params）内：
+1. 第10810行：config = load_learning_config()  # 必要加载
+2. 第12507行：current_config = load_learning_config()  # 重复加载（-10MB）
+3. 第13009行：current_config = load_learning_config()  # 重复加载（-10MB）
+
+修复内容：
+----------
+✅ 修复1：第20918行（语法错误修复）
+   - 问题：f-string缩进错误导致SyntaxError
+   - 修改：调整缩进对齐（从8空格改为4空格）
+   
+✅ 修复2：第12507行（邮件参数对比阶段）
+   - 修改前：current_config = load_learning_config()
+   - 修改后：current_config = config  # 复用内存中的config
+
+✅ 修复3：第13009行（Bark推送生成阶段）
+   - 修改前：current_config = load_learning_config()
+   - 修改后：current_config = config  # 复用内存中的config
+
+影响文件：
+----------
+1. ds/deepseek_多币种智能版.py
+2. ds/qwen_多币种智能版.py
+
+预期效果：
+----------
+- 内存节省：20MB+ （2次重复加载）
+- 时间节省：0.6-1.4秒
+- 预计总内存峰值降至 <900MB
+- 彻底解决邮件生成阶段OOM问题
+
+上传步骤：
+----------
+1. 停止运行中的进程
+   supervisorctl stop deepseek qwen
+
+2. 备份服务器当前文件
+   cd /root/10-23-bot/ds
+   cp deepseek_多币种智能版.py deepseek_多币种智能版.py.backup_20251120
+   cp qwen_多币种智能版.py qwen_多币种智能版.py.backup_20251120
+
+3. 上传修复后的文件（覆盖）
+   # 从本地上传到服务器
+   scp /Users/mac-bauyu/Downloads/10-23-bot/ds/deepseek_多币种智能版.py root@43.100.52.142:/root/10-23-bot/ds/
+   scp /Users/mac-bauyu/Downloads/10-23-bot/ds/qwen_多币种智能版.py root@43.100.52.142:/root/10-23-bot/ds/
+
+4. 验证文件完整性
+   cd /root/10-23-bot/ds
+   ls -lh deepseek_多币种智能版.py qwen_多币种智能版.py
+   # 应该显示1.3M左右
+   
+   # 检查修复标记
+   grep -n "V8.5.2.4.89.*避免重复加载config" deepseek_多币种智能版.py
+   # 应该显示两处修改（第12507和13009行附近）
+
+5. 重启服务
+   supervisorctl start deepseek qwen
+   supervisorctl status
+
+6. 监控内存和日志
+   # 实时监控
+   watch -n 5 'free -h && echo "---" && ps aux | grep python | grep -v grep | awk "{print \$11, \$4\"%\"}"'
+   
+   # 查看日志
+   tail -f /root/10-23-bot/ds/logs/deepseek_trading.log
+
+验证方法：
+----------
+1. 等待下次AI参数优化触发（每日08:05 UTC+8）
+2. 观察日志是否成功生成邮件：
+   ✅ 邮件发送成功
+   [Bark推送] 推送完成: 成功 3/3
+3. 检查是否不再OOM Killed
+4. 观察内存峰值 <1.0GB
+
+================================================================
+修复完成！文件已在本地准备就绪，请按上述步骤上传到服务器。
+================================================================
+

@@ -12504,7 +12504,8 @@ def analyze_and_adjust_params():
                 # 【V8.5.1修复】从正确的位置读取参数
                 type_params_html = ""
                 try:
-                    current_config = load_learning_config()
+                    # 【V8.5.2.4.89】避免重复加载config，直接使用内存中的config
+                    current_config = config  # 使用已有的config，避免内存浪费
                     if current_config:
                         # 🆕 V8.5.1.4: 修复参数读取逻辑
                         # V8.5之后，参数存储在config['scalping_params']和config['swing_params']中
@@ -13005,8 +13006,8 @@ def analyze_and_adjust_params():
                 
                 # 🆕 V8.5.2.4.43: 发送详细格式的Bark推送通知（含Phase 4结果）
                 try:
-                    # 重新加载config获取最新优化数据
-                    current_config = load_learning_config()
+                    # 【V8.5.2.4.89】避免重复加载config，直接使用内存中的config
+                    current_config = config  # 使用已有的config，避免内存浪费
                     
                     # 构建详细的Bark内容（与老版本格式一致）
                     bark_content_lines = []
@@ -20914,7 +20915,7 @@ def execute_portfolio_actions(
                     f"AI判断:{direction} 但盈亏比不足\n"
                     f"要求:{min_rr_required:.1f} 实际:{risk_reward:.2f}\n"
                     f"当前价:{entry_price:.2f} 止损:{stop_loss:.2f} 止盈:{take_profit:.2f}\n"
-                        f"AI理由: {action.get('reason', 'N/A')[:80]}",
+                    f"AI理由: {action.get('reason', 'N/A')[:80]}",
                 )
                 continue
             else:
