@@ -1,0 +1,207 @@
+======================================================================
+【紧急修复】服务器语法错误 - V8.5.2.4.89.3
+======================================================================
+
+问题：
+  File "deepseek_多币种智能版.py", line 10833
+    'swing_params': copy.deepcopy(config.get('swing_params', {}))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+SyntaxError: invalid syntax. Perhaps you forgot a comma?
+
+原因：
+可能是git pull时产生了冲突，或者文件损坏
+
+======================================================================
+快速修复步骤
+======================================================================
+
+# 1. 备份当前损坏的文件
+cd /root/10-23-bot/ds
+cp deepseek_多币种智能版.py deepseek_多币种智能版.py.broken
+cp qwen_多币种智能版.py qwen_多币种智能版.py.broken
+
+# 2. 重置到最新版本
+cd /root/10-23-bot
+git reset --hard HEAD
+git pull
+
+# 3. 验证语法
+cd ds
+python3 -m py_compile deepseek_多币种智能版.py
+python3 -m py_compile qwen_多币种智能版.py
+
+# 【预期输出】
+# 无输出 = 编译成功 ✅
+# 有错误 = 继续下面的步骤
+
+# 4. 如果仍有错误，手动检查冲突标记
+grep -n "<<<<<<< HEAD\|=======\|>>>>>>>" deepseek_多币种智能版.py
+
+# 如果有输出，说明有冲突标记，需要手动解决
+
+# 5. 检查第10816-10841行
+sed -n '10816,10841p' deepseek_多币种智能版.py
+
+# 【应该看到】
+# old_config = {
+#     'global': copy.deepcopy(config.get('global', {})),
+#     'per_symbol': copy.deepcopy(config.get('per_symbol', {})),
+#     'scalping_params': copy.deepcopy(config.get('scalping_params', {})),
+#     'swing_params': copy.deepcopy(config.get('swing_params', {}))
+# }
+
+======================================================================
+方案A：完全重置（推荐）
+======================================================================
+
+# 这会丢弃所有本地修改，使用远程最新版本
+
+cd /root/10-23-bot
+git fetch origin
+git reset --hard origin/main
+git clean -fd
+
+# 验证
+cd ds
+python3 -m py_compile deepseek_多币种智能版.py && echo "✅ 编译成功"
+
+======================================================================
+方案B：手动修复（如果方案A不work）
+======================================================================
+
+# 1. 打开文件编辑第10816-10841行
+vim +10816 deepseek_多币种智能版.py
+
+# 2. 确保这段代码如下（注意缩进是12个空格）：
+
+            # 【V8.5.2.4.89.1】轻量级old_config - 只复制参数部分，不复制整个config
+            # 之前deepcopy整个config会导致内存翻倍（10-20MB → 20-40MB）
+            # 现在只复制真正需要的参数字段（<1MB）
+            import copy
+            old_config = {
+                'global': copy.deepcopy(config.get('global', {})),
+                'per_symbol': copy.deepcopy(config.get('per_symbol', {})),
+                'scalping_params': copy.deepcopy(config.get('scalping_params', {})),
+                'swing_params': copy.deepcopy(config.get('swing_params', {}))
+            }
+            
+            # 如果config中没有这些参数，从global中提取作为旧参数
+            if 'scalping_params' not in old_config:
+                old_config['scalping_params'] = {
+                    'atr_tp_multiplier': old_config.get('global', {}).get('atr_tp_multiplier', 2.0),
+                    'atr_stop_multiplier': old_config.get('global', {}).get('atr_stop_multiplier', 1.5),
+                    'min_risk_reward': old_config.get('global', {}).get('min_risk_reward', 1.5),
+                    'min_signal_score': old_config.get('global', {}).get('min_signal_score', 60),
+                    'min_indicator_consensus': old_config.get('global', {}).get('min_indicator_consensus', 1),
+                    'max_holding_hours': 12
+                }
+            if 'swing_params' not in old_config:
+                old_config['swing_params'] = {
+                    'atr_tp_multiplier': old_config.get('global', {}).get('atr_tp_multiplier', 3.0),
+                    'atr_stop_multiplier': old_config.get('global', {}).get('atr_stop_multiplier', 1.5),
+                    'min_risk_reward': old_config.get('global', {}).get('min_risk_reward', 2.0),
+                    'min_signal_score': old_config.get('global', {}).get('min_signal_score', 60),
+                    'min_indicator_consensus': old_config.get('global', {}).get('min_indicator_consensus', 1),
+                    'max_holding_hours': 72
+                }
+
+# 3. 保存并验证
+python3 -m py_compile deepseek_多币种智能版.py
+
+======================================================================
+方案C：下载干净的文件（最后手段）
+======================================================================
+
+# 直接从GitHub下载最新文件
+
+cd /root/10-23-bot/ds
+
+# 备份
+mv deepseek_多币种智能版.py deepseek_多币种智能版.py.broken
+
+# 下载
+wget https://raw.githubusercontent.com/Leo202403/bot/main/ds/deepseek_多币种智能版.py
+
+# 验证
+python3 -m py_compile deepseek_多币种智能版.py && echo "✅ 成功"
+
+# 同样操作qwen版本
+mv qwen_多币种智能版.py qwen_多币种智能版.py.broken
+wget https://raw.githubusercontent.com/Leo202403/bot/main/ds/qwen_多币种智能版.py
+python3 -m py_compile qwen_多币种智能版.py && echo "✅ 成功"
+
+======================================================================
+验证修复
+======================================================================
+
+# 1. 编译检查
+python3 -m py_compile deepseek_多币种智能版.py
+python3 -m py_compile qwen_多币种智能版.py
+
+# 【预期输出】
+# 无输出 = ✅ 成功
+
+# 2. 语法检查
+python3 -c "import ast; ast.parse(open('deepseek_多币种智能版.py').read())" && echo "✅ 语法正确"
+
+# 3. 运行回测测试
+MANUAL_BACKTEST=true python3 deepseek_多币种智能版.py backtest-deepseek 2>&1 | head -20
+
+# 【预期输出】
+# 🔧 币安交易所初始化...
+# ✓ 时间同步正常...
+# （没有SyntaxError）
+
+======================================================================
+常见错误原因
+======================================================================
+
+1. Git冲突标记未解决
+   症状：文件中有 <<<<<<< HEAD 或 ======= 或 >>>>>>>
+   解决：使用方案A完全重置
+
+2. 文件编码问题
+   症状：显示乱码或特殊字符
+   解决：使用方案C下载新文件
+
+3. 缩进错误
+   症状：IndentationError或unexpected indent
+   解决：使用方案B手动修复，确保缩进一致（12个空格）
+
+4. 括号不匹配
+   症状：SyntaxError: invalid syntax
+   解决：检查第10816-10821行，确保字典括号正确闭合
+
+======================================================================
+修复后的下一步
+======================================================================
+
+# 1. 运行回测（不集成内存监控，先确保基本功能正常）
+cd /root/10-23-bot/ds
+MANUAL_BACKTEST=true python3 deepseek_多币种智能版.py backtest-deepseek
+
+# 2. 如果成功完成，再集成内存监控
+python3 quick_add_memory_monitor.py
+
+# 3. 运行带监控的回测
+MANUAL_BACKTEST=true python3 deepseek_多币种智能版.py backtest-deepseek
+
+======================================================================
+如果所有方案都失败
+======================================================================
+
+请提供以下信息：
+
+1. git status 输出
+2. git log --oneline -5 输出
+3. 第10816-10841行的实际内容：
+   sed -n '10816,10841p' deepseek_多币种智能版.py
+4. 是否有冲突标记：
+   grep -c "<<<<<<< HEAD" deepseek_多币种智能版.py
+
+======================================================================
+版本: V8.5.2.4.89.3
+日期: 2025-11-20
+状态: 紧急修复
+======================================================================
+
