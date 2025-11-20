@@ -15330,11 +15330,29 @@ def get_ohlcv_data(symbol, skip_timing_check=False):
             symbol, TRADE_CONFIG["timeframe"], limit=limit_15m
         )
         
-        # 【V8.5.2.3关键】移除最后一根K线（可能还在形成中）
+        # 【V8.5.2.3优化】智能判断是否需要移除最后一根K线
         if len(ohlcv_15m) > 0:
+            current_time = datetime.now()
             last_kline_time = datetime.fromtimestamp(ohlcv_15m[-1][0] / 1000)
-            print(f"📊 {symbol}: 移除最后一根K线 {last_kline_time.strftime('%H:%M')}（可能未完成），确保数据完整")
-            ohlcv_15m = ohlcv_15m[:-1]  # 移除最后一根
+            
+            # 计算当前应该完成的K线时间（向下取整到15分钟）
+            current_minute = current_time.minute
+            completed_minute = (current_minute // 15) * 15
+            expected_completed_time = current_time.replace(minute=completed_minute, second=0, microsecond=0)
+            
+            # 如果最后一根K线的开始时间 >= 当前周期，说明是未完成的，需要移除
+            if last_kline_time >= expected_completed_time:
+                second_last_time = datetime.fromtimestamp(ohlcv_15m[-2][0] / 1000) if len(ohlcv_15m) > 1 else None
+                print(f"📊 {symbol}: 移除未完成K线 {last_kline_time.strftime('%H:%M')}")
+                if second_last_time:
+                    delay_minutes = (current_time - second_last_time - timedelta(minutes=15)).total_seconds() / 60
+                    print(f"   → 使用已完成K线: {second_last_time.strftime('%H:%M')}-{(second_last_time + timedelta(minutes=15)).strftime('%H:%M')} (延后{delay_minutes:.0f}分钟)")
+                ohlcv_15m = ohlcv_15m[:-1]  # 移除未完成的最后一根
+            else:
+                # 最后一根是已完成的，保留
+                end_time = last_kline_time + timedelta(minutes=15)
+                delay_minutes = (current_time - end_time).total_seconds() / 60
+                print(f"📊 {symbol}: 使用已完成K线 {last_kline_time.strftime('%H:%M')}-{end_time.strftime('%H:%M')} (延后{delay_minutes:.0f}分钟)")
         
         df_15m = pd.DataFrame(
             ohlcv_15m, columns=["timestamp", "open", "high", "low", "close", "volume"]
@@ -15350,9 +15368,16 @@ def get_ohlcv_data(symbol, skip_timing_check=False):
                 limit_4h = 50  # 实盘：约8天（足够计算趋势）
             
             ohlcv_4h = exchange.fetch_ohlcv(symbol, "4h", limit=limit_4h)
-            # 【V8.5.2.3】移除最后一根K线（可能未完成）
+            # 【V8.5.2.3优化】智能判断是否需要移除4H K线
             if len(ohlcv_4h) > 0:
-                ohlcv_4h = ohlcv_4h[:-1]
+                current_time = datetime.now()
+                last_kline_time = datetime.fromtimestamp(ohlcv_4h[-1][0] / 1000)
+                # 计算当前应该完成的4H K线时间
+                current_hour = current_time.hour
+                completed_hour = (current_hour // 4) * 4
+                expected_completed_time = current_time.replace(hour=completed_hour, minute=0, second=0, microsecond=0)
+                if last_kline_time >= expected_completed_time:
+                    ohlcv_4h = ohlcv_4h[:-1]  # 移除未完成的
             df_4h = pd.DataFrame(
                 ohlcv_4h,
                 columns=["timestamp", "open", "high", "low", "close", "volume"],
@@ -15380,9 +15405,14 @@ def get_ohlcv_data(symbol, skip_timing_check=False):
                 limit_1h = 100  # 实盘：约4天（足够S/R分析）
             
             ohlcv_1h = exchange.fetch_ohlcv(symbol, "1h", limit=limit_1h)
-            # 【V8.5.2.3】移除最后一根K线（可能未完成）
+            # 【V8.5.2.3优化】智能判断是否需要移除1H K线
             if len(ohlcv_1h) > 0:
-                ohlcv_1h = ohlcv_1h[:-1]
+                current_time = datetime.now()
+                last_kline_time = datetime.fromtimestamp(ohlcv_1h[-1][0] / 1000)
+                # 当前应该完成的1H K线时间
+                expected_completed_time = current_time.replace(minute=0, second=0, microsecond=0)
+                if last_kline_time >= expected_completed_time:
+                    ohlcv_1h = ohlcv_1h[:-1]  # 移除未完成的
             df_1h = pd.DataFrame(
                 ohlcv_1h,
                 columns=["timestamp", "open", "high", "low", "close", "volume"],
