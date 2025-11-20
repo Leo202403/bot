@@ -19,6 +19,62 @@ import os
 from openai import OpenAI
 
 
+def classify_entry_quality(trade, objective_profit=None):
+    """
+    【V8.5.2.4.82】完整的开仓质量分类（7类）
+    
+    Args:
+        trade: dict or Series, 交易记录
+        objective_profit: float, 客观最大利润（用于判断是否时机问题）
+    
+    Returns:
+        str: 分类名称（'excellent', 'good', 'timing_issue', 'false_signal', 
+                      'reasonable_loss', 'breakeven', 'holding'）
+    """
+    # 获取盈亏
+    pnl_raw = trade.get('盈亏(U)', trade.get('盈亏', trade.get('PnL', trade.get('实际盈亏'))))
+    if pnl_raw is None or pd.isna(pnl_raw):
+        pnl = 0
+    else:
+        try:
+            pnl = float(pnl_raw)
+        except:
+            pnl = 0
+    
+    # 获取平仓时间（判断是否持仓中）
+    close_time = trade.get('平仓时间', trade.get('close_time'))
+    
+    # 1. 持仓中（未平仓）
+    if close_time is None or pd.isna(close_time) or str(close_time).strip() == '':
+        return 'holding'
+    
+    # 2. 平局（±1U）
+    if abs(pnl) <= 1.0:
+        return 'breakeven'
+    
+    # 3. 盈利交易
+    if pnl > 0:
+        # 3.1 优秀（>5U）
+        if pnl > 5.0:
+            return 'excellent'
+        # 3.2 良好（1-5U）
+        else:
+            # 检查是否时机问题（错过更大利润）
+            if objective_profit and objective_profit > pnl * 1.5:
+                return 'timing_issue'
+            else:
+                return 'good'
+    
+    # 4. 亏损交易
+    else:
+        # 4.1 虚假信号（快速止损，且亏损>2U）
+        if abs(pnl) > 2.0:
+            return 'false_signal'
+        # 4.2 合理止损（亏损1-2U）
+        else:
+            return 'reasonable_loss'
+
+
 def analyze_entry_timing_v2(
     yesterday_trades_df,
     market_snapshots_df,
@@ -28,15 +84,19 @@ def analyze_entry_timing_v2(
 ):
     """
     【V8.3.25.15】完整的开仓时机分析（核心改进：使用回测确认的盈利机会）
+    【V8.5.2.4.82】新增：7类完整分类，确保所有交易都被分类
     
     核心逻辑：
     1. 使用回测确认的盈利机会（而非所有市场快照）作为基准
     2. 对比AI实际开仓记录
-    3. 分类分析：
-       - 正确开仓：AI开了，且实际盈利
-       - 错误开仓：AI开了，但快速止损（虚假信号）
-       - 错过机会：回测确认能盈利的机会，但AI没开（查AI当时的决策理由）
-       - 时机问题：开了但太早/太晚
+    3. 分类分析（7类）：
+       - ✅ 优秀：盈利>5U
+       - ✔️ 良好：盈利1-5U
+       - ⚠️ 时机问题：方向对但时机欠佳
+       - ❌ 虚假信号：快速止损，亏损>2U
+       - 🔻 合理止损：亏损1-2U，止损及时
+       - ➡️ 平局：盈亏接近0（±1U）
+       - ⏳ 持仓中：尚未平仓
     
     Args:
         yesterday_trades_df: DataFrame, 昨日开仓的交易
@@ -47,33 +107,45 @@ def analyze_entry_timing_v2(
     
     Returns:
         {
-            'entry_stats': {...},  # 统计数据
-            'correct_entries': [...],  # 正确开仓案例
-            'false_entries': [...],  # 虚假信号开仓
-            'missed_opportunities': [...],  # 错过的机会（回测确认能盈利，且AI没开）
-            'timing_issues': [...],  # 时机问题（太早/太晚）
+            'entry_stats': {...},  # 统计数据（包含7类分类）
+            'excellent_entries': [...],  # ✅ 优秀
+            'good_entries': [...],  # ✔️ 良好
+            'timing_issues': [...],  # ⚠️ 时机问题
+            'false_entries': [...],  # ❌ 虚假信号
+            'reasonable_loss_entries': [...],  # 🔻 合理止损
+            'breakeven_entries': [...],  # ➡️ 平局
+            'holding_entries': [...],  # ⏳ 持仓中
+            'missed_opportunities': [...],  # 错过的机会
             'entry_table_data': [...],  # 邮件表格数据
             'entry_lessons': [...]  # 改进建议
         }
     """
     
-    print(f"\n【开仓时机完整分析 V8.3.25.8】")
+    print(f"\n【开仓时机完整分析 V8.3.25.8 + V8.5.2.4.82】")
     
-    # 初始化统计
+    # 初始化统计（7类分类）
     entry_stats = {
         'total_opportunities': 0,  # 昨日识别的总机会数
         'ai_opened': 0,  # AI实际开仓数
-        'correct_entries': 0,  # 正确开仓
-        'false_entries': 0,  # 虚假信号
+        'excellent_entries': 0,  # ✅ 优秀
+        'good_entries': 0,  # ✔️ 良好
+        'timing_issues': 0,  # ⚠️ 时机问题
+        'false_entries': 0,  # ❌ 虚假信号
+        'reasonable_loss': 0,  # 🔻 合理止损
+        'breakeven': 0,  # ➡️ 平局
+        'holding': 0,  # ⏳ 持仓中
         'missed_profitable': 0,  # 错过的盈利机会
-        'correctly_filtered': 0,  # 正确过滤的虚假信号
-        'timing_issues': 0  # 时机问题（太早/太晚）
+        'correctly_filtered': 0  # 正确过滤的虚假信号
     }
     
-    correct_entries = []
-    false_entries = []
-    missed_opportunities = []
+    excellent_entries = []
+    good_entries = []
     timing_issues = []
+    false_entries = []
+    reasonable_loss_entries = []
+    breakeven_entries = []
+    holding_entries = []
+    missed_opportunities = []
     entry_table_data = []
     
     # ===== Step 1: 获取昨日所有市场快照 =====
@@ -81,10 +153,15 @@ def analyze_entry_timing_v2(
         print(f"⚠️ 无市场快照数据，无法进行开仓时机分析")
         return {
             'entry_stats': entry_stats,
-            'correct_entries': [],
-            'false_entries': [],
-            'missed_opportunities': [],
+            'excellent_entries': [],
+            'good_entries': [],
             'timing_issues': [],
+            'false_entries': [],
+            'reasonable_loss_entries': [],
+            'breakeven_entries': [],
+            'holding_entries': [],
+            'correct_entries': [],  # 兼容
+            'missed_opportunities': [],
             'entry_table_data': [],
             'entry_lessons': ['无市场快照数据，无法分析']
         }
@@ -97,10 +174,15 @@ def analyze_entry_timing_v2(
         print(f"⚠️ 市场快照数据缺少snapshot_date列（旧格式），无法筛选昨日数据")
         return {
             'entry_stats': entry_stats,
-            'correct_entries': [],
-            'false_entries': [],
-            'missed_opportunities': [],
+            'excellent_entries': [],
+            'good_entries': [],
             'timing_issues': [],
+            'false_entries': [],
+            'reasonable_loss_entries': [],
+            'breakeven_entries': [],
+            'holding_entries': [],
+            'correct_entries': [],  # 兼容
+            'missed_opportunities': [],
             'entry_table_data': [],
             'entry_lessons': ['市场快照数据格式不兼容（缺少snapshot_date列）']
         }
@@ -113,10 +195,15 @@ def analyze_entry_timing_v2(
         print(f"⚠️ 昨日({yesterday_date_yyyymmdd})无市场快照数据")
         return {
             'entry_stats': entry_stats,
-            'correct_entries': [],
-            'false_entries': [],
-            'missed_opportunities': [],
+            'excellent_entries': [],
+            'good_entries': [],
             'timing_issues': [],
+            'false_entries': [],
+            'reasonable_loss_entries': [],
+            'breakeven_entries': [],
+            'holding_entries': [],
+            'correct_entries': [],  # 兼容
+            'missed_opportunities': [],
             'entry_table_data': [],
             'entry_lessons': ['昨日无市场快照数据']
         }
@@ -348,56 +435,57 @@ def analyze_entry_timing_v2(
                     })
                     entry_stats['missed_profitable'] += 1
                 else:
-                    # AI开仓了 → 分析质量（复用原有逻辑）
+                    # AI开仓了 → 使用新的7类分类
                     matched_trades_count += len(matching_trades)
                     trade = matching_trades.iloc[0]
                     
-                    # （复用原有的交易质量判断代码，这里暂时简化）
-                    pnl_raw = trade.get('盈亏(U)', trade.get('盈亏', trade.get('PnL')))
-                    if pnl_raw is None or pd.isna(pnl_raw):
-                        pnl = 0
-                    else:
-                        try:
-                            pnl = float(pnl_raw)
-                        except:
-                            pnl = 0
+                    # 【V8.5.2.4.82】使用新的分类函数
+                    category = classify_entry_quality(trade, objective_profit)
                     
-                    if pnl > 0.1:
-                        correct_entries.append({
-                            'coin': coin,
-                            'time': timestamp_str,
-                            'signal_score': signal_score,
-                            'consensus': consensus,
-                            'pnl': pnl,
-                            'reason': f'正确开仓：盈利{pnl:.2f}U',
-                            'ai_open_reason': trade.get('开仓理由', 'N/A'),
-                            'ai_close_reason': trade.get('平仓理由', 'N/A')
-                        })
-                        entry_stats['correct_entries'] += 1
-                    elif pnl < -0.5:
-                        false_entries.append({
-                            'coin': coin,
-                            'time': timestamp_str,
-                            'signal_score': signal_score,
-                            'consensus': consensus,
-                            'pnl': pnl,
-                            'reason': '虚假信号：快速止损',
-                            'ai_open_reason': trade.get('开仓理由', 'N/A'),
-                            'ai_close_reason': trade.get('平仓理由', 'N/A')
-                        })
-                        entry_stats['false_entries'] += 1
-                    else:
-                        timing_issues.append({
-                            'coin': coin,
-                            'time': timestamp_str,
-                            'signal_score': signal_score,
-                            'consensus': consensus,
-                            'pnl': pnl,
-                            'reason': f'时机问题：盈亏接近0（{pnl:+.2f}U）',
-                            'ai_open_reason': trade.get('开仓理由', 'N/A'),
-                            'ai_close_reason': trade.get('平仓理由', 'N/A')
-                        })
+                    # 获取盈亏（用于显示）
+                    pnl_raw = trade.get('盈亏(U)', trade.get('盈亏', trade.get('PnL')))
+                    pnl = float(pnl_raw) if pnl_raw and not pd.isna(pnl_raw) else 0
+                    
+                    # 构建基础记录
+                    entry_record = {
+                        'coin': coin,
+                        'time': timestamp_str,
+                        'signal_score': signal_score,
+                        'consensus': consensus,
+                        'pnl': pnl,
+                        'ai_open_reason': trade.get('开仓理由', 'N/A'),
+                        'ai_close_reason': trade.get('平仓理由', 'N/A')
+                    }
+                    
+                    # 根据分类添加到对应列表
+                    if category == 'excellent':
+                        entry_record['reason'] = f'✅ 优秀：盈利{pnl:.2f}U'
+                        excellent_entries.append(entry_record)
+                        entry_stats['excellent_entries'] += 1
+                    elif category == 'good':
+                        entry_record['reason'] = f'✔️ 良好：盈利{pnl:.2f}U'
+                        good_entries.append(entry_record)
+                        entry_stats['good_entries'] += 1
+                    elif category == 'timing_issue':
+                        entry_record['reason'] = f'⚠️ 时机问题：盈利{pnl:.2f}U，但错过更大利润'
+                        timing_issues.append(entry_record)
                         entry_stats['timing_issues'] += 1
+                    elif category == 'false_signal':
+                        entry_record['reason'] = f'❌ 虚假信号：亏损{pnl:.2f}U'
+                        false_entries.append(entry_record)
+                        entry_stats['false_entries'] += 1
+                    elif category == 'reasonable_loss':
+                        entry_record['reason'] = f'🔻 合理止损：亏损{pnl:.2f}U'
+                        reasonable_loss_entries.append(entry_record)
+                        entry_stats['reasonable_loss'] += 1
+                    elif category == 'breakeven':
+                        entry_record['reason'] = f'➡️ 平局：盈亏{pnl:+.2f}U'
+                        breakeven_entries.append(entry_record)
+                        entry_stats['breakeven'] += 1
+                    elif category == 'holding':
+                        entry_record['reason'] = '⏳ 持仓中'
+                        holding_entries.append(entry_record)
+                        entry_stats['holding'] += 1
         else:
             # 【原逻辑】使用yesterday_snapshots
             for idx, snapshot in yesterday_snapshots.iterrows():
@@ -667,6 +755,75 @@ def analyze_entry_timing_v2(
                 'evaluation': '⚠️ 错过机会'
             })
     
+    # 【V8.5.2.4.82】Step 3.5: 确保所有交易都被分类
+    # 检查是否有未分类的交易
+    total_classified = (
+        entry_stats['excellent_entries'] + 
+        entry_stats['good_entries'] + 
+        entry_stats['timing_issues'] + 
+        entry_stats['false_entries'] + 
+        entry_stats['reasonable_loss'] + 
+        entry_stats['breakeven'] + 
+        entry_stats['holding']
+    )
+    
+    if total_classified < entry_stats['ai_opened']:
+        print(f"\n  ⚠️  【警告】发现{entry_stats['ai_opened'] - total_classified}笔未分类交易")
+        print(f"     已分类: {total_classified}笔, 实际开仓: {entry_stats['ai_opened']}笔")
+        
+        # 找出未分类的交易并强制分类
+        classified_times = set()
+        for entry_list in [excellent_entries, good_entries, timing_issues, false_entries, 
+                          reasonable_loss_entries, breakeven_entries, holding_entries]:
+            for entry in entry_list:
+                classified_times.add(entry.get('time', ''))
+        
+        # 遍历所有交易，找出未分类的
+        for idx, trade in yesterday_trades_df.iterrows():
+            open_time = str(trade.get('开仓时间', ''))
+            if open_time not in classified_times:
+                # 未分类的交易，使用分类函数强制分类
+                category = classify_entry_quality(trade)
+                
+                pnl_raw = trade.get('盈亏(U)', trade.get('盈亏', trade.get('PnL')))
+                pnl = float(pnl_raw) if pnl_raw and not pd.isna(pnl_raw) else 0
+                
+                entry_record = {
+                    'coin': trade.get('币种', 'N/A'),
+                    'time': open_time,
+                    'signal_score': 0,
+                    'consensus': 0,
+                    'pnl': pnl,
+                    'reason': f'未匹配机会池的交易（{category}）',
+                    'ai_open_reason': trade.get('开仓理由', 'N/A'),
+                    'ai_close_reason': trade.get('平仓理由', 'N/A')
+                }
+                
+                # 根据分类添加
+                if category == 'excellent':
+                    excellent_entries.append(entry_record)
+                    entry_stats['excellent_entries'] += 1
+                elif category == 'good':
+                    good_entries.append(entry_record)
+                    entry_stats['good_entries'] += 1
+                elif category == 'timing_issue':
+                    timing_issues.append(entry_record)
+                    entry_stats['timing_issues'] += 1
+                elif category == 'false_signal':
+                    false_entries.append(entry_record)
+                    entry_stats['false_entries'] += 1
+                elif category == 'reasonable_loss':
+                    reasonable_loss_entries.append(entry_record)
+                    entry_stats['reasonable_loss'] += 1
+                elif category == 'breakeven':
+                    breakeven_entries.append(entry_record)
+                    entry_stats['breakeven'] += 1
+                elif category == 'holding':
+                    holding_entries.append(entry_record)
+                    entry_stats['holding'] += 1
+                
+                print(f"     └─ 已分类: {trade.get('币种')} @ {open_time} → {category}")
+    
     # ===== Step 4: 生成改进建议 =====
     entry_lessons = []
     
@@ -682,13 +839,22 @@ def analyze_entry_timing_v2(
     if entry_stats['timing_issues'] > 0:
         entry_lessons.append(f"时机问题{entry_stats['timing_issues']}笔：优化开仓时机判断（等待更强确认信号）")
     
-    # 打印统计
+    # 【V8.5.2.4.82】打印统计（7类完整分类）
     print(f"\n  📊 开仓质量统计：")
     print(f"     总机会数: {entry_stats['total_opportunities']}")
     print(f"     AI开仓: {entry_stats['ai_opened']} ({entry_stats['ai_opened']/max(entry_stats['total_opportunities'],1)*100:.0f}%)")
-    print(f"     ├─ ✅ 正确开仓: {entry_stats['correct_entries']}")
-    print(f"     ├─ ❌ 虚假信号: {entry_stats['false_entries']}")
-    print(f"     └─ ⚠️ 时机问题: {entry_stats['timing_issues']}")
+    print(f"     ├─ ✅ 优秀: {entry_stats['excellent_entries']}笔 |")
+    print(f"     ├─ ✔️ 良好: {entry_stats['good_entries']}笔 |")
+    print(f"     ├─ ⚠️ 时机问题: {entry_stats['timing_issues']}笔 |")
+    print(f"     ├─ ❌ 虚假信号: {entry_stats['false_entries']}笔 |")
+    print(f"     ├─ 🔻 合理止损: {entry_stats['reasonable_loss']}笔 |")
+    print(f"     ├─ ➡️ 平局: {entry_stats['breakeven']}笔 |")
+    print(f"     └─ ⏳ 持仓中: {entry_stats['holding']}笔")
+    
+    total_classified = (entry_stats['excellent_entries'] + entry_stats['good_entries'] + 
+                       entry_stats['timing_issues'] + entry_stats['false_entries'] + 
+                       entry_stats['reasonable_loss'] + entry_stats['breakeven'] + entry_stats['holding'])
+    print(f"     分类合计: {total_classified}笔 {'✅' if total_classified == entry_stats['ai_opened'] else '❌ 不等于AI开仓数'}")
     print(f"     错过机会: {entry_stats['missed_profitable']}")
     print(f"     正确过滤: {entry_stats['correctly_filtered']}")
     print(f"  🔍 【调试】共匹配到 {matched_trades_count} 笔交易与market snapshot关联")
@@ -703,12 +869,20 @@ def analyze_entry_timing_v2(
     else:
         missed_opportunities_for_ai = missed_opportunities
     
+    # 【V8.5.2.4.82】返回7类完整分类
     return {
         'entry_stats': entry_stats,
-        'correct_entries': correct_entries,
-        'false_entries': false_entries,
+        # 新的7类分类
+        'excellent_entries': excellent_entries,  # ✅ 优秀
+        'good_entries': good_entries,  # ✔️ 良好
+        'timing_issues': timing_issues,  # ⚠️ 时机问题
+        'false_entries': false_entries,  # ❌ 虚假信号
+        'reasonable_loss_entries': reasonable_loss_entries,  # 🔻 合理止损
+        'breakeven_entries': breakeven_entries,  # ➡️ 平局
+        'holding_entries': holding_entries,  # ⏳ 持仓中
+        # 兼容旧代码（保留correct_entries字段）
+        'correct_entries': excellent_entries + good_entries,  # 合并优秀+良好
         'missed_opportunities': missed_opportunities_for_ai,  # 🔧 V8.3.25.20: 传递筛选后的TOP 30
-        'timing_issues': timing_issues,
         'entry_table_data': entry_table_data,
         'entry_lessons': entry_lessons
     }

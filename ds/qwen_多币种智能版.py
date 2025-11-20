@@ -12636,13 +12636,23 @@ def analyze_and_adjust_params():
                     
                     # 🆕 V8.5.5: 开仓质量分析（独立模块，用户要求）
                     # 🆕 V8.5.6: 增加"错过机会"统计
+                    # 【V8.5.2.4.82】更新：使用7类完整分类
                     if has_entry:
                         try:
                             entry_stats = entry_analysis['entry_stats']
                             total_ai_opened = entry_stats.get('ai_opened', 0)
-                            correct_entries = entry_stats.get('correct_entries', 0)
+                            
+                            # 【V8.5.2.4.82】新的7类分类
+                            excellent_entries = entry_stats.get('excellent_entries', 0)
+                            good_entries = entry_stats.get('good_entries', 0)
                             timing_issues = entry_stats.get('timing_issues', 0)
                             false_entries = entry_stats.get('false_entries', 0)
+                            reasonable_loss = entry_stats.get('reasonable_loss', 0)
+                            breakeven = entry_stats.get('breakeven', 0)
+                            holding = entry_stats.get('holding', 0)
+                            
+                            # 兼容：合并优秀+良好作为correct_entries
+                            correct_entries = excellent_entries + good_entries
                             correctly_filtered = entry_stats.get('correctly_filtered', 0)
                             
                             # 🆕 V8.5.6: 获取错过的高质量机会数量
@@ -12652,11 +12662,13 @@ def analyze_and_adjust_params():
                             missed_rate = (missed_profitable / total_opportunities * 100) if total_opportunities > 0 else 0
                             
                             # 计算占比（已开仓的交易）
+                            excellent_rate = (excellent_entries / total_ai_opened * 100) if total_ai_opened > 0 else 0
+                            good_rate = (good_entries / total_ai_opened * 100) if total_ai_opened > 0 else 0
                             correct_rate = (correct_entries / total_ai_opened * 100) if total_ai_opened > 0 else 0
                             timing_rate = (timing_issues / total_ai_opened * 100) if total_ai_opened > 0 else 0
                             false_rate = (false_entries / total_ai_opened * 100) if total_ai_opened > 0 else 0
                             
-                            # 评级逻辑
+                            # 评级逻辑（基于优秀+良好的占比）
                             if correct_rate >= 60:
                                 grade = "A"
                                 grade_color = "#4caf50"
@@ -12674,9 +12686,12 @@ def analyze_and_adjust_params():
                                 grade_color = "#ff9800"
                                 grade_desc = "待改进"
                             
+                            # 【V8.5.2.4.82】计算分类合计
+                            total_classified = excellent_entries + good_entries + timing_issues + false_entries + reasonable_loss + breakeven + holding
+                            
                             stats_html += f'''
     <div style="background: #fff; padding: 15px; border-radius: 8px; margin: 15px 0; border: 2px solid {grade_color}; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-        <h3 style="color: {grade_color}; margin: 0 0 10px 0;">🎯 开仓质量分析</h3>
+        <h3 style="color: {grade_color}; margin: 0 0 10px 0;">🎯 开仓质量分析（完整分类）</h3>
         <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
             <tr style="background: #f5f5f5; font-weight: bold;">
                 <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">评级</th>
@@ -12684,23 +12699,53 @@ def analyze_and_adjust_params():
                 <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">占比</th>
                 <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">说明</th>
             </tr>
-            <tr>
+            <tr style="background: #d4edda;">
                 <td style="padding: 8px; border: 1px solid #ddd;">✅ 优秀</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{correct_entries}笔</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #4caf50;">{correct_rate:.0f}%</td>
-                <td style="padding: 8px; border: 1px solid #ddd;">正确识别，盈利交易</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{excellent_entries}笔</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #28a745;">{excellent_rate:.0f}%</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">盈利>5U</td>
             </tr>
-            <tr>
-                <td style="padding: 8px; border: 1px solid #ddd;">⚠️ 一般</td>
+            <tr style="background: #d1ecf1;">
+                <td style="padding: 8px; border: 1px solid #ddd;">✔️ 良好</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{good_entries}笔</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #17a2b8;">{good_rate:.0f}%</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">盈利1-5U</td>
+            </tr>
+            <tr style="background: #fff3cd;">
+                <td style="padding: 8px; border: 1px solid #ddd;">⚠️ 时机问题</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{timing_issues}笔</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{timing_rate:.0f}%</td>
-                <td style="padding: 8px; border: 1px solid #ddd;">时机欠佳，可优化</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">方向对但时机欠佳</td>
             </tr>
-            <tr>
-                <td style="padding: 8px; border: 1px solid #ddd;">❌ 较差</td>
+            <tr style="background: #f8d7da;">
+                <td style="padding: 8px; border: 1px solid #ddd;">❌ 虚假信号</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{false_entries}笔</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #f44336;">{false_rate:.0f}%</td>
-                <td style="padding: 8px; border: 1px solid #ddd;">虚假信号，需改进</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #dc3545;">{false_rate:.0f}%</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">快速止损，亏损>2U</td>
+            </tr>
+            <tr style="background: #e2e3e5;">
+                <td style="padding: 8px; border: 1px solid #ddd;">🔻 合理止损</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{reasonable_loss}笔</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{(reasonable_loss/total_ai_opened*100) if total_ai_opened > 0 else 0:.0f}%</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">亏损1-2U，止损及时</td>
+            </tr>
+            <tr style="background: #e2e3e5;">
+                <td style="padding: 8px; border: 1px solid #ddd;">➡️ 平局</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{breakeven}笔</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{(breakeven/total_ai_opened*100) if total_ai_opened > 0 else 0:.0f}%</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">盈亏接近0（±1U）</td>
+            </tr>
+            <tr style="background: #d1ecf1;">
+                <td style="padding: 8px; border: 1px solid #ddd;">⏳ 持仓中</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{holding}笔</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{(holding/total_ai_opened*100) if total_ai_opened > 0 else 0:.0f}%</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">尚未平仓</td>
+            </tr>
+            <tr style="font-weight: bold; background: #f5f5f5;">
+                <td style="padding: 8px; border: 1px solid #ddd;">合计</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{total_classified}笔</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">100.0%</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">{'✅ 完整' if total_classified == total_ai_opened else f'❌ 缺失{total_ai_opened - total_classified}笔'}</td>
             </tr>
             <tr>
                 <td style="padding: 8px; border: 1px solid #ddd;">🔒 过滤</td>
