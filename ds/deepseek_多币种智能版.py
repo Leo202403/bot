@@ -10452,7 +10452,7 @@ def analyze_and_adjust_params():
         
         if all_opportunities_sorted:
             try:
-                print(f"\n  📊 【V8.5.2.4.47】生成机会对比分析...")
+                print(f"\n  📊 【V8.5.2.4.89.7】生成机会对比分析（使用历史参数）...")
                 
                 # 获取Phase 4的测试结果（如果可用）
                 full_test = phase4_result_extracted.get('full_test', {}) if phase4_result_extracted else {}
@@ -10461,23 +10461,47 @@ def analyze_and_adjust_params():
                 scalping_opps = [opp for opp in all_opportunities_sorted if opp.get('signal_type') == 'scalping']
                 swing_opps = [opp for opp in all_opportunities_sorted if opp.get('signal_type') == 'swing']
                 
-                # 计算每个机会是否会被新参数捕获
+                # 【V8.5.2.4.89.7】获取历史参数（优化前的参数）
+                # 从iterative_result的最后一次迭代中获取
+                old_scalping_params = {}
+                old_swing_params = {}
+                
+                if iterative_result and '_iterative_history' in config:
+                    history = config['_iterative_history']
+                    if history:
+                        last_iter = history[-1]  # 最后一次迭代即为本次优化前的状态
+                        old_scalping_params = last_iter.get('scalping_params', {})
+                        old_swing_params = last_iter.get('swing_params', {})
+                        print(f"     ✓ 使用历史参数: 迭代#{len(history)}")
+                
+                # 如果没有历史记录，使用当前global参数作为基准（降级方案）
+                if not old_scalping_params:
+                    old_scalping_params = config.get('global', {})
+                    old_swing_params = config.get('global', {})
+                    print(f"     ⚠️ 无历史参数，使用global参数作为基准")
+                
+                # 计算每个机会是否会被新/旧参数捕获
                 scalping_params = config.get('scalping_params', config.get('global', {}))
                 swing_params = config.get('swing_params', config.get('global', {}))
                 
                 for opp in all_opportunities_sorted:
                     signal_type = opp.get('signal_type')
-                    params = scalping_params if signal_type == 'scalping' else swing_params
+                    new_params = scalping_params if signal_type == 'scalping' else swing_params
+                    old_params = old_scalping_params if signal_type == 'scalping' else old_swing_params
                     
                     # 判断是否满足参数要求
                     signal_score = opp.get('signal_score', 0)
                     consensus = opp.get('indicator_consensus', 0)
                     
-                    min_signal = params.get('min_signal_score', 50)
-                    min_consensus = params.get('min_indicator_consensus', 0)
+                    # 新参数判断
+                    min_signal_new = new_params.get('min_signal_score', 50)
+                    min_consensus_new = new_params.get('min_indicator_consensus', 0)
+                    opp['new_can_entry'] = (signal_score >= min_signal_new and consensus >= min_consensus_new)
                     
-                    opp['new_can_entry'] = (signal_score >= min_signal and consensus >= min_consensus)
-                    opp['old_can_entry'] = True  # 假设旧参数都能捕获（用于对比）
+                    # 【V8.5.2.4.89.7】旧参数判断（使用实际历史参数）
+                    min_signal_old = old_params.get('min_signal_score', 50)
+                    min_consensus_old = old_params.get('min_indicator_consensus', 0)
+                    opp['old_can_entry'] = (signal_score >= min_signal_old and consensus >= min_consensus_old)
                     
                     # 添加捕获利润和效率字段（供邮件显示）
                     if opp['new_can_entry']:
@@ -10489,23 +10513,31 @@ def analyze_and_adjust_params():
                         opp['new_efficiency'] = 0
                         opp['new_exit_type'] = 'N/A'
                     
-                    opp['old_captured_profit'] = opp.get('objective_profit', 0)
-                    opp['old_efficiency'] = 100.0
-                    opp['old_exit_type'] = 'TP'
+                    if opp['old_can_entry']:
+                        opp['old_captured_profit'] = opp.get('objective_profit', 0)
+                        opp['old_efficiency'] = 100.0
+                        opp['old_exit_type'] = 'TP'
+                    else:
+                        opp['old_captured_profit'] = 0
+                        opp['old_efficiency'] = 0
+                        opp['old_exit_type'] = 'N/A'
                 
                 new_captured = [opp for opp in all_opportunities_sorted if opp.get('new_can_entry', False)]
-                old_captured = all_opportunities_sorted[:]  # 旧参数假设捕获所有
+                old_captured = [opp for opp in all_opportunities_sorted if opp.get('old_can_entry', False)]
                 missed = [opp for opp in all_opportunities_sorted if not opp.get('new_can_entry', False)]
                 
                 # 计算平均利润
                 avg_old_profit = sum(o.get('objective_profit', 0) for o in old_captured) / len(old_captured) if old_captured else 0
                 avg_new_profit = sum(o.get('objective_profit', 0) for o in new_captured) / len(new_captured) if new_captured else 0
                 
+                # 【V8.5.2.4.89.7】计算真实的捕获率
+                old_capture_rate = len(old_captured) / len(all_opportunities_sorted) * 100 if all_opportunities_sorted else 0
+                
                 # 构建stats
                 stats = {
                     'total_opportunities': len(all_opportunities_sorted),
                     'old_captured_count': len(old_captured),
-                    'old_capture_rate': 100.0,  # 假设旧参数100%捕获
+                    'old_capture_rate': old_capture_rate,  # 使用真实捕获率
                     'new_captured_count': len(new_captured),
                     'new_capture_rate': len(new_captured) / len(all_opportunities_sorted) * 100 if all_opportunities_sorted else 0,
                     'avg_old_captured_profit': avg_old_profit,

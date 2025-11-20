@@ -155,26 +155,34 @@ def generate_phase_summary_table(phase_data):
 
 def generate_params_comparison_table(scalping_params, swing_params, learned_features=None):
     """
-    【V8.5.2.4.83】生成超短线/波段参数对比表HTML（包含密度信息）
+    【V8.5.2.4.89.6】生成超短线/波段参数对比表HTML（包含密度信息+处理None）
     
     Args:
-        scalping_params: dict, 超短线参数
+        scalping_params: dict, 超短线参数（可能为None）
         swing_params: dict, 波段参数
         learned_features: dict, Phase 2学习成果（包含密度信息）
     
     Returns:
         str: HTML表格
     """
+    # 【V8.5.2.4.89.6】处理None情况
+    if scalping_params is None:
+        scalping_params = {}
+    if swing_params is None:
+        swing_params = {}
+    
     # 安全获取参数值
     def safe_get(params, key, default='N/A'):
+        if not params:  # 如果params为空字典
+            return default
         value = params.get(key, default)
         if isinstance(value, float):
             return f"{value:.1f}"
         return str(value)
     
     # 移动止损图标
-    scalping_trailing = "✅" if scalping_params.get('trailing_stop_enabled') else "❌"
-    swing_trailing = "✅" if swing_params.get('trailing_stop_enabled') else "❌"
+    scalping_trailing = "✅" if scalping_params and scalping_params.get('trailing_stop_enabled') else "❌"
+    swing_trailing = "✅" if swing_params and swing_params.get('trailing_stop_enabled') else "❌"
     
     # 【V8.5.2.4.83】从learned_features提取密度信息
     if learned_features is None:
@@ -327,14 +335,14 @@ def generate_profit_comparison_table(phase_data):
     
     html = f"""
 <div class="summary-box" style="background: #e8f5e9; border: 2px solid #4caf50; margin: 20px 0; padding: 20px; border-radius: 8px;">
-    <h2 style="color: #1b5e20; margin-top: 0;">💰 总利润对比分析</h2>
+    <h2 style="color: #1b5e20; margin-top: 0;">💰 累计收益率对比分析</h2>
     
     <table style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 14px;">
         <thead>
             <tr style="background: #4caf50; color: white;">
                 <th style="padding: 12px; border: 1px solid #dee2e6; text-align: left;">阶段</th>
-                <th style="padding: 12px; border: 1px solid #dee2e6; text-align: right;">超短线总利润</th>
-                <th style="padding: 12px; border: 1px solid #dee2e6; text-align: right;">波段总利润</th>
+                <th style="padding: 12px; border: 1px solid #dee2e6; text-align: right;">超短线累计收益率</th>
+                <th style="padding: 12px; border: 1px solid #dee2e6; text-align: right;">波段累计收益率</th>
                 <th style="padding: 12px; border: 1px solid #dee2e6; text-align: right;">合计</th>
             </tr>
         </thead>
@@ -396,6 +404,9 @@ def generate_profit_comparison_table(phase_data):
             <span style="color: {improvement_color}; font-weight: bold; font-size: 1.1em;">
                 {improvement_amount:+.2f}% ({improvement_pct:+.1f}%)
             </span>
+        </p>
+        <p style="margin: 5px 0; color: #6c757d; font-size: 0.9em;">
+            💡 累计收益率 = 捕获机会数 × 平均单笔收益率（理论值）
         </p>
         <p style="margin: 5px 0; color: #6c757d; font-size: 0.9em;">
             💡 Phase 1为理论最大值，Phase 4为实际可捕获利润
