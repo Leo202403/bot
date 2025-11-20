@@ -10952,7 +10952,8 @@ def analyze_and_adjust_params():
                         # 优先级1：是否被新参数错过（0=捕获，1=错过）
                         missed = 0 if opp.get('new_can_entry', False) else 1
                         # 优先级2：客观利润（越高越好）
-                        profit = opp.get('actual_profit_pct', 0)
+                        # 【V8.5.2.4.77】使用objective_profit而不是actual_profit_pct
+                        profit = opp.get('objective_profit', 0)
                         # 返回：(错过优先, 利润降序)
                         return (missed, -profit)
                     
@@ -22124,7 +22125,11 @@ def analyze_opportunities_with_new_params(market_snapshots, actual_trades, new_c
                     continue
             
             # ✅ 【V8.0】核心改动：根据信号类型使用对应参数
-            # 获取旧参数（根据机会类型）
+            # 【V8.5.2.4.77】明确新旧参数来源
+            # old_config = 优化前的参数（上一次的参数，在第9691行保存）
+            # new_config = 优化后的参数（本次应用的参数）
+            
+            # 获取旧参数（优化前，从old_config）
             old_params = get_params_for_signal_type(old_config if old_config else new_config, opp_type)
             
             # 模拟旧参数交易
@@ -22144,7 +22149,7 @@ def analyze_opportunities_with_new_params(market_snapshots, actual_trades, new_c
                 max_holding_hours=old_params.get('max_holding_hours')  # 【V8.1】时间限制
             )
             
-            # 获取新参数（根据机会类型）
+            # 获取新参数（优化后，从new_config）
             new_params = get_params_for_signal_type(new_config, opp_type)
             
             # 模拟新参数交易
