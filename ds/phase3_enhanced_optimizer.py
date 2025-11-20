@@ -21,12 +21,12 @@ import sys
 
 def sample_opportunities_for_phase3(opportunities: List[Dict], max_size: int = 800) -> List[Dict]:
     """
-    【V8.5.2.4.88】为Phase 3采样机会（保留代表性，控制内存）
+    【V8.5.2.4.89.4】为Phase 3采样机会（保留代表性，控制内存）
     
     策略：
-    1. 保留所有高质量机会（signal_score>=90）
-    2. 从中低质量机会中随机采样
-    3. 确保超短线/波段比例一致
+    1. 先按超短线/波段分类
+    2. 每类分别采样（保证两类都有代表）
+    3. 在每类内按质量分层采样
     
     Args:
         opportunities: 所有机会列表
@@ -37,21 +37,65 @@ def sample_opportunities_for_phase3(opportunities: List[Dict], max_size: int = 8
     """
     import random
     
-    # 按质量分层
-    high_quality = [o for o in opportunities if o.get('signal_score', 0) >= 90]
-    medium_quality = [o for o in opportunities if 80 <= o.get('signal_score', 0) < 90]
-    low_quality = [o for o in opportunities if o.get('signal_score', 0) < 80]
+    # 【V8.5.2.4.89.4】先按类型分类（关键修复）
+    scalping_opps = [o for o in opportunities if o.get('signal_type') == 'scalping']
+    swing_opps = [o for o in opportunities if o.get('signal_type') == 'swing']
     
-    print(f"  📊 机会分布: 高质量{len(high_quality)} | 中等{len(medium_quality)} | 低质量{len(low_quality)}")
+    print(f"  📊 机会分布: 超短线{len(scalping_opps)}个 | 波段{len(swing_opps)}个")
     
     # 如果总数<=max_size，不需要采样
     if len(opportunities) <= max_size:
         print(f"  ✓ 机会数({len(opportunities)})未超限，无需采样")
         return opportunities
     
+    # 【V8.5.2.4.89.4】按类型比例分配配额
+    scalping_ratio = len(scalping_opps) / len(opportunities) if opportunities else 0
+    scalping_quota = int(max_size * scalping_ratio)
+    swing_quota = max_size - scalping_quota
+    
+    # 确保至少各有一些样本（如果存在的话）
+    if len(scalping_opps) > 0 and scalping_quota < 100:
+        scalping_quota = min(100, len(scalping_opps))
+        swing_quota = max_size - scalping_quota
+    if len(swing_opps) > 0 and swing_quota < 100:
+        swing_quota = min(100, len(swing_opps))
+        scalping_quota = max_size - swing_quota
+    
+    sampled = []
+    
+    # 采样超短线
+    if scalping_opps:
+        sampled_scalping = _sample_by_quality(scalping_opps, scalping_quota)
+        sampled.extend(sampled_scalping)
+        print(f"  ⚡ 超短线采样: {len(sampled_scalping)}/{len(scalping_opps)}个")
+    
+    # 采样波段
+    if swing_opps:
+        sampled_swing = _sample_by_quality(swing_opps, swing_quota)
+        sampled.extend(sampled_swing)
+        print(f"  🌊 波段采样: {len(sampled_swing)}/{len(swing_opps)}个")
+    
+    print(f"  ✂️  采样后: {len(sampled)}个机会（节省{len(opportunities)-len(sampled)}个，约{(1-len(sampled)/len(opportunities))*100:.0f}%内存）")
+    return sampled
+
+
+def _sample_by_quality(opportunities: List[Dict], quota: int) -> List[Dict]:
+    """
+    【V8.5.2.4.89.4】按质量分层采样（内部辅助函数）
+    """
+    import random
+    
+    if len(opportunities) <= quota:
+        return opportunities
+    
+    # 按质量分层
+    high_quality = [o for o in opportunities if o.get('signal_score', 0) >= 90]
+    medium_quality = [o for o in opportunities if 80 <= o.get('signal_score', 0) < 90]
+    low_quality = [o for o in opportunities if o.get('signal_score', 0) < 80]
+    
     # 保留所有高质量
     sampled = high_quality.copy()
-    remaining_quota = max_size - len(high_quality)
+    remaining_quota = quota - len(high_quality)
     
     if remaining_quota > 0:
         # 从中低质量中按比例采样
@@ -69,7 +113,6 @@ def sample_opportunities_for_phase3(opportunities: List[Dict], max_size: int = 8
         else:
             sampled.extend(low_quality)
     
-    print(f"  ✂️  采样后: {len(sampled)}个机会（节省{len(opportunities)-len(sampled)}个，约{(1-len(sampled)/len(opportunities))*100:.0f}%内存）")
     return sampled
 
 
