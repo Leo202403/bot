@@ -8023,7 +8023,8 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             print(f"【🚀 Phase 3启动】")
             print(f"{'='*70}")
             
-            model_name = os.getenv("MODEL_NAME", "qwen")
+            # 【V8.5.2.4.89.3】修复：DeepSeek回测应使用deepseek模型，不是qwen
+            model_name = os.getenv("MODEL_NAME", "deepseek")
             # 【V8.5.2.4.46】kline_snapshots参数可选，传None即可（所有数据已在opportunities中）
             phase3_result = phase3_enhanced_optimization(
                 all_opportunities=all_opportunities_sorted,
