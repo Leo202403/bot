@@ -14,9 +14,15 @@ import traceback
 import re
 from datetime import datetime, timedelta
 import csv
+import time  # 【V8.5.2.4.88优化】添加时间模块用于缓存
 
 
 app = Flask(__name__)
+
+# 【V8.5.2.4.88优化】数据缓存配置
+# 缓存summary数据，减少频繁读取CSV文件的内存和CPU开销
+SUMMARY_CACHE = {}
+CACHE_DURATION = 30  # 缓存有效期（秒）
 
 # ==================== 时区转换辅助函数 ====================
 
@@ -1731,9 +1737,16 @@ def trading_combined():
         start_date = request.args.get('start_date', '')
         end_date = request.args.get('end_date', '')
         
+        # 【V8.5.2.4.88优化】记录请求时间，用于分析缓存效果
+        request_start = time.time()
+        
         # 获取两个模型的数据（传递时间周期参数）
+        # 得益于缓存机制，这里不会每次都读取CSV文件
         deepseek_summary = get_model_summary('deepseek', range_type, start_date, end_date)
         qwen_summary = get_model_summary('qwen', range_type, start_date, end_date)
+        
+        request_duration = int((time.time() - request_start) * 1000)  # 毫秒
+        logging.info(f"[/trading-combined] 请求耗时: {request_duration}ms (range={range_type})")
         
         # 计算综合的总资产和总保证金占用
         combined_total_assets = (deepseek_summary.get('status', {}).get('total_assets', 0) + 
@@ -1915,6 +1928,20 @@ def get_model_summary(model, range_type='all', start_date='', end_date=''):
     :param start_date: 自定义开始日期
     :param end_date: 自定义结束日期
     """
+    # 【V8.5.2.4.88优化】缓存逻辑：避免频繁读取CSV导致内存飙升
+    cache_key = f"{model}_{range_type}_{start_date}_{end_date}"
+    current_time = time.time()
+    
+    # 检查缓存是否存在且未过期
+    if cache_key in SUMMARY_CACHE:
+        cached_data, cache_time = SUMMARY_CACHE[cache_key]
+        age = int(current_time - cache_time)
+        if current_time - cache_time < CACHE_DURATION:
+            logging.info(f"[{model}][缓存命中] 使用{age}秒前的数据，跳过CSV读取")
+            return cached_data
+        else:
+            logging.info(f"[{model}][缓存过期] 缓存已过期({age}秒)，重新读取")
+    
     try:
         data_dir = get_trading_data_dir(model)
         summary = {}
@@ -2267,10 +2294,65 @@ def get_model_summary(model, range_type='all', start_date='', end_date=''):
             logging.error(f"读取{model}AI决策历史失败: {e}")
             summary['ai_decisions'] = []
         
+        # 【V8.5.2.4.88优化】保存到缓存（30秒有效期）
+        SUMMARY_CACHE[cache_key] = (summary, current_time)
+        
+        # 【V8.5.2.4.88优化】自动清理过期缓存，防止内存泄漏
+        expired_keys = [
+            k for k, (_, cache_time) in SUMMARY_CACHE.items() 
+            if current_time - cache_time > CACHE_DURATION * 3
+        ]
+        for k in expired_keys:
+            del SUMMARY_CACHE[k]
+            logging.debug(f"[缓存清理] 删除过期缓存: {k}")
+        
+        logging.info(f"[{model}][缓存更新] 已保存到缓存，当前缓存数: {len(SUMMARY_CACHE)}")
+        
         return summary
     except Exception as e:
         logging.error(f"获取{model}摘要失败: {e}")
         return {}
+
+@app.route('/trading-cache-status', methods=['GET'])
+def trading_cache_status():
+    """【V8.5.2.4.88优化】查看缓存状态（管理员接口）"""
+    try:
+        current_time = time.time()
+        cache_info = []
+        
+        for cache_key, (_, cache_time) in SUMMARY_CACHE.items():
+            age = int(current_time - cache_time)
+            cache_info.append({
+                'key': cache_key,
+                'age_seconds': age,
+                'status': '有效' if age < CACHE_DURATION else '已过期'
+            })
+        
+        return jsonify({
+            'cache_count': len(SUMMARY_CACHE),
+            'cache_duration': CACHE_DURATION,
+            'cache_items': cache_info,
+            'memory_tip': '缓存减少了CSV读取次数，降低了内存和CPU占用'
+        }), 200
+    except Exception as e:
+        logging.error(f"获取缓存状态失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/trading-cache-clear', methods=['POST'])
+def trading_cache_clear():
+    """【V8.5.2.4.88优化】清理缓存（管理员接口）"""
+    try:
+        cleared_count = len(SUMMARY_CACHE)
+        SUMMARY_CACHE.clear()
+        logging.info(f"[缓存清理] 手动清理了 {cleared_count} 个缓存项")
+        return jsonify({
+            'success': True,
+            'cleared_count': cleared_count,
+            'message': f'已清理 {cleared_count} 个缓存项'
+        }), 200
+    except Exception as e:
+        logging.error(f"清理缓存失败: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/trading-chat', methods=['POST'])
 def trading_chat():
