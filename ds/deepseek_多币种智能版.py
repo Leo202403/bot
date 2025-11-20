@@ -10289,10 +10289,13 @@ def analyze_and_adjust_params():
         
         if kline_snapshots is not None and not kline_snapshots.empty:
             try:
-                # 【V8.5.2.4.86】优先使用Phase 1缓存
+                # 【V8.5.2.4.87】优先使用Phase 1缓存
                 if '_phase1_cache' in config and config['_phase1_cache'].get('date') == datetime.now().strftime('%Y-%m-%d'):
                     print("  💾 【使用Phase 1缓存】避免重复计算（节省约2分钟）")
-                    full_analysis = config['_phase1_cache']['opportunities']['combined']
+                    # 缓存结构：{'opportunities': {'scalping': {...}, 'swing': {...}}, 'baseline': {...}}
+                    cached_opps = config['_phase1_cache']['opportunities']
+                    scalping_opps = cached_opps.get('scalping', {}).get('opportunities', [])
+                    swing_opps = cached_opps.get('swing', {}).get('opportunities', [])
                 else:
                     # 【V8.4.10】使用阶段2的逻辑（与动态ATR一致）
                     print("  ℹ️  使用动态ATR重新分析全量数据...")
@@ -10300,10 +10303,11 @@ def analyze_and_adjust_params():
                         market_snapshots=kline_snapshots,
                         old_config=config
                     )
+                    # 提取机会
+                    scalping_opps = full_analysis['scalping']['opportunities']
+                    swing_opps = full_analysis['swing']['opportunities']
                 
-                # 提取机会
-                scalping_opps = full_analysis['scalping']['opportunities']
-                swing_opps = full_analysis['swing']['opportunities']
+                # 合并机会（无论是从缓存还是新计算）
                 all_opps = scalping_opps + swing_opps
                 
                 # 【V8.5.2.4.76】修复：正确区分新旧参数
