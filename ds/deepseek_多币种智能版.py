@@ -12735,6 +12735,9 @@ def analyze_and_adjust_params():
                 email_body_parts = [
                     email_header,
                     executive_summary_html,  # 🆕 V8.5.5: 执行摘要（5秒看懂，最前）
+                    phase_summary_html,  # 【V8.5.2.4.81】Phase 1-4汇总表
+                    params_comparison_html,  # 【V8.5.2.4.81】超短线/波段参数对比
+                    profit_comparison_html,  # 【V8.5.2.4.81】总利润对比分析
                     learning_insights_html,  # AI智能洞察（第二重要）
                     type_params_html,  # 参数配置
                     opportunity_stats_html,  # 机会捕获（含V8.5.4分类利润）
