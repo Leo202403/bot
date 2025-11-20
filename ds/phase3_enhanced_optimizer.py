@@ -501,18 +501,19 @@ def build_ai_analysis_prompt(
         else:
             signal_score_ranges['90-100'] += 1
     
+    # 【V8.5.2.4.83】从learned_features提取密度信息
+    learned_features = phase2_baseline.get('learned_features', {})
+    
     prompt = f"""As a trading system optimization expert, please analyze the following data and recommend optimal parameter configuration.
 
 【Phase 1 Objective Statistics】
 - Total Opportunities: {total_opps}
-- Scalping: {scalping_count}, Swing: {swing_count}
-- Average Max Profit: {phase1_baseline.get('avg_max_profit', 0):.2f}%
+- Scalping: {scalping_count} (density: {learned_features.get('scalping_avg_density', 'N/A')}, profit: {learned_features.get('scalping_avg_profit', 'N/A')}%, holding: {learned_features.get('scalping_real_holding_hours', 'N/A')}h)
+- Swing: {swing_count} (density: {learned_features.get('swing_avg_density', 'N/A')}, profit: {learned_features.get('swing_avg_profit', 'N/A')}%, holding: {learned_features.get('swing_real_holding_hours', 'N/A')}h)
+- Density Threshold: {learned_features.get('high_density_threshold', 'N/A')} (>threshold→Scalping, ≤threshold→Swing)
 
 【Phase 2 Learning Results】
-- Best Scalping Weights: {phase2_baseline.get('learned_features', {}).get('best_scalping_weights', {}).get('name', 'N/A')}
-- Best Swing Weights: {phase2_baseline.get('learned_features', {}).get('best_swing_weights', {}).get('name', 'N/A')}
-- Phase 2 Capture Rate: {phase2_baseline.get('capture_rate', 0)*100:.1f}%
-- Phase 2 Avg Profit: {phase2_baseline.get('avg_profit', 0):.2f}%
+- Capture Rate: {phase2_baseline.get('capture_rate', 0)*100:.1f}%, Avg Profit: {phase2_baseline.get('avg_profit', 0):.2f}%
 
 【Data Distribution】
 Consensus Distribution: {consensus_dist}

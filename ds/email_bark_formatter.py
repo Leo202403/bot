@@ -153,13 +153,14 @@ def generate_phase_summary_table(phase_data):
     return html
 
 
-def generate_params_comparison_table(scalping_params, swing_params):
+def generate_params_comparison_table(scalping_params, swing_params, learned_features=None):
     """
-    生成超短线/波段参数对比表HTML
+    【V8.5.2.4.83】生成超短线/波段参数对比表HTML（包含密度信息）
     
     Args:
         scalping_params: dict, 超短线参数
         swing_params: dict, 波段参数
+        learned_features: dict, Phase 2学习成果（包含密度信息）
     
     Returns:
         str: HTML表格
@@ -175,6 +176,13 @@ def generate_params_comparison_table(scalping_params, swing_params):
     scalping_trailing = "✅" if scalping_params.get('trailing_stop_enabled') else "❌"
     swing_trailing = "✅" if swing_params.get('trailing_stop_enabled') else "❌"
     
+    # 【V8.5.2.4.83】从learned_features提取密度信息
+    if learned_features is None:
+        learned_features = {}
+    scalping_density = safe_get(learned_features, 'scalping_avg_density', 'N/A')
+    swing_density = safe_get(learned_features, 'swing_avg_density', 'N/A')
+    high_density_threshold = safe_get(learned_features, 'high_density_threshold', 'N/A')
+    
     html = f"""
 <div class="summary-box" style="background: #fff3e0; border: 2px solid #ff9800; margin: 20px 0; padding: 20px; border-radius: 8px;">
     <h2 style="color: #e65100; margin-top: 0;">⚡🌊 超短线/波段 参数配置</h2>
@@ -188,6 +196,15 @@ def generate_params_comparison_table(scalping_params, swing_params):
             </tr>
         </thead>
         <tbody>
+            <tr style="background: #e3f2fd;">
+                <td style="padding: 10px; border: 1px solid #dee2e6; font-weight: bold;">📊 平均利润密度</td>
+                <td style="padding: 10px; border: 1px solid #dee2e6; text-align: center; font-size: 1.1em; color: #1976d2; font-weight: bold;">
+                    {scalping_density}
+                </td>
+                <td style="padding: 10px; border: 1px solid #dee2e6; text-align: center; font-size: 1.1em; color: #1976d2; font-weight: bold;">
+                    {swing_density}
+                </td>
+            </tr>
             <tr>
                 <td style="padding: 10px; border: 1px solid #dee2e6; font-weight: bold;">最小盈亏比</td>
                 <td style="padding: 10px; border: 1px solid #dee2e6; text-align: center; font-size: 1.1em;">
@@ -253,6 +270,12 @@ def generate_params_comparison_table(scalping_params, swing_params):
             </tr>
         </tbody>
     </table>
+    
+    <div style="margin-top: 15px; padding: 12px; background: #e3f2fd; border-left: 4px solid #1976d2; border-radius: 4px;">
+        <p style="margin: 0; font-size: 13px; color: #0d47a1;">
+            <strong>🎯 分类规则：</strong>密度 &gt; {high_density_threshold} → 超短线 | 密度 ≤ {high_density_threshold} → 波段
+        </p>
+    </div>
 </div>
 """
     return html

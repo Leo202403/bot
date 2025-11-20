@@ -7711,8 +7711,17 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 'params': phase2_params_with_tp_sl,
                 # 【V8.5.2.4.38】从Phase 1学到的真实特征 + 最优参数组合
                 'learned_features': {
+                    # 持仓时长
                     'scalping_real_holding_hours': scalping_real_holding,
                     'swing_real_holding_hours': swing_real_holding,
+                    # 【V8.5.2.4.83】密度信息
+                    'scalping_avg_density': scalping_avg_density,
+                    'swing_avg_density': swing_avg_density,
+                    'high_density_threshold': phase1_baseline.get('high_density_threshold', 7.1) if phase1_baseline else 7.1,
+                    # 【V8.5.2.4.83】利润信息
+                    'scalping_avg_profit': scalping_avg_profit,
+                    'swing_avg_profit': swing_avg_profit,
+                    # 参数范围
                     'scalping_params_range': scalping_params_range,
                     'swing_params_range': swing_params_range,
                     'scalping_weight_candidates': scalping_weight_candidates,
@@ -7729,8 +7738,9 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             print(f"     捕获: {len(best_captured_opps)}个 ({phase2_capture_rate*100:.1f}%)")
             print(f"     平均利润: {phase2_avg_profit:.2f}%")
             print(f"\n  💾 【Phase 2学习成果】")
-            print(f"     ⚡ 超短线真实持仓: {scalping_real_holding:.1f}h | 最优权重: {best_scalping_weights['name']}")
-            print(f"     🌊 波段真实持仓: {swing_real_holding:.1f}h | 最优权重: {best_swing_weights['name']}")
+            print(f"     ⚡ 超短线: 持仓{scalping_real_holding:.1f}h | 密度{scalping_avg_density:.1f} | 利润{scalping_avg_profit:.1f}%")
+            print(f"     🌊 波段: 持仓{swing_real_holding:.1f}h | 密度{swing_avg_density:.1f} | 利润{swing_avg_profit:.1f}%")
+            print(f"     🎯 高密度阈值: {phase1_baseline.get('high_density_threshold', 7.1) if phase1_baseline else 7.1:.1f}")
             print(f"     🏆 Top5参数组合已保存（供Phase 3使用）")
             
             # 【V8.5.2.4.80】保存Phase 2学习成果到config
@@ -7797,6 +7807,13 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 'learned_features': {
                     'scalping_real_holding_hours': scalping_real_holding,
                     'swing_real_holding_hours': swing_real_holding,
+                    # 【V8.5.2.4.83】密度信息
+                    'scalping_avg_density': scalping_avg_density,
+                    'swing_avg_density': swing_avg_density,
+                    'high_density_threshold': phase1_baseline.get('high_density_threshold', 7.1) if phase1_baseline else 7.1,
+                    'scalping_avg_profit': scalping_avg_profit,
+                    'swing_avg_profit': swing_avg_profit,
+                    # 参数范围
                     'scalping_params_range': scalping_params_range,
                     'swing_params_range': swing_params_range,
                     'scalping_weight_candidates': scalping_weight_candidates,
@@ -7819,6 +7836,13 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             'learned_features': {
                 'scalping_real_holding_hours': 1.5,  # 降级默认值
                 'swing_real_holding_hours': 6.0,     # 降级默认值
+                # 【V8.5.2.4.83】密度信息（降级默认值）
+                'scalping_avg_density': 10.0,
+                'swing_avg_density': 1.0,
+                'high_density_threshold': 7.1,
+                'scalping_avg_profit': 15.0,
+                'swing_avg_profit': 16.0,
+                # 参数范围
                 'scalping_params_range': scalping_params_range,
                 'swing_params_range': swing_params_range,
                 'scalping_weight_candidates': scalping_weight_candidates,
@@ -12316,11 +12340,12 @@ def analyze_and_adjust_params():
                     # 生成Phase汇总表
                     phase_summary_html = generate_phase_summary_table(all_phase_data)
                     
-                    # 生成参数对比表
+                    # 【V8.5.2.4.83】生成参数对比表（包含learned_features）
                     scalping_params = config.get('scalping_params', {})
                     swing_params = config.get('swing_params', {})
+                    learned_features = config.get('phase2_learning', {}).get('latest', {}).get('learned_features', {})
                     if scalping_params or swing_params:
-                        params_comparison_html = generate_params_comparison_table(scalping_params, swing_params)
+                        params_comparison_html = generate_params_comparison_table(scalping_params, swing_params, learned_features)
                     
                     # 生成总利润对比表
                     profit_comparison_html = generate_profit_comparison_table(all_phase_data)
