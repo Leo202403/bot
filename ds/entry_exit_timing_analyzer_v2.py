@@ -19,52 +19,63 @@ import os
 from openai import OpenAI
 
 
-def classify_entry_quality(trade, objective_profit=None):
+def classify_entry_quality(trade, objective_profit=None, matched_opportunity=None):
     """
-    【V8.5.2.4.86】简化的开仓质量分类（3类）
+    【V8.5.2.4.88】基于开仓信号质量的分类
     
     核心逻辑：
-    1. ✅ 正确开仓：盈利>1U（方向对+时机对）
-    2. ⚠️ 时机问题：-2U到1U（方向基本对，但时机不佳）
-    3. ❌ 虚假信号：亏损>2U（方向错误）
-    
-    持仓中的交易返回None，不计入统计
+    1. 已平仓交易：根据实际盈亏分类
+       - ✅ 正确开仓：盈利>1U
+       - ⚠️ 时机问题：-2U到1U
+       - ❌ 虚假信号：亏损>2U
+    2. 持仓中交易：根据匹配到的机会信号质量分类
+       - 🟢 强信号持仓：signal_score>=90, consensus>=3
+       - 🟡 中等信号持仓：signal_score>=80, consensus>=2
+       - 🔴 弱信号持仓：其他情况
     
     Args:
         trade: dict or Series, 交易记录
         objective_profit: float, 客观最大利润（暂不使用）
+        matched_opportunity: dict, 匹配到的Phase 1机会（用于持仓中分析）
     
     Returns:
-        str: 'correct', 'timing_issue', 'false_signal', 或 None（持仓中）
+        str: 'correct', 'timing_issue', 'false_signal', 'holding_strong', 'holding_moderate', 'holding_weak'
     """
-    # 获取盈亏
-    pnl_raw = trade.get('盈亏(U)', trade.get('盈亏', trade.get('PnL', trade.get('实际盈亏'))))
-    if pnl_raw is None or pd.isna(pnl_raw):
-        pnl = 0
-    else:
-        try:
-            pnl = float(pnl_raw)
-        except:
-            pnl = 0
-    
     # 获取平仓时间（判断是否持仓中）
     close_time = trade.get('平仓时间', trade.get('close_time'))
     
-    # 持仓中：不计入统计
-    if close_time is None or pd.isna(close_time) or str(close_time).strip() == '':
-        return None
+    # 情况1：已平仓 - 根据实际盈亏
+    if close_time and not pd.isna(close_time) and str(close_time).strip():
+        pnl_raw = trade.get('盈亏(U)', trade.get('盈亏', trade.get('PnL', trade.get('实际盈亏'))))
+        if pnl_raw is None or pd.isna(pnl_raw):
+            pnl = 0
+        else:
+            try:
+                pnl = float(pnl_raw)
+            except:
+                pnl = 0
+        
+        if pnl > 1.0:
+            return 'correct'
+        elif pnl < -2.0:
+            return 'false_signal'
+        else:
+            return 'timing_issue'
     
-    # 1. ✅ 正确开仓：盈利>1U
-    if pnl > 1.0:
-        return 'correct'
+    # 情况2：持仓中 - 根据开仓信号质量
+    if matched_opportunity:
+        signal_score = matched_opportunity.get('signal_score', 0)
+        consensus = matched_opportunity.get('consensus', 0)
+        
+        if signal_score >= 90 and consensus >= 3:
+            return 'holding_strong'  # 强信号持仓
+        elif signal_score >= 80 and consensus >= 2:
+            return 'holding_moderate'  # 中等信号持仓
+        else:
+            return 'holding_weak'  # 弱信号持仓
     
-    # 2. ❌ 虚假信号：亏损>2U
-    elif pnl < -2.0:
-        return 'false_signal'
-    
-    # 3. ⚠️ 时机问题：-2U到1U
-    else:
-        return 'timing_issue'
+    # 无法匹配机会
+    return 'holding_unknown'
 
 
 def analyze_entry_timing_v2(
@@ -405,8 +416,13 @@ def analyze_entry_timing_v2(
                     matched_trades_count += len(matching_trades)
                     trade = matching_trades.iloc[0]
                     
-                    # 【V8.5.2.4.86】使用新的3类分类函数
-                    category = classify_entry_quality(trade, objective_profit)
+                    # 【V8.5.2.4.88】传递匹配到的机会信息（用于持仓中分析）
+                    matched_opp = {
+                        'signal_score': signal_score,
+                        'consensus': consensus,
+                        'objective_profit': objective_profit
+                    }
+                    category = classify_entry_quality(trade, objective_profit, matched_opp)
                     
                     # 获取盈亏（用于显示）
                     pnl_raw = trade.get('盈亏(U)', trade.get('盈亏', trade.get('PnL')))
@@ -423,7 +439,7 @@ def analyze_entry_timing_v2(
                         'ai_close_reason': trade.get('平仓理由', 'N/A')
                     }
                     
-                    # 根据分类添加到对应列表（持仓中的交易category=None，不计入统计）
+                    # 根据分类添加到对应列表
                     if category == 'correct':
                         entry_record['reason'] = f'✅ 正确开仓：盈利{pnl:.2f}U'
                         correct_entries.append(entry_record)
@@ -436,7 +452,18 @@ def analyze_entry_timing_v2(
                         entry_record['reason'] = f'❌ 虚假信号：亏损{pnl:.2f}U'
                         false_entries.append(entry_record)
                         entry_stats['false_entries'] += 1
-                    # category == None（持仓中）不计入统计
+                    elif category == 'holding_strong':
+                        entry_record['reason'] = f'⏳ 持仓中（强信号：score={signal_score}, consensus={consensus}）'
+                        holding_entries.append(entry_record)
+                        entry_stats['holding'] += 1
+                    elif category == 'holding_moderate':
+                        entry_record['reason'] = f'⏳ 持仓中（中等信号：score={signal_score}, consensus={consensus}）'
+                        holding_entries.append(entry_record)
+                        entry_stats['holding'] += 1
+                    elif category in ['holding_weak', 'holding_unknown']:
+                        entry_record['reason'] = f'⏳ 持仓中（弱信号或无匹配）'
+                        holding_entries.append(entry_record)
+                        entry_stats['holding'] += 1
         else:
             # 【原逻辑】使用yesterday_snapshots
             for idx, snapshot in yesterday_snapshots.iterrows():
@@ -779,11 +806,31 @@ def analyze_entry_timing_v2(
     print(f"\n  📊 开仓质量统计：")
     print(f"     总机会数: {entry_stats['total_opportunities']}")
     print(f"     AI开仓: {entry_stats['ai_opened']} ({entry_stats['ai_opened']/max(entry_stats['total_opportunities'],1)*100:.0f}%)")
-    print(f"     ├─ ✅ 正确开仓: {entry_stats['correct_entries']}笔 ({entry_stats['correct_entries']/max(entry_stats['ai_opened'],1)*100:.0f}%)")
-    print(f"     ├─ ⚠️ 时机问题: {entry_stats['timing_issues']}笔 ({entry_stats['timing_issues']/max(entry_stats['ai_opened'],1)*100:.0f}%)")
-    print(f"     └─ ❌ 虚假信号: {entry_stats['false_entries']}笔 ({entry_stats['false_entries']/max(entry_stats['ai_opened'],1)*100:.0f}%)")
     
-    total_classified = entry_stats['correct_entries'] + entry_stats['timing_issues'] + entry_stats['false_entries']
+    # 【V8.5.2.4.88】已平仓交易分类
+    closed_count = entry_stats['correct_entries'] + entry_stats['timing_issues'] + entry_stats['false_entries']
+    print(f"     ├─ 已平仓: {closed_count}笔")
+    print(f"     │  ├─ ✅ 正确开仓: {entry_stats['correct_entries']}笔 ({entry_stats['correct_entries']/max(closed_count,1)*100:.0f}%)")
+    print(f"     │  ├─ ⚠️ 时机问题: {entry_stats['timing_issues']}笔 ({entry_stats['timing_issues']/max(closed_count,1)*100:.0f}%)")
+    print(f"     │  └─ ❌ 虚假信号: {entry_stats['false_entries']}笔 ({entry_stats['false_entries']/max(closed_count,1)*100:.0f}%)")
+    
+    # 【V8.5.2.4.88】持仓中交易分类
+    holding_count = entry_stats.get('holding', 0)
+    if holding_count > 0:
+        # 统计持仓中交易的信号质量分布
+        holding_strong = len([e for e in holding_entries if '强信号' in e.get('reason', '')])
+        holding_moderate = len([e for e in holding_entries if '中等信号' in e.get('reason', '')])
+        holding_weak = holding_count - holding_strong - holding_moderate
+        
+        print(f"     └─ ⏳ 持仓中: {holding_count}笔")
+        if holding_strong > 0:
+            print(f"        ├─ 🟢 强信号: {holding_strong}笔 (score>=90, consensus>=3)")
+        if holding_moderate > 0:
+            print(f"        ├─ 🟡 中等信号: {holding_moderate}笔 (score>=80, consensus>=2)")
+        if holding_weak > 0:
+            print(f"        └─ 🔴 弱信号: {holding_weak}笔")
+    
+    total_classified = closed_count + holding_count
     print(f"     分类合计: {total_classified}笔 {'✅' if total_classified == entry_stats['ai_opened'] else '❌ 不等于AI开仓数'}")
     print(f"     错过机会: {entry_stats['missed_profitable']}")
     print(f"     正确过滤: {entry_stats['correctly_filtered']}")

@@ -19,6 +19,60 @@ from typing import Dict, List, Any, Tuple
 import sys
 
 
+def sample_opportunities_for_phase3(opportunities: List[Dict], max_size: int = 800) -> List[Dict]:
+    """
+    【V8.5.2.4.88】为Phase 3采样机会（保留代表性，控制内存）
+    
+    策略：
+    1. 保留所有高质量机会（signal_score>=90）
+    2. 从中低质量机会中随机采样
+    3. 确保超短线/波段比例一致
+    
+    Args:
+        opportunities: 所有机会列表
+        max_size: 最大保留数量（默认800，约占用170MB）
+    
+    Returns:
+        采样后的机会列表
+    """
+    import random
+    
+    # 按质量分层
+    high_quality = [o for o in opportunities if o.get('signal_score', 0) >= 90]
+    medium_quality = [o for o in opportunities if 80 <= o.get('signal_score', 0) < 90]
+    low_quality = [o for o in opportunities if o.get('signal_score', 0) < 80]
+    
+    print(f"  📊 机会分布: 高质量{len(high_quality)} | 中等{len(medium_quality)} | 低质量{len(low_quality)}")
+    
+    # 如果总数<=max_size，不需要采样
+    if len(opportunities) <= max_size:
+        print(f"  ✓ 机会数({len(opportunities)})未超限，无需采样")
+        return opportunities
+    
+    # 保留所有高质量
+    sampled = high_quality.copy()
+    remaining_quota = max_size - len(high_quality)
+    
+    if remaining_quota > 0:
+        # 从中低质量中按比例采样
+        medium_sample_size = int(remaining_quota * 0.7)
+        low_sample_size = remaining_quota - medium_sample_size
+        
+        if len(medium_quality) > medium_sample_size:
+            sampled.extend(random.sample(medium_quality, medium_sample_size))
+        else:
+            sampled.extend(medium_quality)
+            low_sample_size += medium_sample_size - len(medium_quality)
+        
+        if len(low_quality) > low_sample_size:
+            sampled.extend(random.sample(low_quality, low_sample_size))
+        else:
+            sampled.extend(low_quality)
+    
+    print(f"  ✂️  采样后: {len(sampled)}个机会（节省{len(opportunities)-len(sampled)}个，约{(1-len(sampled)/len(opportunities))*100:.0f}%内存）")
+    return sampled
+
+
 def phase3_enhanced_optimization(
     all_opportunities: List[Dict],
     phase1_baseline: Dict,
@@ -27,7 +81,7 @@ def phase3_enhanced_optimization(
     model_name: str = "deepseek"
 ) -> Dict:
     """
-    【V8.5.2.4.41】Phase 3增强优化
+    【V8.5.2.4.88】Phase 3增强优化（内存优化版）
     
     Args:
         all_opportunities: 所有识别的机会
@@ -44,7 +98,14 @@ def phase3_enhanced_optimization(
     print(f"{'='*70}")
     print(f"  策略：叠加Phase 2成果 + 多起点搜索 + AI辅助决策")
     print(f"  特色：使用优化权重 + consensus筛选 + 信号分矩阵")
+    print(f"  【V8.5.2.4.88】内存优化：智能采样 + 分批测试")
     print(f"{'='*70}")
+    
+    # 【V8.5.2.4.88】内存优化：采样机会
+    print(f"\n  💾 【内存优化】机会采样")
+    print(f"     原始机会数: {len(all_opportunities)}")
+    all_opportunities = sample_opportunities_for_phase3(all_opportunities, max_size=800)
+    print(f"     采样后机会数: {len(all_opportunities)}")
     
     # 【步骤1】提取Phase 2学到的特征
     learned_features = phase2_baseline.get('learned_features', {})
@@ -133,6 +194,7 @@ def phase3_enhanced_optimization(
     
     # 为每个起点进行局部搜索
     from backtest_optimizer_v8321 import optimize_params_v8321_lightweight
+    import gc
     
     all_search_results = []
     
@@ -141,21 +203,27 @@ def phase3_enhanced_optimization(
         
         try:
             # 为这个起点做局部搜索
-            # 【V8.5.2.4.47优化】从50组减到10组，避免内存耗尽（与实时AI共存）
-            # 【V8.5.2.4.47修复】使用current_params代替starting_params，添加signal_type
+            # 【V8.5.2.4.88优化】进一步降低到8组，配合采样后的800机会
+            # 计算量：800机会 × 8组 × 4起点 = 25,600次（约50MB峰值）
             search_result = optimize_params_v8321_lightweight(
                 opportunities=all_opportunities,
                 current_params=starting_point['params'],
                 signal_type='swing',  # 默认使用swing（或根据实际情况判断）
-                max_combinations=10  # 【V8.5.2.4.47】50→30→15→10，节省80%内存
+                max_combinations=8  # 【V8.5.2.4.88】10→8，节省20%内存
             )
             
             if search_result:
                 search_result['starting_point'] = starting_point['name']
                 all_search_results.append(search_result)
                 print(f"        ✓ 找到优化参数，利润: {search_result.get('total_profit', 0):.1f}%")
+            
+            # 【V8.5.2.4.88】每个起点测试完后释放内存
+            gc.collect()
+            
         except Exception as e:
             print(f"        ⚠️  搜索失败: {e}")
+            import traceback
+            traceback.print_exc()
     
     # 选择最佳结果
     if all_search_results:
