@@ -10913,6 +10913,9 @@ def analyze_and_adjust_params():
             # 【V8.5.2.4.83】获取phase1_baseline（从快速探索结果中）
             phase1_baseline = quick_search_baseline if 'quick_search_baseline' in locals() else None
             
+            # 【V8.5.2.4.89】获取phase2_baseline（从快速探索结果中）
+            phase2_baseline = phase2_baseline_result if 'phase2_baseline_result' in locals() else None
+            
             # Phase 1数据（客观机会）
             phase1_data = {}
             if phase1_baseline:
