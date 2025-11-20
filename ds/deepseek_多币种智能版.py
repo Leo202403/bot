@@ -11627,6 +11627,7 @@ def analyze_and_adjust_params():
                 
                 # 🆕 V7.6.3.3: 构建多轮迭代历史
                 iterative_history_html = ""
+                iter_result = None  # 【V8.5.2.4.89.2】初始化变量，避免后续引用错误
                 if config.get('_iterative_history'):
                     iter_result = config['_iterative_history']
                     rounds = iter_result['rounds']

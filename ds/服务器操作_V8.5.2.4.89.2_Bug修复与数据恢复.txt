@@ -1,0 +1,224 @@
+======================================================================
+【V8.5.2.4.89.2】Bug修复与逐步恢复数据量
+======================================================================
+时间: 2025-11-20
+修复: iter_result 变量未定义错误
+目标: 逐步恢复到正常数据量（14天/2000机会/8组合/800采样）
+
+======================================================================
+📊 当前状态
+======================================================================
+✅ 回测成功完成！
+   - Phase 1-4 全部执行成功
+   - 内存峰值: 79.86MB（非常健康！）
+   - 数据量: 5天/300机会/4组合/400采样
+
+⚠️ Bug修复
+   - 邮件生成阶段 iter_result 变量未定义
+   - 已修复: 在外部初始化 iter_result = None
+
+======================================================================
+🔧 1. 上传修复后的文件
+======================================================================
+# 在本地终端（Mac）
+cd ~/Downloads/10-23-bot
+
+# 上传修复后的文件
+scp ds/deepseek_多币种智能版.py root@<服务器IP>:/root/10-23-bot/ds/
+scp ds/qwen_多币种智能版.py root@<服务器IP>:/root/10-23-bot/ds/
+scp ds/restore_data_volume.py root@<服务器IP>:/root/10-23-bot/ds/
+
+# 上传文档
+scp ds/服务器操作_V8.5.2.4.89.2_Bug修复与数据恢复.txt root@<服务器IP>:/root/10-23-bot/ds/
+
+======================================================================
+🎯 2. 阶段1：小幅增加（保守测试）
+======================================================================
+参数调整:
+  - lookback_days: 5天 → 7天
+  - max_opportunities: 300 → 500
+  - max_combinations: 4 → 6
+  - sample_size: 400 → 500
+  
+预计内存: 400-500MB
+
+# 在服务器终端
+cd /root/10-23-bot/ds
+
+# 恢复到阶段1
+python3 restore_data_volume.py stage1
+
+# 验证修改
+grep -E "lookback_days|max_opportunities|max_combinations|sample_size" deepseek_多币种智能版.py | head -20
+
+# 提交Git（可选）
+cd /root/10-23-bot
+git add -A
+git commit -m "V8.5.2.4.89.2: 修复iter_result错误 + 阶段1数据恢复"
+
+# 停止supervisor（如果在运行）
+supervisorctl stop deepseek qwen
+
+# 运行回测（带内存监控）
+cd /root/10-23-bot/ds
+MANUAL_BACKTEST=true python3 run_with_memory_monitor.py > /tmp/backtest_stage1.txt 2>&1 &
+
+# 实时查看输出
+tail -f /tmp/backtest_stage1.txt
+
+# 另开窗口监控内存
+watch -n 2 'free -h && echo "---" && tail -3 memory_monitor_simple.log'
+
+# 回测完成后查看内存峰值
+echo "=== 阶段1内存峰值 ==="
+cat memory_monitor_simple.log | awk -F',' '{print $2,$3}' | sort -n | tail -5
+
+======================================================================
+✅ 阶段1判定标准
+======================================================================
+成功: 内存峰值 < 500MB，全流程完成 → 继续阶段2
+失败: 内存峰值 > 800MB 或 OOM → 保持当前配置
+
+======================================================================
+🎯 3. 阶段2：中等增加（如果阶段1成功）
+======================================================================
+参数调整:
+  - lookback_days: 7天 → 10天
+  - max_opportunities: 500 → 1000
+  - max_combinations: 6 → 7
+  - sample_size: 500 → 600
+  
+预计内存: 500-700MB
+
+# 在服务器终端
+cd /root/10-23-bot/ds
+
+# 恢复到阶段2
+python3 restore_data_volume.py stage2
+
+# 提交Git（可选）
+cd /root/10-23-bot
+git add -A
+git commit -m "V8.5.2.4.89.2: 阶段2数据恢复"
+
+# 运行回测（带内存监控）
+cd /root/10-23-bot/ds
+MANUAL_BACKTEST=true python3 run_with_memory_monitor.py > /tmp/backtest_stage2.txt 2>&1 &
+tail -f /tmp/backtest_stage2.txt
+
+# 查看内存峰值
+echo "=== 阶段2内存峰值 ==="
+cat memory_monitor_simple.log | awk -F',' '{print $2,$3}' | sort -n | tail -5
+
+======================================================================
+✅ 阶段2判定标准
+======================================================================
+成功: 内存峰值 < 700MB，全流程完成 → 继续阶段3
+失败: 内存峰值 > 800MB 或 OOM → 回退到阶段1
+
+======================================================================
+🎯 4. 阶段3：完全恢复（如果阶段2成功）
+======================================================================
+参数调整:
+  - lookback_days: 10天 → 14天
+  - max_opportunities: 1000 → 2000
+  - max_combinations: 7 → 8
+  - sample_size: 600 → 800
+  
+预计内存: 700-900MB
+
+# 在服务器终端
+cd /root/10-23-bot/ds
+
+# 恢复到阶段3（完全恢复）
+python3 restore_data_volume.py stage3
+
+# 提交Git（可选）
+cd /root/10-23-bot
+git add -A
+git commit -m "V8.5.2.4.89.2: 阶段3数据完全恢复"
+
+# 运行回测（带内存监控）
+cd /root/10-23-bot/ds
+MANUAL_BACKTEST=true python3 run_with_memory_monitor.py > /tmp/backtest_stage3.txt 2>&1 &
+tail -f /tmp/backtest_stage3.txt
+
+# 查看内存峰值
+echo "=== 阶段3内存峰值 ==="
+cat memory_monitor_simple.log | awk -F',' '{print $2,$3}' | sort -n | tail -5
+
+======================================================================
+✅ 阶段3判定标准
+======================================================================
+成功: 内存峰值 < 900MB，全流程完成 → 数据恢复完成！
+失败: 内存峰值 > 900MB 或 OOM → 回退到阶段2，保持长期运行
+
+======================================================================
+🔄 5. 回退操作（如果某阶段失败）
+======================================================================
+# 回退到阶段1
+python3 restore_data_volume.py stage1
+
+# 或回退到阶段2
+python3 restore_data_volume.py stage2
+
+# 查看备份文件
+ls -lh *.before_restore_*
+
+# 如果需要完全回退到初始状态（5天/300机会）
+git checkout -- deepseek_多币种智能版.py qwen_多币种智能版.py
+
+======================================================================
+📊 6. 内存监控脚本（长期运行）
+======================================================================
+# 如果最终成功恢复，重启supervisor并保留内存监控
+supervisorctl start deepseek qwen
+
+# 后台持续监控内存（每5分钟记录一次）
+cat > /root/monitor_memory.sh << 'EOF'
+#!/bin/bash
+while true; do
+    timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+    mem_used=$(free -h | awk '/Mem:/ {print $3}')
+    mem_avail=$(free -h | awk '/Mem:/ {print $7}')
+    swap_used=$(free -h | awk '/Swap:/ {print $3}')
+    echo "$timestamp | Mem Used: $mem_used | Avail: $mem_avail | Swap: $swap_used" >> /root/memory_monitor.log
+    sleep 300
+done
+EOF
+
+chmod +x /root/monitor_memory.sh
+nohup /root/monitor_memory.sh > /dev/null 2>&1 &
+
+# 查看监控日志
+tail -20 /root/memory_monitor.log
+
+======================================================================
+📝 总结与建议
+======================================================================
+1. ✅ Bug已修复（iter_result变量初始化）
+2. 📊 当前79MB峰值非常健康
+3. 🎯 建议保守恢复：
+   - 第一天: 测试阶段1（预计400-500MB）
+   - 第二天: 如果稳定，测试阶段2（预计500-700MB）
+   - 第三天: 如果稳定，测试阶段3（预计700-900MB）
+4. ⚠️ 如果任何阶段OOM，立即回退到上一阶段
+5. 💡 如果阶段2稳定（10天/1000机会），可以长期保持
+
+======================================================================
+🔍 故障排查
+======================================================================
+# 查看是否有OOM killer日志
+dmesg | grep -i "killed process"
+dmesg | grep -i "out of memory"
+
+# 查看系统日志
+journalctl -xe | grep -i "memory"
+
+# 查看swap使用情况
+swapon --show
+free -h
+
+# 如果需要，临时停止qwen释放更多内存
+supervisorctl stop qwen
+
