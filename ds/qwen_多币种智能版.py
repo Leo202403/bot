@@ -10882,9 +10882,9 @@ def analyze_and_adjust_params():
             # 【V8.5.2.4.89.3】确保compressed_insights是字典，不是字符串
             compressed_insights = config.get('compressed_insights', {})
             if isinstance(compressed_insights, str):
-                import json
+                import json as json_module
                 try:
-                    compressed_insights = json.loads(compressed_insights)
+                    compressed_insights = json_module.loads(compressed_insights)
                 except:
                     compressed_insights = {}
             v8321_insights = compressed_insights.get('v8321_insights', {})
@@ -13041,9 +13041,9 @@ def analyze_and_adjust_params():
                     # 【V8.5.2.4.89.3】确保compressed_insights是字典
                     compressed_insights_check = current_config.get('compressed_insights', {})
                     if isinstance(compressed_insights_check, str):
-                        import json
+                        import json as json_module
                         try:
-                            compressed_insights_check = json.loads(compressed_insights_check)
+                            compressed_insights_check = json_module.loads(compressed_insights_check)
                         except:
                             compressed_insights_check = {}
                     v8321_insights = compressed_insights_check.get('v8321_insights', {})
