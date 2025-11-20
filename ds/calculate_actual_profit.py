@@ -80,6 +80,9 @@ def calculate_single_actual_profit(
         atr_stop_mult = strategy_params.get('atr_stop_multiplier', 1.5)
         atr_tp_mult = strategy_params.get('atr_tp_multiplier', 4.0)
         max_holding_hours = strategy_params.get('max_holding_hours', 24)
+        trailing_stop_enabled = strategy_params.get('trailing_stop_enabled', False)  # 【V8.5.2.4.75】新增
+        trailing_stop_activation = strategy_params.get('trailing_stop_activation', 0.5)  # 激活阈值（ATR倍数）
+        trailing_stop_distance = strategy_params.get('trailing_stop_distance', 1.0)  # 跟踪距离（ATR倍数）
         
         # 🆕 V8.4.8: 动态ATR倍数（根据signal_score调整）
         if use_dynamic_atr:
@@ -106,85 +109,199 @@ def calculate_single_actual_profit(
         
         # 4. 模拟交易结果
         # 【V8.5.2.4.17】改进：使用概率加权方法判断TP/SL触发顺序
+        # 【V8.5.2.4.75】新增：移动止损支持
         
         if direction == 'long':
             # Long: 止损在下方，止盈在上方
             hit_stop_loss = min_low <= stop_loss
             hit_take_profit = max_high >= take_profit
             
-            if hit_stop_loss and hit_take_profit:
-                # 🔧 【V8.5.2.4.65】波动幅度判断法
-                # 原理：基于实际波动幅度判断哪个目标更可能先触发
-                # 避免距离比例导致的偏差（TP设30倍ATR，SL设1.5倍ATR时，距离比例会严重偏向SL）
-                
-                # 计算实际波动幅度（百分比）
-                upward_amplitude = (max_high - entry_price) / entry_price  # 上涨幅度
-                downward_amplitude = (entry_price - min_low) / entry_price  # 下跌幅度
-                
-                # Long方向：上涨幅度大 → TP先触发（TP在上方）
-                if upward_amplitude > downward_amplitude:
+            # 【V8.5.2.4.75】移动止损逻辑（简化模拟）
+            if trailing_stop_enabled and not hit_stop_loss:
+                # 计算激活价格（盈利达到activation阈值时启动trailing stop）
+                activation_price = entry_price + (atr * trailing_stop_activation)
+                if max_high >= activation_price:
+                    # 移动止损已激活，计算trailing stop价格
+                    # 假设价格达到max_high后回撤trailing_stop_distance倍ATR触发止损
+                    trailing_stop_price = max_high - (atr * trailing_stop_distance)
+                    
+                    # 如果回撤触发了trailing stop
+                    if min_low <= trailing_stop_price:
+                        # 检查是否也触发了TP
+                        if hit_take_profit:
+                            # 同时触发TP和trailing stop，用波动幅度判断
+                            upward_amplitude = (max_high - entry_price) / entry_price
+                            downward_amplitude = (entry_price - min_low) / entry_price
+                            if upward_amplitude > downward_amplitude * 1.5:  # TP优先（需要明显优势）
+                                exit_price = take_profit
+                                exit_method = 'take_profit'
+                            else:
+                                exit_price = trailing_stop_price
+                                exit_method = 'trailing_stop'
+                        else:
+                            exit_price = trailing_stop_price
+                            exit_method = 'trailing_stop'
+                        opportunity['exit_method'] = exit_method
+                        profit_pct = (exit_price - entry_price) / entry_price * 100
+                        if debug_mode:
+                            print(f"     退出方式: {exit_method}, 退出价: {exit_price:.2f}, 利润: {profit_pct:.2f}%")
+                    elif hit_take_profit:
+                        # 只触发TP，未触发trailing stop
+                        exit_price = take_profit
+                        exit_method = 'take_profit'
+                        opportunity['exit_method'] = exit_method
+                        profit_pct = (exit_price - entry_price) / entry_price * 100
+                        if debug_mode:
+                            print(f"     退出方式: {exit_method}, 退出价: {exit_price:.2f}, 利润: {profit_pct:.2f}%")
+                    else:
+                        # 未触发任何退出条件，继续持有
+                        exit_price = final_close
+                        exit_method = 'timeout'
+                        opportunity['exit_method'] = exit_method
+                        profit_pct = (exit_price - entry_price) / entry_price * 100
+                        if debug_mode:
+                            print(f"     退出方式: {exit_method}, 退出价: {exit_price:.2f}, 利润: {profit_pct:.2f}%")
+                elif hit_take_profit:
+                    # trailing stop未激活，但触发TP
                     exit_price = take_profit
-                    exit_method = 'take_profit_amplitude'
+                    exit_method = 'take_profit'
                     opportunity['exit_method'] = exit_method
+                    profit_pct = (exit_price - entry_price) / entry_price * 100
+                    if debug_mode:
+                        print(f"     退出方式: {exit_method}, 退出价: {exit_price:.2f}, 利润: {profit_pct:.2f}%")
                 else:
-                    exit_price = stop_loss
-                    exit_method = 'stop_loss_amplitude'
+                    # trailing stop未激活，也未触发TP
+                    exit_price = final_close
+                    exit_method = 'timeout'
                     opportunity['exit_method'] = exit_method
-            elif hit_stop_loss:
-                exit_price = stop_loss
-                exit_method = 'stop_loss'
-            elif hit_take_profit:
-                exit_price = take_profit
-                exit_method = 'take_profit'
+                    profit_pct = (exit_price - entry_price) / entry_price * 100
+                    if debug_mode:
+                        print(f"     退出方式: {exit_method}, 退出价: {exit_price:.2f}, 利润: {profit_pct:.2f}%")
             else:
-                # 超时退出（按最终收盘价）
-                exit_price = final_close
-                exit_method = 'timeout'
-            
-            profit_pct = (exit_price - entry_price) / entry_price * 100
-            
-            # 🔧 V8.5.2.4.63 调试：打印退出方式和利润
-            if debug_mode:
-                print(f"     退出方式: {exit_method}, 退出价: {exit_price:.2f}, 利润: {profit_pct:.2f}%")
+                # 未启用trailing stop，使用原有逻辑
+                if hit_stop_loss and hit_take_profit:
+                    # 🔧 【V8.5.2.4.65】波动幅度判断法
+                    upward_amplitude = (max_high - entry_price) / entry_price
+                    downward_amplitude = (entry_price - min_low) / entry_price
+                    
+                    if upward_amplitude > downward_amplitude:
+                        exit_price = take_profit
+                        exit_method = 'take_profit_amplitude'
+                        opportunity['exit_method'] = exit_method
+                    else:
+                        exit_price = stop_loss
+                        exit_method = 'stop_loss_amplitude'
+                        opportunity['exit_method'] = exit_method
+                elif hit_stop_loss:
+                    exit_price = stop_loss
+                    exit_method = 'stop_loss'
+                elif hit_take_profit:
+                    exit_price = take_profit
+                    exit_method = 'take_profit'
+                else:
+                    exit_price = final_close
+                    exit_method = 'timeout'
+                
+                profit_pct = (exit_price - entry_price) / entry_price * 100
+                
+                if debug_mode:
+                    print(f"     退出方式: {exit_method}, 退出价: {exit_price:.2f}, 利润: {profit_pct:.2f}%")
         
         else:  # short
             # Short: 止损在上方，止盈在下方
             hit_stop_loss = max_high >= stop_loss
             hit_take_profit = min_low <= take_profit
             
-            if hit_stop_loss and hit_take_profit:
-                # 🔧 【V8.5.2.4.65】波动幅度判断法
-                # 原理：基于实际波动幅度判断哪个目标更可能先触发
-                
-                # 计算实际波动幅度（百分比）
-                upward_amplitude = (max_high - entry_price) / entry_price  # 上涨幅度
-                downward_amplitude = (entry_price - min_low) / entry_price  # 下跌幅度
-                
-                # Short方向：下跌幅度大 → TP先触发（TP在下方）
-                if downward_amplitude > upward_amplitude:
+            # 【V8.5.2.4.75】移动止损逻辑（简化模拟）
+            if trailing_stop_enabled and not hit_stop_loss:
+                # 计算激活价格（盈利达到activation阈值时启动trailing stop）
+                activation_price = entry_price - (atr * trailing_stop_activation)
+                if min_low <= activation_price:
+                    # 移动止损已激活，计算trailing stop价格
+                    # 假设价格达到min_low后反弹trailing_stop_distance倍ATR触发止损
+                    trailing_stop_price = min_low + (atr * trailing_stop_distance)
+                    
+                    # 如果反弹触发了trailing stop
+                    if max_high >= trailing_stop_price:
+                        # 检查是否也触发了TP
+                        if hit_take_profit:
+                            # 同时触发TP和trailing stop，用波动幅度判断
+                            upward_amplitude = (max_high - entry_price) / entry_price
+                            downward_amplitude = (entry_price - min_low) / entry_price
+                            if downward_amplitude > upward_amplitude * 1.5:  # TP优先（需要明显优势）
+                                exit_price = take_profit
+                                exit_method = 'take_profit'
+                            else:
+                                exit_price = trailing_stop_price
+                                exit_method = 'trailing_stop'
+                        else:
+                            exit_price = trailing_stop_price
+                            exit_method = 'trailing_stop'
+                        opportunity['exit_method'] = exit_method
+                        profit_pct = (entry_price - exit_price) / entry_price * 100
+                        if debug_mode:
+                            print(f"     退出方式: {exit_method}, 退出价: {exit_price:.2f}, 利润: {profit_pct:.2f}%")
+                    elif hit_take_profit:
+                        # 只触发TP，未触发trailing stop
+                        exit_price = take_profit
+                        exit_method = 'take_profit'
+                        opportunity['exit_method'] = exit_method
+                        profit_pct = (entry_price - exit_price) / entry_price * 100
+                        if debug_mode:
+                            print(f"     退出方式: {exit_method}, 退出价: {exit_price:.2f}, 利润: {profit_pct:.2f}%")
+                    else:
+                        # 未触发任何退出条件，继续持有
+                        exit_price = final_close
+                        exit_method = 'timeout'
+                        opportunity['exit_method'] = exit_method
+                        profit_pct = (entry_price - exit_price) / entry_price * 100
+                        if debug_mode:
+                            print(f"     退出方式: {exit_method}, 退出价: {exit_price:.2f}, 利润: {profit_pct:.2f}%")
+                elif hit_take_profit:
+                    # trailing stop未激活，但触发TP
                     exit_price = take_profit
-                    exit_method = 'take_profit_amplitude'
+                    exit_method = 'take_profit'
                     opportunity['exit_method'] = exit_method
+                    profit_pct = (entry_price - exit_price) / entry_price * 100
+                    if debug_mode:
+                        print(f"     退出方式: {exit_method}, 退出价: {exit_price:.2f}, 利润: {profit_pct:.2f}%")
                 else:
-                    exit_price = stop_loss
-                    exit_method = 'stop_loss_amplitude'
+                    # trailing stop未激活，也未触发TP
+                    exit_price = final_close
+                    exit_method = 'timeout'
                     opportunity['exit_method'] = exit_method
-            elif hit_stop_loss:
-                exit_price = stop_loss
-                exit_method = 'stop_loss'
-            elif hit_take_profit:
-                exit_price = take_profit
-                exit_method = 'take_profit'
+                    profit_pct = (entry_price - exit_price) / entry_price * 100
+                    if debug_mode:
+                        print(f"     退出方式: {exit_method}, 退出价: {exit_price:.2f}, 利润: {profit_pct:.2f}%")
             else:
-                # 超时退出
-                exit_price = final_close
-                exit_method = 'timeout'
-            
-            profit_pct = (entry_price - exit_price) / entry_price * 100
-            
-            # 🔧 V8.5.2.4.63 调试：打印退出方式和利润
-            if debug_mode:
-                print(f"     退出方式: {exit_method}, 退出价: {exit_price:.2f}, 利润: {profit_pct:.2f}%")
+                # 未启用trailing stop，使用原有逻辑
+                if hit_stop_loss and hit_take_profit:
+                    # 🔧 【V8.5.2.4.65】波动幅度判断法
+                    upward_amplitude = (max_high - entry_price) / entry_price
+                    downward_amplitude = (entry_price - min_low) / entry_price
+                    
+                    if downward_amplitude > upward_amplitude:
+                        exit_price = take_profit
+                        exit_method = 'take_profit_amplitude'
+                        opportunity['exit_method'] = exit_method
+                    else:
+                        exit_price = stop_loss
+                        exit_method = 'stop_loss_amplitude'
+                        opportunity['exit_method'] = exit_method
+                elif hit_stop_loss:
+                    exit_price = stop_loss
+                    exit_method = 'stop_loss'
+                elif hit_take_profit:
+                    exit_price = take_profit
+                    exit_method = 'take_profit'
+                else:
+                    exit_price = final_close
+                    exit_method = 'timeout'
+                
+                profit_pct = (entry_price - exit_price) / entry_price * 100
+                
+                if debug_mode:
+                    print(f"     退出方式: {exit_method}, 退出价: {exit_price:.2f}, 利润: {profit_pct:.2f}%")
         
         # 5. 考虑超时退出的限制
         # 如果未触发止盈止损，但持仓时间超过max_holding_hours，强制平仓

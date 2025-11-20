@@ -658,17 +658,17 @@ def optimize_for_signal_type(
         # 从learned_features或全局配置中获取（默认关闭）
         enable_advanced_filters = learned_features.get('enable_advanced_filters', False)
         
-        # 【V8.5.2.4.75】Phase 3放宽筛选 + 提高TP + 强制移动止损
+        # 【V8.5.2.4.75】Phase 3进一步放宽筛选 + 提高TP + 强制移动止损
         # 目标：在Phase 2基础上提高利润（当前6.46% → 目标10-15%）
-        # 策略：放宽5维度筛选 + 提高TP上限 + 强制移动止损
+        # 策略：大幅放宽5维度筛选 + 提高TP上限 + 强制移动止损
         param_grid = {
-            # 核心筛选条件（放宽）
-            'min_indicator_consensus': [1, 2],               # 共振度（减少到2档）
-            'min_signal_score': [70, 75, 80],                # 信号分（降低起点70→70）
+            # 核心筛选条件（大幅放宽）
+            'min_indicator_consensus': [1, 2],               # 共振度（保持2档）
+            'min_signal_score': [60, 70, 75],                # 信号分（降低起点70→60）
             
-            # 质量控制条件（放宽）
-            'min_risk_reward': [1.2, 1.5],                   # R:R（降低起点1.5→1.2）
-            'min_profit_density': [6.0, 8.0, 10.0],          # 利润密度（降低起点8.0→6.0）
+            # 质量控制条件（大幅放宽）
+            'min_risk_reward': [1.0, 1.2],                   # R:R（降低起点1.2→1.0）
+            'min_profit_density': [4.0, 6.0, 8.0],           # 利润密度（降低起点6.0→4.0）
             
             # TP/SL优化（提高TP上限）
             'atr_tp_multiplier': [optimal_tp, optimal_tp * 1.25, optimal_tp * 1.5],  # 扩大TP范围
@@ -676,29 +676,33 @@ def optimize_for_signal_type(
             'max_holding_hours': [int(avg_holding)],
         }
         
-        # 【V8.5.2.4.74】高级筛选（仅在启用时添加）
+        
+        # 【V8.5.2.4.75】添加trailing stop参数
         if enable_advanced_filters:
             param_grid.update({
                 'require_strong_pattern': [False, True],
                 'min_trend_strength': ['any', 'normal', 'strong'],
                 'require_near_sr': [False, True],
                 'trailing_stop_enabled': [False, True],
+                'trailing_stop_activation': [0.5, 1.0],
+                'trailing_stop_distance': [1.0, 1.5],
             })
-            print(f"     🎨 【V8.5.2.4.74】高级筛选已启用（8维度探索+移动止损）")
+            print(f"     🎨 【V8.5.2.4.75】高级筛选已启用（8维度探索+移动止损）")
         else:
-            # 【V8.5.2.4.74】默认启用移动止损，但不启用其他高级筛选
             param_grid.update({
                 'require_strong_pattern': [False],
                 'min_trend_strength': ['any'],
                 'require_near_sr': [False],
                 'trailing_stop_enabled': [True],
+                'trailing_stop_activation': [0.5],
+                'trailing_stop_distance': [1.0],
             })
-            print(f"     🎯 【V8.5.2.4.74】使用标准筛选+移动止损（5维度：基础+质量+TP）")
+            print(f"     🎯 【V8.5.2.4.75】使用标准筛选+移动止损（5维度：基础+质量+TP）")
         
         print(f"     📐 基础条件: score≥{param_grid['min_signal_score']}, consensus≥{param_grid['min_indicator_consensus']}")
         print(f"     💡 质量控制: R:R≥{param_grid['min_risk_reward']}, 密度≥{param_grid['min_profit_density']}")
         print(f"     🎯 TP扩大（+25%/+50%）: 范围[{optimal_tp:.1f}, {optimal_tp*1.25:.1f}, {optimal_tp*1.5:.1f}], SL={optimal_sl:.1f}")
-        print(f"     🚀 目标：{'全维度筛选' if enable_advanced_filters else '放宽筛选+提高TP+强制移动止损'}，提高平均利润（当前6.46% → 目标10-15%）")
+        print(f"     🚀 目标：{'全维度筛选' if enable_advanced_filters else '大幅放宽筛选+提高TP+强制移动止损'}，提高平均利润（当前6.46% → 目标10-15%）")
     else:  # swing
         # 【V8.5.2.4.68】固定Phase 2最优TP/SL，重点测试筛选条件
         swing_optimal = optimal_tp_sl.get('swing', {})
@@ -709,17 +713,17 @@ def optimize_for_signal_type(
         # 从learned_features或全局配置中获取（默认关闭）
         enable_advanced_filters = learned_features.get('enable_advanced_filters', False)
         
-        # 【V8.5.2.4.75】Phase 3放宽筛选 + 提高TP + 强制移动止损
+        # 【V8.5.2.4.75】Phase 3进一步放宽筛选 + 提高TP + 强制移动止损
         # 目标：在Phase 2基础上提高利润（当前6.49% → 目标10-15%）
-        # 策略：放宽5维度筛选 + 提高TP上限 + 强制移动止损
+        # 策略：大幅放宽5维度筛选 + 提高TP上限 + 强制移动止损
         param_grid = {
-            # 核心筛选条件（放宽）
-            'min_indicator_consensus': [1, 2],               # 共振度（减少到2档）
-            'min_signal_score': [75, 80, 85],                # 信号分（降低起点90→75）
+            # 核心筛选条件（大幅放宽）
+            'min_indicator_consensus': [1, 2],               # 共振度（保持2档）
+            'min_signal_score': [65, 75, 80],                # 信号分（降低起点75→65）
             
-            # 质量控制条件（放宽）
-            'min_risk_reward': [1.2, 1.5],                   # R:R（降低起点1.5→1.2）
-            'min_profit_density': [0.3, 0.5, 0.8],           # 利润密度（降低起点0.5→0.3）
+            # 质量控制条件（大幅放宽）
+            'min_risk_reward': [1.0, 1.2],                   # R:R（降低起点1.2→1.0）
+            'min_profit_density': [0.2, 0.3, 0.5],           # 利润密度（降低起点0.3→0.2）
             
             # TP/SL优化（提高TP上限）
             'atr_tp_multiplier': [optimal_tp, optimal_tp * 1.27, optimal_tp * 1.59],  # 扩大TP范围（22→28→35）
@@ -727,29 +731,33 @@ def optimize_for_signal_type(
             'max_holding_hours': [int(avg_holding)],
         }
         
-        # 【V8.5.2.4.74】高级筛选（仅在启用时添加）
+        
+        # 【V8.5.2.4.75】添加trailing stop参数
         if enable_advanced_filters:
             param_grid.update({
                 'require_strong_pattern': [False, True],
                 'min_trend_strength': ['any', 'normal', 'strong'],
                 'require_near_sr': [False, True],
                 'trailing_stop_enabled': [False, True],
+                'trailing_stop_activation': [0.5, 1.0],
+                'trailing_stop_distance': [1.0, 1.5],
             })
-            print(f"     🎨 【V8.5.2.4.74】高级筛选已启用（8维度探索+移动止损）")
+            print(f"     🎨 【V8.5.2.4.75】高级筛选已启用（8维度探索+移动止损）")
         else:
-            # 【V8.5.2.4.74】默认启用移动止损，但不启用其他高级筛选
             param_grid.update({
                 'require_strong_pattern': [False],
                 'min_trend_strength': ['any'],
                 'require_near_sr': [False],
                 'trailing_stop_enabled': [True],
+                'trailing_stop_activation': [0.5],
+                'trailing_stop_distance': [1.0],
             })
-            print(f"     🎯 【V8.5.2.4.74】使用标准筛选+移动止损（5维度：基础+质量+TP）")
+            print(f"     🎯 【V8.5.2.4.75】使用标准筛选+移动止损（5维度：基础+质量+TP）")
         
         print(f"     📐 基础条件: score≥{param_grid['min_signal_score']}, consensus≥{param_grid['min_indicator_consensus']}")
         print(f"     💡 质量控制: R:R≥{param_grid['min_risk_reward']}, 密度≥{param_grid['min_profit_density']}")
         print(f"     🎯 TP扩大（+27%/+59%）: 范围[{optimal_tp:.1f}, {optimal_tp*1.27:.1f}, {optimal_tp*1.59:.1f}], SL={optimal_sl:.1f}")
-        print(f"     🚀 目标：{'全维度筛选' if enable_advanced_filters else '放宽筛选+提高TP+强制移动止损'}，提高平均利润（当前6.49% → 目标10-15%）")
+        print(f"     🚀 目标：{'全维度筛选' if enable_advanced_filters else '大幅放宽筛选+提高TP+强制移动止损'}，提高平均利润（当前6.49% → 目标10-15%）")
     
     # 多起点搜索
     all_results = []
@@ -761,7 +769,7 @@ def optimize_for_signal_type(
         # 由于TP/SL已固定，重点测试筛选条件组合
         test_combinations = []
         
-        # 【V8.5.2.4.73】测试所有筛选条件组合（8维度）
+        # 【V8.5.2.4.75】测试所有筛选条件组合（8维度+移动止损）
         for consensus in param_grid['min_indicator_consensus']:
             for signal_score in param_grid['min_signal_score']:
                 for risk_reward in param_grid['min_risk_reward']:
@@ -770,24 +778,30 @@ def optimize_for_signal_type(
                             for trend_strength in param_grid['min_trend_strength']:
                                 for require_sr in param_grid['require_near_sr']:
                                     for tp_multiplier in param_grid['atr_tp_multiplier']:
-                                        test_params = {
-                                            'min_indicator_consensus': consensus,
-                                            'min_signal_score': signal_score,
-                                            'min_risk_reward': risk_reward,
-                                            'min_profit_density': profit_density,
-                                            'require_strong_pattern': require_pattern,    # 【V8.5.2.4.73】新增
-                                            'min_trend_strength': trend_strength,         # 【V8.5.2.4.73】新增
-                                            'require_near_sr': require_sr,                # 【V8.5.2.4.73】新增
-                                            'atr_tp_multiplier': tp_multiplier,
-                                            'atr_stop_multiplier': param_grid['atr_stop_multiplier'][0],
-                                            'max_holding_hours': param_grid['max_holding_hours'][0],
-                                            'trailing_stop_enabled': False
-                                        }
-                                        test_combinations.append(test_params)
+                                        for trailing_stop in param_grid['trailing_stop_enabled']:
+                                            for ts_activation in param_grid['trailing_stop_activation']:
+                                                for ts_distance in param_grid['trailing_stop_distance']:
+                                                    test_params = {
+                                                        'min_indicator_consensus': consensus,
+                                                        'min_signal_score': signal_score,
+                                                        'min_risk_reward': risk_reward,
+                                                        'min_profit_density': profit_density,
+                                                        'require_strong_pattern': require_pattern,
+                                                        'min_trend_strength': trend_strength,
+                                                        'require_near_sr': require_sr,
+                                                        'atr_tp_multiplier': tp_multiplier,
+                                                        'atr_stop_multiplier': param_grid['atr_stop_multiplier'][0],
+                                                        'max_holding_hours': param_grid['max_holding_hours'][0],
+                                                        'trailing_stop_enabled': trailing_stop,
+                                                        'trailing_stop_activation': ts_activation,  # 【V8.5.2.4.75】新增
+                                                        'trailing_stop_distance': ts_distance       # 【V8.5.2.4.75】新增
+                                                    }
+                                                    test_combinations.append(test_params)
         
-        # 【V8.5.2.4.73】测试组合数量：3×3×2×3×2×3×2×3=1944组（8维度全面测试）
-        # 维度：score×consensus×R:R×密度×K线形态×趋势强度×S/R×TP
-        print(f"     📊 测试组合数: {len(test_combinations)}组 (8维度：基础+形态+趋势+S/R+TP)")
+        # 【V8.5.2.4.75】测试组合数量：3×3×2×3×2×3×2×3×1=1944组（8维度+移动止损）
+        # 维度：score×consensus×R:R×密度×K线形态×趋势强度×S/R×TP×trailing_stop
+        # 注意：trailing_stop_enabled默认只有[True]，所以组合数不变
+        print(f"     📊 测试组合数: {len(test_combinations)}组 (8维度：基础+形态+趋势+S/R+TP+移动止损)")
         
         # 测试每个组合
         best_for_this_start = None
