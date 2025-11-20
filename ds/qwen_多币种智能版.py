@@ -15525,8 +15525,8 @@ def get_ohlcv_data(symbol, skip_timing_check=False):
             indicator_consensus += 1
         
         # 5. 多周期趋势一致（15m、1h、4h同向）
-        if ("多头" in trend and "多头" in trend_1h and "多头" in long_term_trend) or \
-           ("空头" in trend and "空头" in trend_1h and "空头" in long_term_trend):
+        if ("多头" in trend_15m and "多头" in trend_1h and "多头" in long_term_trend) or \
+           ("空头" in trend_15m and "空头" in trend_1h and "空头" in long_term_trend):
             indicator_consensus += 1
         
         # 添加到返回的data字典中

@@ -11037,6 +11037,110 @@ def analyze_and_adjust_params():
                             backtest_info += f"持平"
                         backtest_info += f" 捕获率{capture_rate*100:.0f}%"
             
+            # 【V8.5.2.4.81】收集Phase 1-4数据用于邮件和Bark
+            print(f"\n[V8.5.2.4.81] 收集Phase数据...")
+            
+            # Phase 1数据（客观机会）
+            phase1_data = {}
+            if phase1_baseline:
+                scalping_bl = phase1_baseline.get('scalping', {})
+                swing_bl = phase1_baseline.get('swing', {})
+                phase1_data = {
+                    'scalping_count': scalping_bl.get('count', 0),
+                    'scalping_profit': scalping_bl.get('avg_objective_profit', 0),
+                    'swing_count': swing_bl.get('count', 0),
+                    'swing_profit': swing_bl.get('avg_objective_profit', 0),
+                    # 总利润（用于对比分析）
+                    'scalping_total_profit': scalping_bl.get('count', 0) * scalping_bl.get('avg_objective_profit', 0),
+                    'swing_total_profit': swing_bl.get('count', 0) * swing_bl.get('avg_objective_profit', 0)
+                }
+            
+            # Phase 2数据（参数探索）
+            phase2_data = {}
+            if phase2_baseline:
+                # 从phase2_baseline中提取分离的数据
+                # 注意：Phase 2可能没有完全分离，需要从learned_features中提取
+                learned_features = phase2_baseline.get('learned_features', {})
+                phase1_from_p2 = learned_features.get('phase1_baseline', {})
+                
+                # 尝试从Phase 2的捕获结果中分离超短线和波段
+                # 如果没有分离数据，使用整体数据作为估算
+                total_capture_rate = phase2_baseline.get('capture_rate', 0) * 100
+                total_avg_profit = phase2_baseline.get('avg_profit', 0)
+                total_captured = phase2_baseline.get('captured_count', 0)
+                
+                # 估算：假设超短线和波段各占一半（如果没有精确数据）
+                phase2_data = {
+                    'scalping_capture': total_capture_rate,  # 整体捕获率
+                    'scalping_profit': total_avg_profit,
+                    'scalping_count': total_captured // 2,
+                    'swing_capture': total_capture_rate,
+                    'swing_profit': total_avg_profit,
+                    'swing_count': total_captured - (total_captured // 2),
+                    # 总利润
+                    'scalping_total_profit': (total_captured // 2) * total_avg_profit,
+                    'swing_total_profit': (total_captured - (total_captured // 2)) * total_avg_profit
+                }
+            
+            # Phase 3数据（分离优化）
+            phase3_data = {}
+            if phase3_result and not phase3_result.get('error'):
+                scalping_p3 = phase3_result.get('scalping', {})
+                swing_p3 = phase3_result.get('swing', {})
+                phase3_data = {
+                    'scalping_capture': scalping_p3.get('capture_rate', 0) * 100,
+                    'scalping_profit': scalping_p3.get('avg_profit', 0),
+                    'scalping_count': scalping_p3.get('captured_count', 0),
+                    'swing_capture': swing_p3.get('capture_rate', 0) * 100,
+                    'swing_profit': swing_p3.get('avg_profit', 0),
+                    'swing_count': swing_p3.get('captured_count', 0),
+                    # 总利润
+                    'scalping_total_profit': scalping_p3.get('captured_count', 0) * scalping_p3.get('avg_profit', 0),
+                    'swing_total_profit': swing_p3.get('captured_count', 0) * swing_p3.get('avg_profit', 0)
+                }
+            
+            # Phase 4数据（最终验证）
+            phase4_data = {}
+            if phase4_result:
+                # Phase 4验证后，最终参数已应用到config
+                # 使用Phase 3的数据作为Phase 4的基准（因为Phase 4只是验证）
+                scalping_p4 = phase4_result.get('scalping', {})
+                swing_p4 = phase4_result.get('swing', {})
+                
+                # 如果Phase 4有具体的性能数据，使用它；否则使用Phase 3数据
+                if scalping_p4.get('avg_profit') is not None:
+                    phase4_data = {
+                        'scalping_capture': scalping_p4.get('capture_rate', phase3_data.get('scalping_capture', 0)),
+                        'scalping_profit': scalping_p4.get('avg_profit', phase3_data.get('scalping_profit', 0)),
+                        'scalping_count': scalping_p4.get('captured_count', phase3_data.get('scalping_count', 0)),
+                        'swing_capture': swing_p4.get('capture_rate', phase3_data.get('swing_capture', 0)),
+                        'swing_profit': swing_p4.get('avg_profit', phase3_data.get('swing_profit', 0)),
+                        'swing_count': swing_p4.get('captured_count', phase3_data.get('swing_count', 0)),
+                        # 总利润
+                        'scalping_total_profit': scalping_p4.get('captured_count', phase3_data.get('scalping_count', 0)) * scalping_p4.get('avg_profit', phase3_data.get('scalping_profit', 0)),
+                        'swing_total_profit': swing_p4.get('captured_count', phase3_data.get('swing_count', 0)) * swing_p4.get('avg_profit', phase3_data.get('swing_profit', 0))
+                    }
+                else:
+                    # Phase 4只有验证状态，使用Phase 3数据
+                    phase4_data = phase3_data.copy()
+            else:
+                # 如果Phase 4未运行，使用Phase 3数据
+                phase4_data = phase3_data.copy()
+            
+            # 汇总所有Phase数据
+            all_phase_data = {
+                'phase1': phase1_data,
+                'phase2': phase2_data,
+                'phase3': phase3_data,
+                'phase4': phase4_data
+            }
+            
+            print(f"[V8.5.2.4.81] Phase数据收集完成")
+            print(f"  Phase 1: 超短线{phase1_data.get('scalping_count', 0)}个, 波段{phase1_data.get('swing_count', 0)}个")
+            print(f"  Phase 2: 捕获率{phase2_data.get('scalping_capture', 0):.1f}%")
+            print(f"  Phase 3: 超短线{phase3_data.get('scalping_capture', 0):.1f}%, 波段{phase3_data.get('swing_capture', 0):.1f}%")
+            print(f"  Phase 4: 超短线{phase4_data.get('scalping_capture', 0):.1f}%, 波段{phase4_data.get('swing_capture', 0):.1f}%")
+            
             # 🔄 V8.3.21.8: 构建Bark通知内容（优先显示优化后预期收益）
             bark_content_lines = []
             
@@ -11070,53 +11174,80 @@ def analyze_and_adjust_params():
                 scalp_perf = {}
                 swing_perf = {}
             
-            # 检查是否有任何优化数据
-            has_scalp_data = scalp_opt or scalp_perf
-            has_swing_data = swing_opt or swing_perf
-            
-            if has_scalp_data or has_swing_data:
-                # 标题行
-                bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
-                bark_content_lines.append("")
-                bark_content_lines.append("📊 优化后预期收益:")
+            # 【V8.5.2.4.81】使用新的Bark格式
+            try:
+                from email_bark_formatter import generate_optimized_bark_content
                 
-                # 超短线数据（优先使用scalp_opt）
-                if has_scalp_data:
-                    if scalp_opt:
-                        # 使用scalping_optimization的数据
-                        cap_rate = scalp_opt.get('new_capture_rate', 0)
-                        avg_profit = scalp_opt.get('new_avg_profit', 0) / 100  # 转为小数
-                    else:
-                        # 使用v8321_insights的数据
-                        cap_rate = scalp_perf.get('capture_rate', 0)
-                        avg_profit = scalp_perf.get('avg_profit', 0)
-                    bark_content_lines.append(f"⚡超短线: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
+                # 准备昨日数据
+                yesterday_data = {
+                    'winrate': win_rate,  # 已经是0-1的小数
+                    'profit': sum([t.get('profit_loss', 0) for t in recent_20 if t.get('profit_loss', 0) > 0])  # 昨日总利润
+                }
                 
-                # 波段数据（优先使用swing_opt）
-                if has_swing_data:
-                    if swing_opt:
-                        # 使用swing_optimization的数据
-                        cap_rate = swing_opt.get('new_capture_rate', 0)
-                        avg_profit = swing_opt.get('new_avg_profit', 0) / 100  # 转为小数
-                    else:
-                        # 使用v8321_insights的数据
-                        cap_rate = swing_perf.get('capture_rate', 0)
-                        avg_profit = swing_perf.get('avg_profit', 0)
-                    bark_content_lines.append(f"🌊波段: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
+                # 使用Phase 2和Phase 4数据
+                bark_content = generate_optimized_bark_content(
+                    yesterday_data=yesterday_data,
+                    phase2_data=phase2_data,
+                    phase4_data=phase4_data
+                )
                 
-                # 显示当前ROI参数
-                bark_content_lines.append("")
-                min_rr = config.get('global', {}).get('min_risk_reward', 'N/A')
-                bark_content_lines.append(f"🎯 当前ROI: {min_rr}:1")
-            else:
-                # 没有任何优化数据，使用历史统计数据
-                bark_content_lines.append(f"胜率{win_rate*100:.0f}% 盈亏比{win_loss_ratio:.1f}")
-                bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
-            
-            send_bark_notification(
-                "[DeepSeek]🤖AI参数优化V8.3.21",
-                "\n".join(bark_content_lines),
-            )
+                send_bark_notification(
+                    "[DeepSeek]🤖AI参数优化完成",
+                    bark_content
+                )
+                print(f"[V8.5.2.4.81] Bark推送已发送（新格式）")
+                
+            except Exception as e:
+                print(f"[V8.5.2.4.81] 新Bark格式失败，使用旧格式: {e}")
+                
+                # 降级：使用旧的Bark格式
+                # 检查是否有任何优化数据
+                has_scalp_data = scalp_opt or scalp_perf
+                has_swing_data = swing_opt or swing_perf
+                
+                if has_scalp_data or has_swing_data:
+                    # 标题行
+                    bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
+                    bark_content_lines.append("")
+                    bark_content_lines.append("📊 优化后预期收益:")
+                    
+                    # 超短线数据（优先使用scalp_opt）
+                    if has_scalp_data:
+                        if scalp_opt:
+                            # 使用scalping_optimization的数据
+                            cap_rate = scalp_opt.get('new_capture_rate', 0)
+                            avg_profit = scalp_opt.get('new_avg_profit', 0) / 100  # 转为小数
+                        else:
+                            # 使用v8321_insights的数据
+                            cap_rate = scalp_perf.get('capture_rate', 0)
+                            avg_profit = scalp_perf.get('avg_profit', 0)
+                        bark_content_lines.append(f"⚡超短线: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
+                    
+                    # 波段数据（优先使用swing_opt）
+                    if has_swing_data:
+                        if swing_opt:
+                            # 使用swing_optimization的数据
+                            cap_rate = swing_opt.get('new_capture_rate', 0)
+                            avg_profit = swing_opt.get('new_avg_profit', 0) / 100  # 转为小数
+                        else:
+                            # 使用v8321_insights的数据
+                            cap_rate = swing_perf.get('capture_rate', 0)
+                            avg_profit = swing_perf.get('avg_profit', 0)
+                        bark_content_lines.append(f"🌊波段: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
+                    
+                    # 显示当前ROI参数
+                    bark_content_lines.append("")
+                    min_rr = config.get('global', {}).get('min_risk_reward', 'N/A')
+                    bark_content_lines.append(f"🎯 当前ROI: {min_rr}:1")
+                else:
+                    # 没有任何优化数据，使用历史统计数据
+                    bark_content_lines.append(f"胜率{win_rate*100:.0f}% 盈亏比{win_loss_ratio:.1f}")
+                    bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
+                
+                send_bark_notification(
+                    "[DeepSeek]🤖AI参数优化V8.3.21",
+                    "\n".join(bark_content_lines),
+                )
             
             # 🆕 发送邮件通知（详细版）
             try:
@@ -12169,6 +12300,37 @@ def analyze_and_adjust_params():
                     import traceback
                     traceback.print_exc()
                     executive_summary_html = ""
+                
+                # 【V8.5.2.4.81】生成Phase汇总表和参数对比表
+                phase_summary_html = ""
+                params_comparison_html = ""
+                profit_comparison_html = ""
+                
+                try:
+                    from email_bark_formatter import (
+                        generate_phase_summary_table,
+                        generate_params_comparison_table,
+                        generate_profit_comparison_table
+                    )
+                    
+                    # 生成Phase汇总表
+                    phase_summary_html = generate_phase_summary_table(all_phase_data)
+                    
+                    # 生成参数对比表
+                    scalping_params = config.get('scalping_params', {})
+                    swing_params = config.get('swing_params', {})
+                    if scalping_params or swing_params:
+                        params_comparison_html = generate_params_comparison_table(scalping_params, swing_params)
+                    
+                    # 生成总利润对比表
+                    profit_comparison_html = generate_profit_comparison_table(all_phase_data)
+                    
+                    print(f"[V8.5.2.4.81] 邮件新表格生成成功")
+                    
+                except Exception as e:
+                    print(f"[V8.5.2.4.81] 邮件新表格生成失败: {e}")
+                    import traceback
+                    traceback.print_exc()
                 
                 # 🆕 V8.3.21.3: 构建学习经验模块（优先展示V8.3.21真实数据）
                 learning_insights_html = ""
