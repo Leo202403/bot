@@ -10824,7 +10824,7 @@ def analyze_and_adjust_params():
             # save_learning_config(config)  # ← V8.5.2.4.79: 注释掉，等Phase 4完成后再保存
             pass  # Phase 2参数暂存在内存，等Phase 4验证后统一保存
             
-            # 🔧 V8.3.21.5: 重新加载配置以获取optimize函数保存的V8.3.21洞察
+            # 【V8.5.2.4.89】只在必要时加载一次config（获取Phase 2保存的数据）
             config = load_learning_config()
 
             # 🆕 V8.5.6: 区分"测试参数"和"实际调整参数"
@@ -10861,8 +10861,8 @@ def analyze_and_adjust_params():
             else:
                 iter_desc = "参数已优化"
             
-            # 🔄 V8.3.32.10: 重新加载config以获取最新的v8321_insights
-            config = load_learning_config()
+            # 【V8.5.2.4.89】删除重复加载（前面已经load过了）
+            # config = load_learning_config()  # ← 重复加载，导致内存浪费
             
             # 🔄 V8.3.21.3: 优先读取V8.3.21洞察（真实数据）
             backtest_info = f"\n调整{adjusted_count}个参数"
@@ -12203,8 +12203,8 @@ def analyze_and_adjust_params():
                 
                 # 🆕 V8.3.21.3: 构建学习经验模块（优先展示V8.3.21真实数据）
                 learning_insights_html = ""
-                # 🔧 V7.7.0.19 Fix: 重新读取最新的 learning_config 确保获取到 compressed_insights
-                current_config = load_learning_config()
+                # 【V8.5.2.4.89】避免重复加载config，直接使用内存中的config
+                current_config = config  # 使用已有的config，避免内存浪费
                 print(f"[邮件调试] compressed_insights 存在: {'compressed_insights' in current_config}")
                 
                 if current_config and 'compressed_insights' in current_config:
