@@ -10652,16 +10652,24 @@ def analyze_and_adjust_params():
         
         if kline_snapshots is not None and not kline_snapshots.empty:
             try:
-                # 【V8.5.2.4.11】生成全量历史数据用于验证
-                print("  ℹ️  生成全量历史数据用于验证...")
-                full_analysis = analyze_separated_opportunities(
-                    market_snapshots=kline_snapshots,
-                    old_config=config
-                )
+                # 【V8.5.2.4.87】优先使用Phase 1缓存（避免重复计算）
+                if '_phase1_cache' in config and config['_phase1_cache'].get('date') == datetime.now().strftime('%Y-%m-%d'):
+                    print("  💾 【Phase 4使用缓存】避免重复计算（节省约2分钟）")
+                    cached_opps = config['_phase1_cache']['opportunities']
+                    scalping_opps = cached_opps.get('scalping', {}).get('opportunities', [])
+                    swing_opps = cached_opps.get('swing', {}).get('opportunities', [])
+                else:
+                    # 【V8.5.2.4.11】生成全量历史数据用于验证
+                    print("  ℹ️  生成全量历史数据用于验证...")
+                    full_analysis = analyze_separated_opportunities(
+                        market_snapshots=kline_snapshots,
+                        old_config=config
+                    )
+                    # 提取机会
+                    scalping_opps = full_analysis['scalping']['opportunities']
+                    swing_opps = full_analysis['swing']['opportunities']
                 
-                # 提取机会
-                scalping_opps = full_analysis['scalping']['opportunities']
-                swing_opps = full_analysis['swing']['opportunities']
+                # 合并机会（无论是从缓存还是新计算）
                 all_opps = scalping_opps + swing_opps
                 
                 # 【V8.5.2.4.11】调用新的Phase 4验证函数
