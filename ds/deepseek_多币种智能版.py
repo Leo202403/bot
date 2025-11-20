@@ -34,10 +34,10 @@ from entry_timing_analyzer import (
     generate_ai_exit_insights
 )
 
-# 🔧 明确指定 .env.deepseek 文件路径
-_env_file = Path(__file__).parent / '.env.deepseek'
+# 🔧 明确指定 .env 文件路径
+_env_file = Path(__file__).parent / '.env'
 if not _env_file.exists():
-    raise FileNotFoundError(f"❌ 找不到 .env.deepseek 文件: {_env_file}")
+    raise FileNotFoundError(f"❌ 找不到 .env 文件: {_env_file}")
 load_dotenv(_env_file, override=True)
 
 # 🔧 V8.3.32.13: 模型显示名称（用于Bark推送）
@@ -5442,8 +5442,8 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
             
             # 调用AI（直接使用全局deepseek_client）
             try:
-                response = qwen_client.chat.completions.create(
-                    model="qwen3-max",
+                response = deepseek_client.chat.completions.create(
+                    model="deepseek-reasoner",
                     messages=[{"role": "user", "content": ai_prompt}],
                     temperature=0.7,
                     max_tokens=5000  # 🔧 增加到5000，避免复杂决策时JSON被截断
@@ -5556,8 +5556,8 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
 """
             
             try:
-                response = qwen_client.chat.completions.create(
-                    model="qwen3-max",
+                response = deepseek_client.chat.completions.create(
+                    model="deepseek-reasoner",
                     messages=[{"role": "user", "content": ai_deep_prompt}],
                     temperature=0.8,  # 更高温度鼓励创新
                     max_tokens=5000  # 🔧 增加到5000，避免复杂决策时JSON被截断
@@ -5630,8 +5630,8 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
 """
             
             try:
-                response = qwen_client.chat.completions.create(
-                    model="qwen3-max",
+                response = deepseek_client.chat.completions.create(
+                    model="deepseek-reasoner",
                     messages=[{"role": "user", "content": emergency_prompt}],
                     temperature=0.9,  # 最高温度，最大创新
                     max_tokens=5000  # 🔧 增加到5000，避免复杂决策时JSON被截断
@@ -8660,8 +8660,8 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
             
             try:
                 # 调用AI
-                ai_response = qwen_client.chat.completions.create(
-                    model="qwen3-max",
+                ai_response = deepseek_client.chat.completions.create(
+                    model="deepseek-reasoner",
                     messages=[
                         {"role": "system", "content": "You are a professional quantitative trading analyst specializing in parameter optimization and profitability discovery. Respond in Chinese for designated fields."},
                             {"role": "user", "content": profit_discovery_prompt}
@@ -8862,13 +8862,13 @@ Based on the results above, design a BETTER 5-point sampling strategy.
 **IMPORTANT**: All text fields (diagnosis, expected_improvement) MUST be in Chinese (中文).
 """
         
-        # 调用AI（使用已有的qwen_client）
+        # 调用AI（使用已有的deepseek_client）
         try:
             import json
             import re
             
-            response = qwen_client.chat.completions.create(
-                model="qwen3-max",
+            response = deepseek_client.chat.completions.create(
+                model="deepseek-reasoner",
                 messages=[{"role": "user", "content": resample_prompt}],
                 temperature=0.1
             )
@@ -9010,7 +9010,7 @@ Based on the 5 strategic sampling points above:
 **IMPORTANT**: All text fields (reasoning, reason, analysis) MUST be in Chinese (中文).
 """
     
-    # 调用AI分析（使用已有的qwen_client）
+    # 调用AI分析（使用已有的deepseek_client）
     try:
         response = deepseek_client.chat.completions.create(
             model="deepseek-reasoner",
@@ -9828,7 +9828,7 @@ def analyze_and_adjust_params():
         # 🔧 V8.3.25.12: 提前加载AI决策（用于开仓分析）
         ai_decisions_for_entry = []
         try:
-            ai_decisions_file = Path("trading_data") / os.getenv("MODEL_NAME", "qwen") / "ai_decisions.json"
+            ai_decisions_file = Path("trading_data") / os.getenv("MODEL_NAME", "deepseek") / "ai_decisions.json"
             if ai_decisions_file.exists():
                 with open(ai_decisions_file, "r", encoding="utf-8") as f:
                     all_decisions = json.load(f)
@@ -9964,7 +9964,7 @@ def analyze_and_adjust_params():
                 # 🔧 V8.3.25: 只读取目标日期的决策（控制数据量）
                 ai_decisions = []
                 try:
-                    ai_decisions_file = Path("trading_data") / os.getenv("MODEL_NAME", "qwen") / "ai_decisions.json"
+                    ai_decisions_file = Path("trading_data") / os.getenv("MODEL_NAME", "deepseek") / "ai_decisions.json"
                     if ai_decisions_file.exists():
                         with open(ai_decisions_file, "r", encoding="utf-8") as f:
                             all_decisions = json.load(f)
@@ -10201,7 +10201,7 @@ def analyze_and_adjust_params():
                     print(f"  ✓ {param}: {old_value} → {value}")
 
             # 记录完整的迭代历史到文件
-            history_file = Path("trading_data") / os.getenv("MODEL_NAME", "qwen") / "iterative_optimization_history.jsonl"
+            history_file = Path("trading_data") / os.getenv("MODEL_NAME", "deepseek") / "iterative_optimization_history.jsonl"
             history_file.parent.mkdir(parents=True, exist_ok=True)
             
             iteration_log = {
@@ -13246,7 +13246,7 @@ def chat_with_ai(user_message, context=None):
 """
         
         response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",  # Qwen模型
+            model="deepseek-reasoner",  # DeepSeek模型
             messages=[
                 {
                     "role": "system",
@@ -15953,7 +15953,7 @@ Output JSON only:
         response = deepseek_client.chat.completions.create(
             model="deepseek-reasoner",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=2000,  # Qwen标准输出限制
+            max_tokens=2000,  # DeepSeek标准输出限制
             temperature=0.3
         )
         
@@ -16762,7 +16762,7 @@ While code executes as single position, AI should plan multi-part management:
         }
     
     try:
-        # 🔧 优化System Prompt结构（利于Qwen后端缓存）
+        # 🔧 优化System Prompt结构（利于DeepSeek后端缓存）
         optimized_system_prompt = """You are a professional quantitative portfolio manager AI specializing in multi-asset analysis and capital allocation.
 
 Your core principles:
@@ -16773,7 +16773,7 @@ Your core principles:
 - Always respond in Chinese (中文)"""
         
         response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",  # Qwen模型（思考模式，提升复杂策略分析能力）
+            model="deepseek-reasoner",  # DeepSeek模型（思考模式，提升复杂策略分析能力）
             messages=[
                 {
                     "role": "system",
@@ -23864,7 +23864,7 @@ IMPORTANT: Be aggressive in recommendations. If Time Exit > 50%, TP is definitel
     return prompt
 
 
-def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_name='qwen'):
+def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_name='deepseek'):
     """
     【V8.3.12.1】调用AI分析exit patterns并给出策略建议
     
@@ -24132,7 +24132,7 @@ def call_ai_for_round_decision(round_num, round_results, current_best_params, op
         all_rounds_results: 【V8.3.18.2】所有轮次结果
         signal_performance: 【V8.3.19 NEW】信号类型分析结果
     """
-    global qwen_api_key  # 【修复】声明全局变量
+    global deepseek_api_key  # 【修复】声明全局变量
     best_result = round_results[0] if round_results else None
     
     # 【V8.3.19】构建信号类型提示
@@ -24299,9 +24299,9 @@ Respond in JSON format ONLY:
     try:
         response = requests.post(
             "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
-            headers={"Authorization": f"Bearer {qwen_api_key}"},
+            headers={"Authorization": f"Bearer {deepseek_api_key}"},
             json={
-                "model": "qwen3-max",
+                "model": "deepseek-reasoner",
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.3,
                 "max_tokens": 2000
