@@ -26,6 +26,9 @@ FILES=(
     "ds/deepseek_多币种智能版.py"
     "ds/qwen_多币种智能版.py"
     "ds/restore_data_volume.py"
+    "ds/email_bark_formatter.py"
+    "ds/phase3_enhanced_optimizer.py"
+    "ds/phase4_validator.py"
     "ds/服务器操作_V8.5.2.4.89.2_Bug修复与数据恢复.txt"
 )
 
