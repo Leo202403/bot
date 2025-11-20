@@ -8003,9 +8003,10 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     print(f"        信号分阈值: {swing_params.get('min_signal_score', 'N/A')}")
                 
                 # 【V8.5.2.4.78】立即保存Phase 3参数到文件
-                # 确保邮件生成时能读取到最新参数
+                # 【V8.5.2.4.79】说明：这里必须保存，因为邮件生成时会重新load_learning_config()
+                # 如果不保存，邮件会读到Phase 2的旧参数
                 save_learning_config(current_config)
-                print(f"     💾 Phase 3参数已保存到配置文件")
+                print(f"     💾 Phase 3参数已保存到配置文件（供邮件使用）")
                 
                 # 保存Phase 4验证状态到current_config
                 current_config['_phase4_status'] = overall_status
@@ -8079,6 +8080,24 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                         'trailing_stop_enabled': False,
                         '_phase4_rollback': 'conservative'
                     }
+            
+            # 【V8.5.2.4.79】Phase 4完成，统一保存最终参数
+            # 无论PASSED还是FAILED，都需要保存最终决定的参数
+            save_learning_config(current_config)
+            print(f"\n  💾 【Phase 4完成】最终参数已保存到配置文件")
+            
+            # 打印最终参数摘要
+            print(f"\n  📊 【最终参数摘要】")
+            print(f"     Phase 4状态: {current_config.get('_phase4_status', 'N/A')}")
+            print(f"     Phase 3应用: {current_config.get('_phase3_applied', False)}")
+            if current_config.get('scalping_params'):
+                print(f"     超短线TP: {current_config['scalping_params'].get('atr_tp_multiplier', 'N/A')}x")
+                print(f"     超短线SL: {current_config['scalping_params'].get('atr_stop_multiplier', 'N/A')}x")
+                print(f"     超短线共振: {current_config['scalping_params'].get('min_indicator_consensus', 'N/A')}")
+            if current_config.get('swing_params'):
+                print(f"     波段TP: {current_config['swing_params'].get('atr_tp_multiplier', 'N/A')}x")
+                print(f"     波段SL: {current_config['swing_params'].get('atr_stop_multiplier', 'N/A')}x")
+                print(f"     波段共振: {current_config['swing_params'].get('min_indicator_consensus', 'N/A')}")
             
         except Exception as e:
             print(f"\n  ⚠️  Phase 4执行失败: {e}")
@@ -10881,9 +10900,13 @@ def analyze_and_adjust_params():
         is_manual_backtest = os.getenv("MANUAL_BACKTEST") == "true"
         should_send_notification = config_changed or is_manual_backtest
         
+        # 【V8.5.2.4.79】Phase 2参数不要立即保存，等Phase 4验证后再保存
+        # Phase 2只是中间结果，Phase 3会进一步优化，Phase 4会验证
+        # 过早保存会导致邮件读到中间参数，而不是最终优化参数
         if config_changed:
             # 🔧 V8.3.25.10: 保存参数修改（包含scalping_params和swing_params）
-            save_learning_config(config)
+            # save_learning_config(config)  # ← V8.5.2.4.79: 注释掉，等Phase 4完成后再保存
+            pass  # Phase 2参数暂存在内存，等Phase 4验证后统一保存
             
             # 🔧 V8.3.21.5: 重新加载配置以获取optimize函数保存的V8.3.21洞察
             config = load_learning_config()
