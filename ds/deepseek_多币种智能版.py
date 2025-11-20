@@ -34,10 +34,10 @@ from entry_timing_analyzer import (
     generate_ai_exit_insights
 )
 
-# 🔧 明确指定 .env 文件路径
-_env_file = Path(__file__).parent / '.env'
+# 🔧 明确指定 .env.qwen 文件路径
+_env_file = Path(__file__).parent / '.env.qwen'
 if not _env_file.exists():
-    raise FileNotFoundError(f"❌ 找不到 .env 文件: {_env_file}")
+    raise FileNotFoundError(f"❌ 找不到 .env.qwen 文件: {_env_file}")
 load_dotenv(_env_file, override=True)
 
 # 🔧 V8.3.32.13: 模型显示名称（用于Bark推送）
@@ -54,10 +54,10 @@ AI_AGGRESSIVENESS_DYNAMIC = True        # 动态AI激进度（根据Time Exit率
 
 def extract_json_from_ai_response(ai_content: str) -> dict:
     """
-    从AI响应中提取JSON对象（鲁棒版本，支持DeepSeek Reasoner）
+    从AI响应中提取JSON对象（鲁棒版本）
     
     尝试顺序：
-    1. 跳过DeepSeek Reasoner的推理标签 (<think>...</think>)
+    1. 清理特殊标签（兼容性处理）
     2. 提取Markdown代码块中的JSON (```json ... ```)
     3. 提取第一个完整的JSON对象（非贪婪匹配）
     4. 尝试解析整个内容为JSON
@@ -73,8 +73,8 @@ def extract_json_from_ai_response(ai_content: str) -> dict:
     """
     ai_content = ai_content.strip()
     
-    # 方法0: 移除DeepSeek Reasoner的推理标签（如果存在）
-    # DeepSeek Reasoner可能返回：<think>推理过程</think>\n{JSON}
+    # 方法0: 移除特殊标签（兼容性处理）
+    # 某些模型可能返回：<think>推理过程</think>\n{JSON}
     think_match = re.search(r'<think>.*?</think>\s*', ai_content, re.DOTALL)
     if think_match:
         ai_content = ai_content[think_match.end():].strip()
@@ -154,6 +154,7 @@ class MarketStateFingerprint:
             # MACD方向（而非精确值）
             'macd_direction': 'bull' if market_data.get('macd', {}).get('histogram', 0) > 0 else 'bear',
                 'macd_1h_direction': 'bull' if market_data.get('mid_term', {}).get('macd_histogram', 0) > 0 else 'bear',
+            
             # 价格相对支撑阻力位置（±3%内认为相同）
             'price_position': _get_price_position(
                 market_data.get('current_price', 0),
@@ -341,7 +342,7 @@ class AICallOptimizer:
         time_passed = (datetime.now() - self.last_portfolio_call_time).seconds // 60 if self.last_portfolio_call_time else 0
         
         # 记录详情 + 估算节省成本
-        cost_per_call = 0.014  # DeepSeek API平均成本（元/次，reasoner模式约0.01-0.02）
+        cost_per_call = 0.020  # Qwen API平均成本（元/次，qwen3-max约0.015-0.025）
         self.daily_details['saved_cost_estimate'] += cost_per_call
         self.daily_details['skip_reasons'].append({
             'time': datetime.now().strftime('%H:%M:%S'),
@@ -390,7 +391,7 @@ class AICallOptimizer:
             'api_calls': self.call_stats['forced'] + (self.call_stats['total'] - self.call_stats['saved'] - self.call_stats['forced']),
             'calls_saved': self.call_stats['saved'],
             'save_rate': f"{saved_rate:.1f}%",
-            'cost_reduction': f"约{saved_rate * 0.8:.0f}%",  # 考虑DeepSeek自身缓存
+            'cost_reduction': f"约{saved_rate * 0.8:.0f}%",  # 考虑Qwen自身缓存
         }
     
     def reset_stats(self):
@@ -551,14 +552,14 @@ ai_optimizer = AICallOptimizer()
 
 # ==================== AI调用优化器结束 ====================
 
-# 初始化DeepSeek客户端
-deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
-if not deepseek_api_key:
-    raise ValueError("❌ DEEPSEEK_API_KEY 环境变量未设置，请检查 .env 文件")
+# 初始化Qwen客户端
+qwen_api_key = os.getenv("QWEN_API_KEY")
+if not qwen_api_key:
+    raise ValueError("❌ QWEN_API_KEY 环境变量未设置，请检查 .env.qwen 文件")
 # 去除可能的空格和换行符
-deepseek_api_key = deepseek_api_key.strip()
-deepseek_client = OpenAI(
-    api_key=deepseek_api_key, base_url="https://api.deepseek.com"
+qwen_api_key = qwen_api_key.strip()
+qwen_client = OpenAI(
+    api_key=qwen_api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
 )
 
 # 初始化交易所（币安/OKX 二选一）
@@ -651,7 +652,7 @@ SIGNAL_TIER_PARAMS = {
         "position_multiplier": 1.3,  # 仓位放大30%
         "description": "YTC高质量信号，3层趋势共振，高胜率预期",
         "rationale": "High-win-rate signals allow tighter stops (R:R 1.5) while maintaining positive expected value. Example: If win rate is 55%, expected return = 0.55×1.5 - 0.45×1 = 0.375 > 0"
-    },
+            },
     "MEDIUM": {
         "min_risk_reward": 2.0,   # 标准盈亏比
         "atr_multiplier": 1.0,     # 标准ATR
@@ -743,7 +744,7 @@ SYMBOL_PROFILES = {
     }
 }
 
-# 数据存储路径（DeepSeek专用目录）
+# 数据存储路径（Qwen专用目录）
 DATA_DIR = Path(__file__).parent / "trading_data" / "deepseek"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 TRADES_FILE = DATA_DIR / "trades_history.csv"
@@ -760,7 +761,7 @@ signal_history = {}  # 每个币种的信号历史
 
 
 def send_bark_notification(title, content):
-    """发送Bark推送通知（支持多个地址 + DeepSeek分组）"""
+    """发送Bark推送通知（支持多个地址 + Qwen分组）"""
     try:
         from urllib.parse import quote
 
@@ -807,8 +808,8 @@ def send_bark_notification(title, content):
                 encoded_title = quote(title)
                 encoded_content = quote(content)
 
-                # 添加group参数，将推送归类到"DeepSeek"文件夹
-                url = f"https://api.day.app/{bark_key}/{encoded_title}/{encoded_content}?group=DeepSeek"
+                # 添加group参数，将推送归类到"Qwen"文件夹
+                url = f"https://api.day.app/{bark_key}/{encoded_title}/{encoded_content}?group=Qwen"
                 
                 # 🔧 V7.7.0.16: 检查URL长度
                 if len(url) > 1800:  # 预留一些安全余量
@@ -862,7 +863,7 @@ def send_bark_notification(title, content):
         traceback.print_exc()
 
 
-def send_email_notification(subject, body_html, model_name="DeepSeek"):
+def send_email_notification(subject, body_html, model_name="Qwen"):
     """发送邮件通知（用于AI参数优化详细报告）"""
     try:
         # 邮件配置
@@ -881,8 +882,8 @@ def send_email_notification(subject, body_html, model_name="DeepSeek"):
         
         # 创建邮件
         msg = MIMEMultipart('alternative')
-        # 根据model_name添加前缀（映射：deepseek->DeepSeek, qwen->Qwen）
-        display_name = "DeepSeek" if "deepseek" in model_name.lower() else "Deepseek" if "deepseek" in model_name.lower() else model_name
+        # 根据model_name添加前缀（映射：qwen->qwen, qwen->Qwen）
+        display_name = "qwen" if "qwen" in model_name.lower() else "Qwen" if "qwen" in model_name.lower() else model_name
         print(f"[邮件通知] 映射后display_name: {display_name}")
         msg['Subject'] = f"[{display_name}] {subject}"
         print(f"[邮件通知] 最终邮件主题: {msg['Subject']}")
@@ -1661,7 +1662,7 @@ def sync_csv_with_exchange_positions(current_positions):
                     actual_holding_minutes = 0
                     
                     # 从position_contexts读取
-                    model_name = os.getenv("MODEL_NAME", "deepseek")
+                    model_name = os.getenv("MODEL_NAME", "qwen")
                     context_file = Path("trading_data") / model_name / "position_contexts.json"
                     if context_file.exists():
                         with open(context_file, 'r', encoding='utf-8') as f:
@@ -1700,7 +1701,7 @@ def sync_csv_with_exchange_positions(current_positions):
                     # 中文化类型名称
                     type_name_cn = "超短线" if signal_type == 'scalping' else "波段" if signal_type == 'swing' else "未知"
                     send_bark_notification(
-                        f"[DS]{coin}自动平仓{pnl_emoji}",
+                        f"[DeepSeek]{coin}自动平仓{pnl_emoji}",
                         f"{side}仓 {触发类型}触发 {pnl:+.2f}U\n{type_emoji}{type_name_cn} {actual_holding_minutes:.0f}分 {达标状态}\n开${entry_price:.0f}→平${close_price:.0f}"
                             )
                 except Exception as e:
@@ -2211,13 +2212,13 @@ def should_pause_trading_v7(config):
             # 保存配置
             from pathlib import Path
             import json
-            config_file = Path("trading_data") / os.getenv("MODEL_NAME", "deepseek") / "learning_config.json"
+            config_file = Path("trading_data") / os.getenv("MODEL_NAME", "qwen") / "learning_config.json"
             with open(config_file, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
             
             # 发送盈利恢复通知
             send_recovery_notification_v7(
-                model_name=os.getenv("MODEL_NAME", "DeepSeek"),
+                model_name=os.getenv("MODEL_NAME", "Qwen"),
                 recovery_type="profit_exit",
                 pause_level=pause_level,
                 new_pause_level=new_pause_level
@@ -2236,13 +2237,13 @@ def should_pause_trading_v7(config):
             # 保存配置
             from pathlib import Path
             import json
-            config_file = Path("trading_data") / os.getenv("MODEL_NAME", "deepseek") / "learning_config.json"
+            config_file = Path("trading_data") / os.getenv("MODEL_NAME", "qwen") / "learning_config.json"
             with open(config_file, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
             
             # 发送恢复通知
             send_recovery_notification_v7(
-                model_name=os.getenv("MODEL_NAME", "DeepSeek"),
+                model_name=os.getenv("MODEL_NAME", "Qwen"),
                 recovery_type="time_based",
                 pause_level=pause_level,
                 new_pause_level=0
@@ -2275,7 +2276,7 @@ def _get_trigger_losses_before_cooldown(pause_start):
         pause_start_dt = datetime.fromisoformat(pause_start)
         
         # 读取交易历史
-        trades_file = Path("trading_data") / os.getenv("MODEL_NAME", "deepseek") / "trades_history.csv"
+        trades_file = Path("trading_data") / os.getenv("MODEL_NAME", "qwen") / "trades_history.csv"
         if not trades_file.exists():
             return 0
         
@@ -2318,7 +2319,7 @@ def _check_profit_during_cooldown(pause_start, pause_level=1):
         pause_start_dt = datetime.fromisoformat(pause_start)
         
         # 读取交易历史
-        trades_file = Path("trading_data") / os.getenv("MODEL_NAME", "deepseek") / "trades_history.csv"
+        trades_file = Path("trading_data") / os.getenv("MODEL_NAME", "qwen") / "trades_history.csv"
         if not trades_file.exists():
             return False
         
@@ -2641,7 +2642,7 @@ def save_market_snapshot_v7(market_data_list):
         from datetime import datetime
         import pandas as pd
         
-        model_name = os.getenv("MODEL_NAME", "deepseek")
+        model_name = os.getenv("MODEL_NAME", "qwen")
         snapshot_dir = Path("trading_data") / model_name / "market_snapshots"
         snapshot_dir.mkdir(parents=True, exist_ok=True)
         
@@ -2796,7 +2797,7 @@ def save_market_snapshot_v7(market_data_list):
             except Exception as e:
                 print(f"⚠️ 计算评分维度失败: {e}")
                 components = {
-                    'signal_type': 'swing',
+                    'signal_type': 'scalping',
                     'total_score': 0,
                     # 默认维度值
                     'volume_surge_type': '',
@@ -3116,7 +3117,7 @@ def daily_review_with_kline_v7():
         from datetime import datetime, timedelta
         import pandas as pd
         
-        model_name = os.getenv("MODEL_NAME", "deepseek")
+        model_name = os.getenv("MODEL_NAME", "qwen")
         yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
         
         # 读取昨日交易记录
@@ -3675,7 +3676,7 @@ def check_signal_type_risk_budget(signal_type, current_positions, planned_positi
         try:
             from pathlib import Path
             import json
-            model_name = os.getenv("MODEL_NAME", "deepseek")
+            model_name = os.getenv("MODEL_NAME", "qwen")
             context_file = Path("trading_data") / model_name / "position_contexts.json"
             if context_file.exists():
                 with open(context_file, 'r', encoding='utf-8') as f:
@@ -4051,7 +4052,7 @@ def add_to_position(symbol, side, new_amount, new_price, leverage, existing_posi
         
         # 7. 更新 position_contexts（记录加仓时间和次数）
         try:
-            model_name = os.getenv("MODEL_NAME", "deepseek")
+            model_name = os.getenv("MODEL_NAME", "qwen")
             context_file = Path("trading_data") / model_name / "position_contexts.json"
             
             if context_file.exists():
@@ -4073,7 +4074,7 @@ def add_to_position(symbol, side, new_amount, new_price, leverage, existing_posi
         # 8. 发送Bark通知
         notional_value = total_amount * new_price
         send_bark_notification(
-            f"[DS]{coin_name}加仓✅",
+            f"[DeepSeek]{coin_name}加仓✅",
             f"{side_cn}仓 加仓{new_amount:.3f}个 @{new_price:.2f}\n"
             f"新平均价: {avg_price:.2f}\n"
             f"总仓位: {total_amount:.3f}个 ({notional_value:.2f}U)\n"
@@ -4097,7 +4098,7 @@ def add_to_position(symbol, side, new_amount, new_price, leverage, existing_posi
         
         # 发送失败通知
         send_bark_notification(
-            f"[DS]{coin_name}加仓失败❌",
+            f"[DeepSeek]{coin_name}加仓失败❌",
             f"{side_cn}仓 加仓{new_amount:.3f}个失败\n"
             f"错误: {str(e)[:80]}"
         )
@@ -4133,7 +4134,7 @@ def check_add_position_conditions(symbol, existing_position, ai_signal, availabl
         
         # 从position_contexts读取原始信号质量
         try:
-            model_name = os.getenv("MODEL_NAME", "deepseek")
+            model_name = os.getenv("MODEL_NAME", "qwen")
             context_file = Path("trading_data") / model_name / "position_contexts.json"
             old_score = 0
             if context_file.exists():
@@ -4304,7 +4305,7 @@ def ai_optimize_parameters(trading_data_summary, learning_mode="full_optimizatio
 - Style: Moderately relax parameters, avoid over-strict preventing entries
 - Adjustment Range: Gentle (±10-15% per change)
 - Focus: Lower entry threshold, maintain small positions for risk control
-- Forbidden: Don't over-tighten (min_risk_reward ≤1.5, min_indicator_consensus ≤4)
+    - Forbidden: Don't over-tighten (min_risk_reward ≤1.5, min_indicator_consensus ≤4)
 """,
             "initial_learning": f"""
 ## 📚 Current Mode: Initial Learning Mode (Samples: {sample_count}/10)
@@ -4359,6 +4360,14 @@ def ai_optimize_parameters(trading_data_summary, learning_mode="full_optimizatio
         prompt = f"""**[IMPORTANT: Respond ONLY in Chinese (中文)]**
 
 You are a professional quantitative trading parameter optimization expert. Analyze the following trading data comprehensively and propose actionable parameter adjustments.
+
+【V8.5.2.4.43】移动止盈止损决策指南：
+- 当市场波动率高、趋势明确时，建议启用移动止损（trailing_stop_enabled=true）
+- 超短线交易：适合在快速突破时使用移动止损，保护短期利润
+- 波段交易：在强趋势中使用移动止损，让利润充分奔跑
+- 震荡市场：建议使用静态止损（trailing_stop_enabled=false），避免频繁触发
+- 根据历史回测数据和当前市场状态，自主决定是否启用移动止损
+- trailing_stop_enabled参数可以在scalping_params和swing_params中独立设置
 
 {experience_context}
 
@@ -4481,25 +4490,16 @@ You are a professional quantitative trading parameter optimization expert. Analy
 """
 
         # 调用AI分析
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",
             messages=[
                 {
                     "role": "system",
-                    "content": """You are a professional quantitative trading parameter optimization expert, skilled in analyzing trading data and proposing optimization suggestions. **Always respond in Chinese (中文).**
-
-【V8.5.2.4.43】移动止盈止损决策指南：
-- 当市场波动率高、趋势明确时，建议启用移动止损（trailing_stop_enabled=true）
-- 超短线交易：适合在快速突破时使用移动止损，保护短期利润
-- 波段交易：在强趋势中使用移动止损，让利润充分奔跑
-- 震荡市场：建议使用静态止损（trailing_stop_enabled=false），避免频繁触发
-- 根据历史回测数据和当前市场状态，自主决定是否启用移动止损
-- trailing_stop_enabled参数可以在scalping_params和swing_params中独立设置""",
+                    "content": "You are a professional quantitative trading parameter optimization expert, skilled in analyzing trading data and proposing optimization suggestions. **Always respond in Chinese (中文).**",
                 },
                 {"role": "user", "content": prompt},
             ],
             temperature=0.3,  # 较低温度确保输出稳定
-            max_tokens=8000,  # 🔧 增加到8000，避免推理过程+JSON被截断
         )
 
         ai_response = response.choices[0].message.content.strip()
@@ -4553,7 +4553,7 @@ def load_validation_history(max_records=10):
         ]
     """
     try:
-        model_dir = os.getenv("MODEL_NAME", "deepseek")
+        model_dir = os.getenv("MODEL_NAME", "qwen")
         history_file = f"trading_data/{model_dir}/backtest_validation_history.jsonl"
         
         if not os.path.exists(history_file):
@@ -4637,7 +4637,7 @@ def backtest_parameters(config_variant, days=7, verbose=False):
         print(f"{'='*60}")
         
         # 读取历史快照数据（近期优先）
-        model_dir = os.getenv("MODEL_NAME", "deepseek")
+        model_dir = os.getenv("MODEL_NAME", "qwen")
         snapshot_dir = f"trading_data/{model_dir}/market_snapshots"
         
         end_date = datetime.now()
@@ -4885,10 +4885,10 @@ def backtest_parameters(config_variant, days=7, verbose=False):
                                         'coin': coin,
                                         'direction': direction,
                                         'entry_price': entry_price,
-                                        'exit_price': exit_price,
+                                            'exit_price': exit_price,
                                         'profit_pct': profit_pct,
                                         'result': 'WIN' if profit_pct > 0 else 'LOSS',
-                                        'exit_reason': 'SCRATCH',  # 主动平仓
+                                            'exit_reason': 'SCRATCH',  # 主动平仓
                                         'signal_type': inferred_signal_type,  # V7.9
                                         'holding_bars': exit_bar,  # V7.9
                                         'weight': day_weight
@@ -5240,7 +5240,7 @@ This metric balances three dimensions:
    - ✅ `should_apply = true` IF: **Composite Profit Metric improves ≥10%**
    - ⚠️ `should_apply = true` (with caution) IF:
        * Composite Profit Metric improves 5-10% AND no single dimension degrades >15%
-  - ❌ `should_apply = false` OTHERWISE
+   - ❌ `should_apply = false` OTHERWISE
    
 3. **Balanced Trade-offs**:
    - If win rate ↑ but capture rate ↓↓ → Check if composite metric improves overall
@@ -5261,8 +5261,8 @@ This metric balances three dimensions:
 8. **Language Requirement**: ALL text fields MUST be in Chinese (中文)
 """
 
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",
             messages=[
                 {
                     "role": "system",
@@ -5270,8 +5270,7 @@ This metric balances three dimensions:
                 },
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.2,
-            max_tokens=8000,  # 🔧 增加到8000，避免推理过程+JSON被截断
+            temperature=0.2
         )
         
         ai_response = response.choices[0].message.content.strip()
@@ -5309,7 +5308,7 @@ This metric balances three dimensions:
 
 # 注意：由于 V7.7.0 代码量较大（约1500行），已保存到独立文件
 # 请运行以下命令手动合并：
-#   python3 /tmp/merge_v770_to_deepseek.py
+#   python3 /tmp/merge_v770_to_q wen.py
 # 或使用提供的部署脚本
 
 # ============================================================================
@@ -5441,13 +5440,13 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
 }}
 """
             
-            # 调用AI（直接使用全局deepseek_client）
+            # 调用AI（直接使用全局qwen_client）
             try:
-                response = deepseek_client.chat.completions.create(
-                    model="deepseek-reasoner",
+                response = qwen_client.chat.completions.create(
+                    model="qwen3-max",
                     messages=[{"role": "user", "content": ai_prompt}],
                     temperature=0.7,
-                    max_tokens=8000  # 🔧 增加到8000，避免推理过程+JSON被截断
+                    max_tokens=5000  # 🔧 增加到5000，避免复杂决策时JSON被截断
                 )
                 
                 ai_content = response.choices[0].message.content.strip()
@@ -5557,11 +5556,11 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
 """
             
             try:
-                response = deepseek_client.chat.completions.create(
-                    model="deepseek-reasoner",
+                response = qwen_client.chat.completions.create(
+                    model="qwen3-max",
                     messages=[{"role": "user", "content": ai_deep_prompt}],
                     temperature=0.8,  # 更高温度鼓励创新
-                    max_tokens=8000  # 🔧 增加到8000，避免推理过程+JSON被截断
+                    max_tokens=5000  # 🔧 增加到5000，避免复杂决策时JSON被截断
                 )
                 
                 ai_content = response.choices[0].message.content.strip()
@@ -5631,11 +5630,11 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
 """
             
             try:
-                response = deepseek_client.chat.completions.create(
-                    model="deepseek-reasoner",
+                response = qwen_client.chat.completions.create(
+                    model="qwen3-max",
                     messages=[{"role": "user", "content": emergency_prompt}],
                     temperature=0.9,  # 最高温度，最大创新
-                    max_tokens=8000  # 🔧 增加到8000，避免推理过程+JSON被截断
+                    max_tokens=5000  # 🔧 增加到5000，避免复杂决策时JSON被截断
                 )
                 
                 ai_content = response.choices[0].message.content.strip()
@@ -5689,8 +5688,8 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
         search_path.append({
             'round': round_num,
             'strategy': test_points[0].get('name', f'Round{round_num}') if test_points else f'Round{round_num}',
-            'tested_points': len(test_points),
                 'tested_points': len(test_points),
+            'found_profitable': len(round_profitable)
         })
         
         # 检查是否找到盈利
@@ -6009,11 +6008,11 @@ JSON (4 test points):
 """
     
     try:
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",
             messages=[{"role": "user", "content": ai_fine_tune_prompt}],
             temperature=0.3,
-            max_tokens=8000  # 🔧 V7.7.0.14: 增至8000（充分放宽，避免截断）
+            max_tokens=5000  # 🔧 增加到5000，避免参数优化建议被截断
         )
         
         ai_content = response.choices[0].message.content.strip()
@@ -6341,7 +6340,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     days = 7
     
     # 读取历史最优采样范围
-    model_name = os.getenv("MODEL_NAME", "deepseek")
+    model_name = os.getenv("MODEL_NAME", "qwen")
     config_file = Path("trading_data") / model_name / "learning_config.json"
     historical_sampling_range = None
     
@@ -6360,7 +6359,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     
     # 🔧 V8.3.31: 全面预分析 - 动态生成所有优化参数
     optimization_cache = {}
-    cache_file = f"trading_data/{os.getenv('MODEL_NAME', 'deepseek')}/optimization_cache.json"
+    cache_file = f"trading_data/{os.getenv('MODEL_NAME', 'qwen')}/optimization_cache.json"
     
     # 🔧 V8.3.31.7: 先判断是否使用confirmed_opportunities
     # 🔧 V8.5.2.4.24: 修复 - 应检查key存在性，而非列表真值（空列表[]也是有效的）
@@ -6722,25 +6721,31 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     # 为超短线和波段分别找到最优权重组合
     print(f"\n  🎯 【信号分权重优化】")
     
-    # 【V8.5.2.4.47】内存优化：定义权重候选组合（5→3组，减少40%测试量）
+    # 定义权重候选组合（围绕默认值微调）
     scalping_weight_candidates = [
-        # 默认权重（保留）
+        # 默认权重
         {'momentum': 20, 'volume': 35, 'breakout': 25, 'pattern': 12, 'trend_align': 10, 'name': '默认'},
-        # 强调动量（保留）
+        # 强调动量
         {'momentum': 25, 'volume': 30, 'breakout': 25, 'pattern': 12, 'trend_align': 10, 'name': '动量优先'},
-        # 平衡型（保留）
+        # 强调成交量
+        {'momentum': 20, 'volume': 40, 'breakout': 20, 'pattern': 12, 'trend_align': 10, 'name': '放量优先'},
+        # 强调突破
+        {'momentum': 20, 'volume': 30, 'breakout': 30, 'pattern': 12, 'trend_align': 10, 'name': '突破优先'},
+        # 平衡型
         {'momentum': 22, 'volume': 33, 'breakout': 25, 'pattern': 12, 'trend_align': 10, 'name': '平衡'},
-        # 【V8.5.2.4.47】移除放量优先、突破优先（减少内存占用）
     ]
     
     swing_weight_candidates = [
-        # 默认权重（保留）
+        # 默认权重
         {'momentum': 20, 'volume': 35, 'breakout': 25, 'trend_align': 35, 'ema_divergence': 15, 'trend_4h_strength': 25, 'name': '默认'},
-        # 强调趋势对齐（保留）
+        # 强调趋势对齐
         {'momentum': 20, 'volume': 30, 'breakout': 20, 'trend_align': 40, 'ema_divergence': 15, 'trend_4h_strength': 25, 'name': '趋势优先'},
-        # 平衡型（保留）
+        # 强调4H趋势
+        {'momentum': 20, 'volume': 30, 'breakout': 20, 'trend_align': 35, 'ema_divergence': 10, 'trend_4h_strength': 35, 'name': '4H优先'},
+        # 强调动量+成交量
+        {'momentum': 25, 'volume': 40, 'breakout': 20, 'trend_align': 30, 'ema_divergence': 15, 'trend_4h_strength': 20, 'name': '动量放量'},
+        # 平衡型
         {'momentum': 22, 'volume': 33, 'breakout': 23, 'trend_align': 33, 'ema_divergence': 15, 'trend_4h_strength': 25, 'name': '平衡'},
-        # 【V8.5.2.4.47】移除4H优先、动量放量（减少内存占用）
     ]
     
     print(f"     ⚡ 超短线权重候选: {len(scalping_weight_candidates)}组")
@@ -8018,7 +8023,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             print(f"【🚀 Phase 3启动】")
             print(f"{'='*70}")
             
-            model_name = os.getenv("MODEL_NAME", "deepseek")
+            model_name = os.getenv("MODEL_NAME", "qwen")
             # 【V8.5.2.4.46】kline_snapshots参数可选，传None即可（所有数据已在opportunities中）
             phase3_result = phase3_enhanced_optimization(
                 all_opportunities=all_opportunities_sorted,
@@ -8241,7 +8246,7 @@ def iterative_parameter_optimization_v770(data_summary, current_config, original
     days = 7
     
     # 读取历史最优采样范围
-    model_name = os.getenv("MODEL_NAME", "deepseek")
+    model_name = os.getenv("MODEL_NAME", "qwen")
     config_file = Path("trading_data") / model_name / "learning_config.json"
     historical_sampling_range = None
     
@@ -8463,7 +8468,7 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
     days = 7
     
     # 🆕 V7.6.3.13: 读取历史最优采样范围（如果有）
-    model_name = os.getenv("MODEL_NAME", "deepseek")
+    model_name = os.getenv("MODEL_NAME", "qwen")
     config_file = Path("trading_data") / model_name / "learning_config.json"
     historical_sampling_range = None
     
@@ -8654,14 +8659,14 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
             
             try:
                 # 调用AI
-                ai_response = deepseek_client.chat.completions.create(
-                    model="deepseek-reasoner",
+                ai_response = qwen_client.chat.completions.create(
+                    model="qwen3-max",
                     messages=[
                         {"role": "system", "content": "You are a professional quantitative trading analyst specializing in parameter optimization and profitability discovery. Respond in Chinese for designated fields."},
                             {"role": "user", "content": profit_discovery_prompt}
                     ],
                     temperature=0.7,
-                    max_tokens=8000  # 🔧 增加到8000，避免推理过程+JSON被截断
+                    max_tokens=5000  # 🔧 增加到5000，避免分析报告被截断
                 )
                 
                 ai_content = ai_response.choices[0].message.content.strip()
@@ -8856,16 +8861,15 @@ Based on the results above, design a BETTER 5-point sampling strategy.
 **IMPORTANT**: All text fields (diagnosis, expected_improvement) MUST be in Chinese (中文).
 """
         
-        # 调用AI（使用已有的deepseek_client）
+        # 调用AI（使用已有的qwen_client）
         try:
             import json
             import re
             
-            response = deepseek_client.chat.completions.create(
-                model="deepseek-reasoner",
+            response = qwen_client.chat.completions.create(
+                model="qwen3-max",
                 messages=[{"role": "user", "content": resample_prompt}],
-                temperature=0.1,
-                max_tokens=8000,  # 🔧 增加到8000，避免推理过程+JSON被截断
+                temperature=0.1
             )
             
             ai_response = response.choices[0].message.content
@@ -9005,13 +9009,12 @@ Based on the 5 strategic sampling points above:
 **IMPORTANT**: All text fields (reasoning, reason, analysis) MUST be in Chinese (中文).
 """
     
-    # 调用AI分析（使用已有的deepseek_client）
+    # 调用AI分析（使用已有的qwen_client）
     try:
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",
             messages=[{"role": "user", "content": ai_analysis_prompt}],
-            temperature=0.1,
-            max_tokens=8000,  # 🔧 增加到8000，避免推理过程+JSON被截断
+            temperature=0.1
         )
         
         ai_response = response.choices[0].message.content
@@ -9522,7 +9525,7 @@ def analyze_and_adjust_params():
     yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
     
     # 🔧 V7.9.1: 读取最近7-14天的市场快照（时间越久权重越低）
-    model_name = os.getenv("MODEL_NAME", "deepseek")
+    model_name = os.getenv("MODEL_NAME", "qwen")
     snapshot_dir = Path("trading_data") / model_name / "market_snapshots"
     
     kline_snapshots = None
@@ -9841,7 +9844,7 @@ def analyze_and_adjust_params():
                 traceback.print_exc()
                 exit_analysis = None
         else:
-                print(f"⚠️ 昨日无平仓交易，跳过平仓时机分析")
+            print(f"⚠️ 昨日无平仓交易，跳过平仓时机分析")
 
         # 🆕 V8.3.22: 开仓时机分析
         # 🔧 V8.3.25.8: 使用新的V2分析（对比市场机会vs AI决策）
@@ -9851,7 +9854,7 @@ def analyze_and_adjust_params():
         # 🔧 V8.3.25.12: 提前加载AI决策（用于开仓分析）
         ai_decisions_for_entry = []
         try:
-            ai_decisions_file = Path("trading_data") / os.getenv("MODEL_NAME", "deepseek") / "ai_decisions.json"
+            ai_decisions_file = Path("trading_data") / os.getenv("MODEL_NAME", "qwen") / "ai_decisions.json"
             if ai_decisions_file.exists():
                 with open(ai_decisions_file, "r", encoding="utf-8") as f:
                     all_decisions = json.load(f)
@@ -9930,7 +9933,7 @@ def analyze_and_adjust_params():
         # 这样第1步和第2步都能使用，且用户能更早看到结果
         print("\n【预分析：生成优化参数缓存】")
         global_optimization_cache = {}
-        cache_file = f"trading_data/{os.getenv('MODEL_NAME', 'deepseek')}/optimization_cache.json"
+        cache_file = f"trading_data/{os.getenv('MODEL_NAME', 'qwen')}/optimization_cache.json"
         
         # 尝试加载缓存
         use_cache = False
@@ -9987,7 +9990,7 @@ def analyze_and_adjust_params():
                 # 🔧 V8.3.25: 只读取目标日期的决策（控制数据量）
                 ai_decisions = []
                 try:
-                    ai_decisions_file = Path("trading_data") / os.getenv("MODEL_NAME", "deepseek") / "ai_decisions.json"
+                    ai_decisions_file = Path("trading_data") / os.getenv("MODEL_NAME", "qwen") / "ai_decisions.json"
                     if ai_decisions_file.exists():
                         with open(ai_decisions_file, "r", encoding="utf-8") as f:
                             all_decisions = json.load(f)
@@ -10029,7 +10032,7 @@ def analyze_and_adjust_params():
                         'missed_lessons': ai_insights.get('missed_lessons', []),
                         'improvements': ai_insights.get('improvements', []),
                         'generated_at': ai_insights['generated_at']
-                        }
+                    }
                     
                     save_learning_config(config)
                     print(f"  ✓ AI自我反思已保存到learning_config.json")
@@ -10224,7 +10227,7 @@ def analyze_and_adjust_params():
                     print(f"  ✓ {param}: {old_value} → {value}")
 
             # 记录完整的迭代历史到文件
-            history_file = Path("trading_data") / os.getenv("MODEL_NAME", "deepseek") / "iterative_optimization_history.jsonl"
+            history_file = Path("trading_data") / os.getenv("MODEL_NAME", "qwen") / "iterative_optimization_history.jsonl"
             history_file.parent.mkdir(parents=True, exist_ok=True)
             
             iteration_log = {
@@ -10282,10 +10285,18 @@ def analyze_and_adjust_params():
         else:
             config["market_regime"]["pause_trading"] = False
 
-        # ========== 【V8.4.10】第4.5步：用新参数重新评估历史机会（使用动态ATR） ==========
-        print("\n【第4.5步：用新参数重新评估历史机会】")
+        # ========== 【DEPRECATED - V8.5.2.4.42】旧Phase 4代码已移除 ==========
+        # 新Phase 4系统已在quick_explore_profit_opportunities()中集成
+        # 位置：行7460-7487（qwen_多币种智能版.py）
+        # 新模块：phase4_validator.py
+        # 
+        # 此处代码段（行9779-9949）已废弃，保留注释供参考
+        """
+        【旧版Phase 4代码 - 已废弃】
+        print("\n【第4步：Phase 4参数验证与过拟合检测】")
         opportunity_analysis = None
-        validation_passed = True  # 【V8.4.10】默认通过
+        validation_passed = True  # 默认通过
+        phase4_result = None
         
         if kline_snapshots is not None and not kline_snapshots.empty:
             try:
@@ -10297,8 +10308,8 @@ def analyze_and_adjust_params():
                     scalping_opps = cached_opps.get('scalping', {}).get('opportunities', [])
                     swing_opps = cached_opps.get('swing', {}).get('opportunities', [])
                 else:
-                    # 【V8.4.10】使用阶段2的逻辑（与动态ATR一致）
-                    print("  ℹ️  使用动态ATR重新分析全量数据...")
+                    # 【V8.5.2.4.11】生成全量数据用于Phase 4验证
+                    print("  ℹ️  生成全量历史数据用于验证...")
                     full_analysis = analyze_separated_opportunities(
                         market_snapshots=kline_snapshots,
                         old_config=config
@@ -10310,103 +10321,131 @@ def analyze_and_adjust_params():
                 # 合并机会（无论是从缓存还是新计算）
                 all_opps = scalping_opps + swing_opps
                 
-                # 【V8.5.2.4.76】修复：正确区分新旧参数
-                # old_config = 优化前的参数（上一次的参数）
-                # config = 优化后的参数（本次应用的参数）
+                # 【V8.5.2.4.11】调用新的Phase 4验证函数
+                phase4_result = validate_params_with_overfitting_check(
+                    full_data=all_opps,
+                    scalping_params=config.get('scalping_params', {}),
+                    swing_params=config.get('swing_params', {}),
+                    phase2_baseline=phase2_baseline_result
+                )
+                
+                if phase4_result:
+                    # 根据验证结果决定是否回退参数
+                    status = phase4_result['status']
+                    
+                    if status == 'FAILED':
+                        print(f"\n  ❌ Phase 4验证失败：{phase4_result['recommendation']}")
+                        print(f"  🔄 回退到保守参数")
+                        config['scalping_params'] = {
+                            'atr_tp_multiplier': 2.0,
+                            'atr_stop_multiplier': 1.5,
+                            'max_holding_hours': 12,
+                            'min_risk_reward': 1.5,
+                            'min_signal_score': 60,
+                            '_phase4_rollback': 'conservative'
+                        }
+                        config['swing_params'] = {
+                            'atr_tp_multiplier': 4.0,
+                            'atr_stop_multiplier': 2.0,
+                            'max_holding_hours': 72,
+                            'min_risk_reward': 1.5,
+                            'min_signal_score': 60,
+                            '_phase4_rollback': 'conservative'
+                        }
+                        validation_passed = False
+                        
+                    elif status in ['OVERFITTED', 'UNSTABLE']:
+                        print(f"\n  ⚠️  Phase 4检测到问题：{phase4_result['recommendation']}")
+                        print(f"  🔄 回退到Phase 2参数")
+                        # 如果有Phase 2 baseline，使用其参数
+                        if phase2_baseline_result and phase2_baseline_result.get('params'):
+                            config['scalping_params'] = phase2_baseline_result['params'].copy()
+                            config['swing_params'] = phase2_baseline_result['params'].copy()
+                            config['scalping_params']['_phase4_rollback'] = 'phase2'
+                            config['swing_params']['_phase4_rollback'] = 'phase2'
+                        else:
+                            # 否则使用保守参数
+                            config['scalping_params'] = {
+                                'atr_tp_multiplier': 2.0,
+                                'atr_stop_multiplier': 1.5,
+                                'max_holding_hours': 12,
+                                'min_risk_reward': 1.5,
+                                'min_signal_score': 60,
+                                '_phase4_rollback': 'conservative'
+                            }
+                            config['swing_params'] = {
+                                'atr_tp_multiplier': 4.0,
+                                'atr_stop_multiplier': 2.0,
+                                'max_holding_hours': 72,
+                                'min_risk_reward': 1.5,
+                                'min_signal_score': 60,
+                                '_phase4_rollback': 'conservative'
+                            }
+                        validation_passed = False
+                        
+                    elif status == 'WARNING':
+                        print(f"\n  🟡 Phase 4警告：{phase4_result['recommendation']}")
+                        print(f"  ✅ 继续使用Phase 3参数，但建议加强监控")
+                        config['scalping_params']['_phase4_status'] = 'warning'
+                        config['swing_params']['_phase4_status'] = 'warning'
+                        validation_passed = True
+                        
+                    else:  # PASSED
+                        print(f"\n  ✅ Phase 4验证通过：{phase4_result['recommendation']}")
+                        print(f"  ✅ 使用Phase 3参数")
+                        config['scalping_params']['_phase4_status'] = 'passed'
+                        config['swing_params']['_phase4_status'] = 'passed'
+                        validation_passed = True
+                    
+                    # 保存Phase 4结果到config供邮件使用
+                    config['_phase4_validation'] = phase4_result
+                    
+                    # 【V8.5.2.4.21】Phase 4阶段总结输出
+                    try:
+                        from phase_output_formatter import print_phase4_summary
+                        
+                        # 准备最终参数
+                        final_params = {
+                            'scalping': config.get('scalping_params', {}),
+                            'swing': config.get('swing_params', {})
+                        }
+                        
+                        print_phase4_summary(
+                            validation_result=phase4_result,
+                            final_params=final_params
+                        )
+                    except Exception as summary_err:
+                        print(f"⚠️  Phase 4总结输出失败: {summary_err}")
+                
+                # 【V8.5.2.4.11】构建简化的opportunity_analysis（用于邮件报告）
+                # 详细的验证逻辑已由validate_params_with_overfitting_check()完成
                 from backtest_optimizer_v8321 import passes_basic_filter
                 
-                # 获取旧参数（优化前，从old_config）
-                old_scalping_params = old_config.get('scalping_params', {}) if old_config else {}
-                old_swing_params = old_config.get('swing_params', {}) if old_config else {}
-                
-                # 获取新参数（优化后，从config）
                 new_scalping_params = config.get('scalping_params', {})
                 new_swing_params = config.get('swing_params', {})
                 
-                # 过滤机会：旧参数
-                old_captured_scalping = [o for o in scalping_opps if passes_basic_filter(o, old_scalping_params)]
-                old_captured_swing = [o for o in swing_opps if passes_basic_filter(o, old_swing_params)]
-                old_captured = old_captured_scalping + old_captured_swing
-                
-                # 过滤机会：新参数
                 new_captured_scalping = [o for o in scalping_opps if passes_basic_filter(o, new_scalping_params)]
                 new_captured_swing = [o for o in swing_opps if passes_basic_filter(o, new_swing_params)]
                 new_captured = new_captured_scalping + new_captured_swing
                 
-                # 计算统计
-                # 【V8.5.2.4.75】修复：使用objective_profit而不是actual_profit_pct
-                # 原因：actual_profit_pct需要特定参数回测，而objective_profit是客观最大利润
-                total_opps = len(all_opps)
-                avg_actual_profit = sum(o.get('objective_profit', 0) for o in all_opps) / total_opps if total_opps > 0 else 0
-                
-                old_count = len(old_captured)
-                old_avg_profit = sum(o.get('objective_profit', 0) for o in old_captured) / old_count if old_count > 0 else 0
-                
-                new_count = len(new_captured)
-                new_avg_profit = sum(o.get('objective_profit', 0) for o in new_captured) / new_count if new_count > 0 else 0
-                
-                # 【V8.5.1】计算分类捕获率
-                scalping_total = len(scalping_opps)
-                swing_total = len(swing_opps)
-                
-                old_scalping_count = len(old_captured_scalping)
-                old_swing_count = len(old_captured_swing)
-                new_scalping_count = len(new_captured_scalping)
-                new_swing_count = len(new_captured_swing)
-                
-                scalping_old_rate = (old_scalping_count / scalping_total * 100) if scalping_total > 0 else 0
-                scalping_new_rate = (new_scalping_count / scalping_total * 100) if scalping_total > 0 else 0
-                swing_old_rate = (old_swing_count / swing_total * 100) if swing_total > 0 else 0
-                swing_new_rate = (new_swing_count / swing_total * 100) if swing_total > 0 else 0
-                
-                # 构建stats
-                stats = {
-                    'total_opportunities': total_opps,
-                    'avg_actual_profit': avg_actual_profit,
-                    'old_captured_count': old_count,
-                    'old_capture_rate': (old_count / total_opps * 100) if total_opps > 0 else 0,
-                    'avg_old_captured_profit': old_avg_profit,
-                    'avg_old_efficiency': (old_avg_profit / avg_actual_profit * 100) if avg_actual_profit > 0 else 0,
-                    'new_captured_count': new_count,
-                    'new_capture_rate': (new_count / total_opps * 100) if total_opps > 0 else 0,
-                    'avg_new_captured_profit': new_avg_profit,
-                    'avg_new_efficiency': (new_avg_profit / avg_actual_profit * 100) if avg_actual_profit > 0 else 0,
-                    'capture_rate_improvement': ((new_count - old_count) / total_opps * 100) if total_opps > 0 else 0,
-                    'profit_improvement': new_avg_profit - old_avg_profit,
-                    # 【V8.5.1】分类捕获率
-                    'scalping_old_rate': scalping_old_rate,
-                    'scalping_new_rate': scalping_new_rate,
-                    'swing_old_rate': swing_old_rate,
-                    'swing_new_rate': swing_new_rate
-                }
-                
-                # 输出统计
-                print(f"✓ 发现{stats['total_opportunities']}个客观机会（基于动态ATR计算）")
-                print(f"  📊 实际平均利润: {stats['avg_actual_profit']:.1f}%")
-                print(f"  • 旧参数: 捕获{stats['old_captured_count']}个({stats['old_capture_rate']:.1f}%) | 平均获利{stats['avg_old_captured_profit']:.1f}% | 效率{stats['avg_old_efficiency']:.0f}%")
-                print(f"  • 新参数: 捕获{stats['new_captured_count']}个({stats['new_capture_rate']:.1f}%) | 平均获利{stats['avg_new_captured_profit']:.1f}% | 效率{stats['avg_new_efficiency']:.0f}%")
-                
-                # 【V8.4.10】最终验证：如果新参数平均利润为负，拒绝优化
-                if stats['avg_new_captured_profit'] < 0:
-                    print(f"\n  ❌ 【V8.4.10最终验证失败】新参数平均利润{stats['avg_new_captured_profit']:.1f}%为负！")
-                    print(f"  🔄 将回滚到保守参数（避免过拟合）")
-                    validation_passed = False
-                else:
-                    print(f"\n  ✅ 【V8.4.10最终验证通过】新参数平均利润{stats['avg_new_captured_profit']:.1f}%为正")
-                    if stats['new_captured_count'] > stats['old_captured_count']:
-                        print(f"  ✅ 改进: 捕获率+{stats['capture_rate_improvement']:.1f}% | 利润+{stats['profit_improvement']:.1f}%")
-                    elif stats['new_captured_count'] < stats['old_captured_count']:
-                        print(f"  ⚠️  退步: 捕获率{stats['capture_rate_improvement']:.1f}% | 利润{stats['profit_improvement']:.1f}%")
-                    else:
-                        print(f"  ➡️  持平: 捕获率和利润无变化")
-                
-                # 构建返回结果
                 missed = [o for o in all_opps if o not in new_captured]
                 missed.sort(key=lambda x: x.get('objective_profit', 0), reverse=True)
                 
+                # 构建简化stats（从Phase 4结果提取）
+                if phase4_result:
+                    stats = {
+                        'total_opportunities': len(all_opps),
+                        'new_captured_count': phase4_result['full_test']['captured_count'],
+                        'new_capture_rate': phase4_result['full_test']['capture_rate'] * 100,
+                        'avg_new_captured_profit': phase4_result['full_test']['avg_profit'],
+                        'validation_status': phase4_result['status'],
+                        'stability_score': phase4_result['stability']['stability_score']
+                    }
+                else:
+                    stats = {}
+                
                 opportunity_analysis = {
                     'all_opportunities': all_opps,
-                    'old_captured': old_captured,
                     'new_captured': new_captured,
                     'missed': missed[:30],  # 只保留TOP30
                     'stats': stats
@@ -10429,6 +10468,98 @@ def analyze_and_adjust_params():
                 print(f"  详细错误: {traceback.format_exc()}")
                 opportunity_analysis = None
                 validation_passed = True  # 失败时默认通过（不影响流程）
+        """
+        # 【END DEPRECATED CODE】
+        
+        # 【V8.5.2.4.47】基于Phase 1数据生成opportunity_analysis（供邮件使用）
+        # 修复：即使Phase 4失败，只要有机会数据就应该生成对比分析
+        opportunity_analysis = None
+        validation_passed = True
+        
+        if all_opportunities_sorted:
+            try:
+                print(f"\n  📊 【V8.5.2.4.47】生成机会对比分析...")
+                
+                # 获取Phase 4的测试结果（如果可用）
+                full_test = phase4_result_extracted.get('full_test', {}) if phase4_result_extracted else {}
+                
+                # 分类机会
+                scalping_opps = [opp for opp in all_opportunities_sorted if opp.get('signal_type') == 'scalping']
+                swing_opps = [opp for opp in all_opportunities_sorted if opp.get('signal_type') == 'swing']
+                
+                # 计算每个机会是否会被新参数捕获
+                scalping_params = config.get('scalping_params', config.get('global', {}))
+                swing_params = config.get('swing_params', config.get('global', {}))
+                
+                for opp in all_opportunities_sorted:
+                    signal_type = opp.get('signal_type')
+                    params = scalping_params if signal_type == 'scalping' else swing_params
+                    
+                    # 判断是否满足参数要求
+                    signal_score = opp.get('signal_score', 0)
+                    consensus = opp.get('indicator_consensus', 0)
+                    
+                    min_signal = params.get('min_signal_score', 50)
+                    min_consensus = params.get('min_indicator_consensus', 0)
+                    
+                    opp['new_can_entry'] = (signal_score >= min_signal and consensus >= min_consensus)
+                    opp['old_can_entry'] = True  # 假设旧参数都能捕获（用于对比）
+                    
+                    # 添加捕获利润和效率字段（供邮件显示）
+                    if opp['new_can_entry']:
+                        opp['new_captured_profit'] = opp.get('objective_profit', 0)
+                        opp['new_efficiency'] = 100.0  # 简化：假设100%效率
+                        opp['new_exit_type'] = 'TP'
+                    else:
+                        opp['new_captured_profit'] = 0
+                        opp['new_efficiency'] = 0
+                        opp['new_exit_type'] = 'N/A'
+                    
+                    opp['old_captured_profit'] = opp.get('objective_profit', 0)
+                    opp['old_efficiency'] = 100.0
+                    opp['old_exit_type'] = 'TP'
+                
+                new_captured = [opp for opp in all_opportunities_sorted if opp.get('new_can_entry', False)]
+                old_captured = all_opportunities_sorted[:]  # 旧参数假设捕获所有
+                missed = [opp for opp in all_opportunities_sorted if not opp.get('new_can_entry', False)]
+                
+                # 计算平均利润
+                avg_old_profit = sum(o.get('objective_profit', 0) for o in old_captured) / len(old_captured) if old_captured else 0
+                avg_new_profit = sum(o.get('objective_profit', 0) for o in new_captured) / len(new_captured) if new_captured else 0
+                
+                # 构建stats
+                stats = {
+                    'total_opportunities': len(all_opportunities_sorted),
+                    'old_captured_count': len(old_captured),
+                    'old_capture_rate': 100.0,  # 假设旧参数100%捕获
+                    'new_captured_count': len(new_captured),
+                    'new_capture_rate': len(new_captured) / len(all_opportunities_sorted) * 100 if all_opportunities_sorted else 0,
+                    'avg_old_captured_profit': avg_old_profit,
+                    'avg_new_captured_profit': avg_new_profit,
+                    'validation_status': phase4_result_extracted.get('overall_status', 'UNKNOWN') if phase4_result_extracted else 'NO_PHASE4',
+                    'stability_score': phase4_result_extracted.get('stability', {}).get('stability_score', 0) if phase4_result_extracted else 0
+                }
+                
+                opportunity_analysis = {
+                    'all_opportunities': all_opportunities_sorted,
+                    'old_captured': old_captured,
+                    'new_captured': new_captured,
+                    'missed': missed[:30],  # 只保留TOP30
+                    'stats': stats
+                }
+                
+                print(f"     ✓ 生成机会分析: 总{len(all_opportunities_sorted)}个, 新参数捕获{len(new_captured)}个({stats['new_capture_rate']:.1f}%)")
+                print(f"        超短线: {len(scalping_opps)}个, 波段: {len(swing_opps)}个")
+                
+            except Exception as e:
+                print(f"  ⚠️ 生成机会对比分析失败: {e}")
+                import traceback
+                traceback.print_exc()
+                opportunity_analysis = None
+        else:
+            print(f"  ⚠️  跳过机会对比分析（无机会数据）")
+        
+        phase4_result = None
 
         # ========== 【V8.3.25.10】第4.55步：提取AI洞察的参数建议 ==========
         print("\n【第4.55步：提取AI洞察的参数建议】")
@@ -10636,285 +10767,6 @@ def analyze_and_adjust_params():
         
         # ========== 【V8.5.2.4.10】Phase 3重构完成 ==========
         # 旧Phase 3代码（第4.6步+第4.6.5步，约360行）已由optimize_strategy_with_risk_control()替代
-        
-        # ========== 【DEPRECATED - V8.5.2.4.42】旧Phase 4代码已移除 ==========
-        # 新Phase 4系统已在quick_explore_profit_opportunities()中集成
-        # 位置：行7461-7488（deepseek_多币种智能版.py）
-        # 新模块：phase4_validator.py
-        # 
-        # 此处代码段（行9920-10090）已废弃，保留注释供参考
-        """
-        【旧版Phase 4代码 - 已废弃】
-        print("\n【第4步：Phase 4参数验证与过拟合检测】")
-        opportunity_analysis = None
-        validation_passed = True  # 默认通过
-        phase4_result = None
-        
-        if kline_snapshots is not None and not kline_snapshots.empty:
-            try:
-                # 【V8.5.2.4.87】优先使用Phase 1缓存（避免重复计算）
-                if '_phase1_cache' in config and config['_phase1_cache'].get('date') == datetime.now().strftime('%Y-%m-%d'):
-                    print("  💾 【Phase 4使用缓存】避免重复计算（节省约2分钟）")
-                    cached_opps = config['_phase1_cache']['opportunities']
-                    scalping_opps = cached_opps.get('scalping', {}).get('opportunities', [])
-                    swing_opps = cached_opps.get('swing', {}).get('opportunities', [])
-                else:
-                    # 【V8.5.2.4.11】生成全量历史数据用于验证
-                    print("  ℹ️  生成全量历史数据用于验证...")
-                    full_analysis = analyze_separated_opportunities(
-                        market_snapshots=kline_snapshots,
-                        old_config=config
-                    )
-                    # 提取机会
-                    scalping_opps = full_analysis['scalping']['opportunities']
-                    swing_opps = full_analysis['swing']['opportunities']
-                
-                # 合并机会（无论是从缓存还是新计算）
-                all_opps = scalping_opps + swing_opps
-                
-                # 【V8.5.2.4.11】调用新的Phase 4验证函数
-                phase4_result = validate_params_with_overfitting_check(
-                    full_data=all_opps,
-                    scalping_params=config.get('scalping_params', {}),
-                    swing_params=config.get('swing_params', {}),
-                    phase2_baseline=phase2_baseline_result
-                )
-                
-                if phase4_result:
-                    # 根据验证结果决定是否回退参数
-                    status = phase4_result['status']
-                    
-                    if status == 'FAILED':
-                        print(f"\n  ❌ Phase 4验证失败：{phase4_result['recommendation']}")
-                        print(f"  🔄 回退到保守参数")
-                                config['scalping_params'] = {
-                                    'atr_tp_multiplier': 2.0,
-                                    'atr_stop_multiplier': 1.5,
-                                    'max_holding_hours': 12,
-                                    'min_risk_reward': 1.5,
-                            'min_signal_score': 60,
-                            '_phase4_rollback': 'conservative'
-                        }
-                        config['swing_params'] = {
-                            'atr_tp_multiplier': 4.0,
-                            'atr_stop_multiplier': 2.0,
-                            'max_holding_hours': 72,
-                            'min_risk_reward': 1.5,
-                            'min_signal_score': 60,
-                            '_phase4_rollback': 'conservative'
-                        }
-                        validation_passed = False
-                        
-                    elif status in ['OVERFITTED', 'UNSTABLE']:
-                        print(f"\n  ⚠️  Phase 4检测到问题：{phase4_result['recommendation']}")
-                        print(f"  🔄 回退到Phase 2参数")
-                        # 如果有Phase 2 baseline，使用其参数
-                        if phase2_baseline_result and phase2_baseline_result.get('params'):
-                            config['scalping_params'] = phase2_baseline_result['params'].copy()
-                            config['swing_params'] = phase2_baseline_result['params'].copy()
-                            config['scalping_params']['_phase4_rollback'] = 'phase2'
-                            config['swing_params']['_phase4_rollback'] = 'phase2'
-                            else:
-                            # 否则使用保守参数
-                            config['scalping_params'] = {
-                                'atr_tp_multiplier': 2.0,
-                                'atr_stop_multiplier': 1.5,
-                                'max_holding_hours': 12,
-                                'min_risk_reward': 1.5,
-                                'min_signal_score': 60,
-                                '_phase4_rollback': 'conservative'
-                            }
-                            config['swing_params'] = {
-                                'atr_tp_multiplier': 4.0,
-                                'atr_stop_multiplier': 2.0,
-                                'max_holding_hours': 72,
-                                'min_risk_reward': 1.5,
-                                'min_signal_score': 60,
-                                '_phase4_rollback': 'conservative'
-                            }
-                        validation_passed = False
-                        
-                    elif status == 'WARNING':
-                        print(f"\n  🟡 Phase 4警告：{phase4_result['recommendation']}")
-                        print(f"  ✅ 继续使用Phase 3参数，但建议加强监控")
-                        config['scalping_params']['_phase4_status'] = 'warning'
-                        config['swing_params']['_phase4_status'] = 'warning'
-                        validation_passed = True
-                        
-                    else:  # PASSED
-                        print(f"\n  ✅ Phase 4验证通过：{phase4_result['recommendation']}")
-                        print(f"  ✅ 使用Phase 3参数")
-                        config['scalping_params']['_phase4_status'] = 'passed'
-                        config['swing_params']['_phase4_status'] = 'passed'
-                        validation_passed = True
-                    
-                    # 保存Phase 4结果到config供邮件使用
-                    config['_phase4_validation'] = phase4_result
-                    
-                    # 【V8.5.2.4.21】Phase 4阶段总结输出
-                    try:
-                        from phase_output_formatter import print_phase4_summary
-                        
-                        # 准备最终参数
-                        final_params = {
-                            'scalping': config.get('scalping_params', {}),
-                            'swing': config.get('swing_params', {})
-                        }
-                        
-                        print_phase4_summary(
-                            validation_result=phase4_result,
-                            final_params=final_params
-                        )
-                    except Exception as summary_err:
-                        print(f"⚠️  Phase 4总结输出失败: {summary_err}")
-                
-                # 【V8.5.2.4.11】构建简化的opportunity_analysis（用于邮件报告）
-                # 详细的验证逻辑已由validate_params_with_overfitting_check()完成
-                from backtest_optimizer_v8321 import passes_basic_filter
-                
-                new_scalping_params = config.get('scalping_params', {})
-                new_swing_params = config.get('swing_params', {})
-                
-                new_captured_scalping = [o for o in scalping_opps if passes_basic_filter(o, new_scalping_params)]
-                new_captured_swing = [o for o in swing_opps if passes_basic_filter(o, new_swing_params)]
-                new_captured = new_captured_scalping + new_captured_swing
-                
-                missed = [o for o in all_opps if o not in new_captured]
-                missed.sort(key=lambda x: x.get('objective_profit', 0), reverse=True)
-                
-                # 构建简化stats（从Phase 4结果提取）
-                if phase4_result:
-                    stats = {
-                        'total_opportunities': len(all_opps),
-                        'new_captured_count': phase4_result['full_test']['captured_count'],
-                        'new_capture_rate': phase4_result['full_test']['capture_rate'] * 100,
-                        'avg_new_captured_profit': phase4_result['full_test']['avg_profit'],
-                        'validation_status': phase4_result['status'],
-                        'stability_score': phase4_result['stability']['stability_score']
-                    }
-                            else:
-                    stats = {}
-                
-                opportunity_analysis = {
-                    'all_opportunities': all_opps,
-                    'new_captured': new_captured,
-                    'missed': missed[:30],  # 只保留TOP30
-                    'stats': stats
-                }
-                
-                if missed:
-                    print(f"\n  📌 重点关注（错过的TOP3）:")
-                    for opp in missed[:3]:
-                        reasons = []
-                        min_signal = config.get('min_signal_score', 50)
-                        min_consensus = config.get('min_indicator_consensus', 2)
-                        signal_score = opp.get('signal_score', 0)
-                        consensus = opp.get('consensus', 0)
-                        
-                        if signal_score < min_signal:
-                            reasons.append(f"信号分{signal_score:.0f}<{min_signal}")
-                        if consensus < min_consensus:
-                            reasons.append(f"共识{consensus}<{min_consensus}")
-                        
-                        reason_str = ', '.join(reasons) if reasons else "其他原因"  # 🔧 V8.5.2.4.31: 显示具体阈值对比
-                        print(f"     • {opp.get('symbol', '?')}: {opp.get('objective_profit', 0):.1f}% | 原因: {reason_str}")
-                
-            except Exception as e:
-                print(f"⚠️ Phase 4验证失败: {e}")
-                import traceback
-                traceback.print_exc()
-        """
-        # 【END DEPRECATED CODE】
-        
-        # 【V8.5.2.4.47】基于Phase 1数据生成opportunity_analysis（供邮件使用）
-        # 修复：即使Phase 4失败，只要有机会数据就应该生成对比分析
-        opportunity_analysis = None
-        validation_passed = True
-        
-        if all_opportunities_sorted:
-            try:
-                print(f"\n  📊 【V8.5.2.4.47】生成机会对比分析...")
-                
-                # 获取Phase 4的测试结果（如果可用）
-                full_test = phase4_result_extracted.get('full_test', {}) if phase4_result_extracted else {}
-                
-                # 分类机会
-                scalping_opps = [opp for opp in all_opportunities_sorted if opp.get('signal_type') == 'scalping']
-                swing_opps = [opp for opp in all_opportunities_sorted if opp.get('signal_type') == 'swing']
-                
-                # 计算每个机会是否会被新参数捕获
-                scalping_params = config.get('scalping_params', config.get('global', {}))
-                swing_params = config.get('swing_params', config.get('global', {}))
-                
-                for opp in all_opportunities_sorted:
-                    signal_type = opp.get('signal_type')
-                    params = scalping_params if signal_type == 'scalping' else swing_params
-                    
-                    # 判断是否满足参数要求
-                    signal_score = opp.get('signal_score', 0)
-                    consensus = opp.get('indicator_consensus', 0)
-                    
-                    min_signal = params.get('min_signal_score', 50)
-                    min_consensus = params.get('min_indicator_consensus', 0)
-                    
-                    opp['new_can_entry'] = (signal_score >= min_signal and consensus >= min_consensus)
-                    opp['old_can_entry'] = True  # 假设旧参数都能捕获（用于对比）
-                    
-                    # 添加捕获利润和效率字段（供邮件显示）
-                    if opp['new_can_entry']:
-                        opp['new_captured_profit'] = opp.get('objective_profit', 0)
-                        opp['new_efficiency'] = 100.0  # 简化：假设100%效率
-                        opp['new_exit_type'] = 'TP'
-                    else:
-                        opp['new_captured_profit'] = 0
-                        opp['new_efficiency'] = 0
-                        opp['new_exit_type'] = 'N/A'
-                    
-                    opp['old_captured_profit'] = opp.get('objective_profit', 0)
-                    opp['old_efficiency'] = 100.0
-                    opp['old_exit_type'] = 'TP'
-                
-                new_captured = [opp for opp in all_opportunities_sorted if opp.get('new_can_entry', False)]
-                old_captured = all_opportunities_sorted[:]  # 旧参数假设捕获所有
-                missed = [opp for opp in all_opportunities_sorted if not opp.get('new_can_entry', False)]
-                
-                # 计算平均利润
-                avg_old_profit = sum(o.get('objective_profit', 0) for o in old_captured) / len(old_captured) if old_captured else 0
-                avg_new_profit = sum(o.get('objective_profit', 0) for o in new_captured) / len(new_captured) if new_captured else 0
-                
-                # 构建stats
-                stats = {
-                    'total_opportunities': len(all_opportunities_sorted),
-                    'old_captured_count': len(old_captured),
-                    'old_capture_rate': 100.0,  # 假设旧参数100%捕获
-                    'new_captured_count': len(new_captured),
-                    'new_capture_rate': len(new_captured) / len(all_opportunities_sorted) * 100 if all_opportunities_sorted else 0,
-                    'avg_old_captured_profit': avg_old_profit,
-                    'avg_new_captured_profit': avg_new_profit,
-                    'validation_status': phase4_result_extracted.get('overall_status', 'UNKNOWN') if phase4_result_extracted else 'NO_PHASE4',
-                    'stability_score': phase4_result_extracted.get('stability', {}).get('stability_score', 0) if phase4_result_extracted else 0
-                }
-                
-                opportunity_analysis = {
-                    'all_opportunities': all_opportunities_sorted,
-                    'old_captured': old_captured,
-                    'new_captured': new_captured,
-                    'missed': missed[:30],  # 只保留TOP30
-                    'stats': stats
-                }
-                
-                print(f"     ✓ 生成机会分析: 总{len(all_opportunities_sorted)}个, 新参数捕获{len(new_captured)}个({stats['new_capture_rate']:.1f}%)")
-                print(f"        超短线: {len(scalping_opps)}个, 波段: {len(swing_opps)}个")
-                
-            except Exception as e:
-                print(f"  ⚠️ 生成机会对比分析失败: {e}")
-                import traceback
-                traceback.print_exc()
-                opportunity_analysis = None
-        else:
-            print(f"  ⚠️  跳过机会对比分析（无机会数据）")
-        
-        phase4_result = None
         
         # ========== 【V8.3.13.3】第4.7步：Per-Symbol优化 ==========
         print("\n【第4.7步：Per-Symbol优化（V8.3.13.3）】")
@@ -11224,58 +11076,58 @@ def analyze_and_adjust_params():
                 print(f"[V8.5.2.4.81] 新Bark格式失败，使用旧格式: {e}")
                 
                 # 降级：使用旧的Bark格式
-            # 检查是否有任何优化数据
-            has_scalp_data = scalp_opt or scalp_perf
-            has_swing_data = swing_opt or swing_perf
-            
-            if has_scalp_data or has_swing_data:
-                # 标题行
-                bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
-                bark_content_lines.append("")
-                bark_content_lines.append("📊 优化后预期收益:")
+                # 检查是否有任何优化数据
+                has_scalp_data = scalp_opt or scalp_perf
+                has_swing_data = swing_opt or swing_perf
                 
-                # 超短线数据（优先使用scalp_opt）
-                if has_scalp_data:
-                    if scalp_opt:
-                        # 使用scalping_optimization的数据
-                        cap_rate = scalp_opt.get('new_capture_rate', 0)
-                        avg_profit = scalp_opt.get('new_avg_profit', 0) / 100  # 转为小数
-                    else:
-                        # 使用v8321_insights的数据
-                        cap_rate = scalp_perf.get('capture_rate', 0)
-                        avg_profit = scalp_perf.get('avg_profit', 0)
-                    bark_content_lines.append(f"⚡超短线: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
+                if has_scalp_data or has_swing_data:
+                    # 标题行
+                    bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
+                    bark_content_lines.append("")
+                    bark_content_lines.append("📊 优化后预期收益:")
+                    
+                    # 超短线数据（优先使用scalp_opt）
+                    if has_scalp_data:
+                        if scalp_opt:
+                            # 使用scalping_optimization的数据
+                            cap_rate = scalp_opt.get('new_capture_rate', 0)
+                            avg_profit = scalp_opt.get('new_avg_profit', 0) / 100  # 转为小数
+                        else:
+                            # 使用v8321_insights的数据
+                            cap_rate = scalp_perf.get('capture_rate', 0)
+                            avg_profit = scalp_perf.get('avg_profit', 0)
+                        bark_content_lines.append(f"⚡超短线: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
+                    
+                    # 波段数据（优先使用swing_opt）
+                    if has_swing_data:
+                        if swing_opt:
+                            # 使用swing_optimization的数据
+                            cap_rate = swing_opt.get('new_capture_rate', 0)
+                            avg_profit = swing_opt.get('new_avg_profit', 0) / 100  # 转为小数
+                        else:
+                            # 使用v8321_insights的数据
+                            cap_rate = swing_perf.get('capture_rate', 0)
+                            avg_profit = swing_perf.get('avg_profit', 0)
+                        bark_content_lines.append(f"🌊波段: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
+                    
+                    # 显示当前ROI参数
+                    bark_content_lines.append("")
+                    min_rr = config.get('global', {}).get('min_risk_reward', 'N/A')
+                    bark_content_lines.append(f"🎯 当前ROI: {min_rr}:1")
+                else:
+                    # 没有任何优化数据，使用历史统计数据
+                    bark_content_lines.append(f"胜率{win_rate*100:.0f}% 盈亏比{win_loss_ratio:.1f}")
+                    bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
                 
-                # 波段数据（优先使用swing_opt）
-                if has_swing_data:
-                    if swing_opt:
-                        # 使用swing_optimization的数据
-                        cap_rate = swing_opt.get('new_capture_rate', 0)
-                        avg_profit = swing_opt.get('new_avg_profit', 0) / 100  # 转为小数
-                    else:
-                        # 使用v8321_insights的数据
-                        cap_rate = swing_perf.get('capture_rate', 0)
-                        avg_profit = swing_perf.get('avg_profit', 0)
-                    bark_content_lines.append(f"🌊波段: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
-                
-                # 显示当前ROI参数
-                bark_content_lines.append("")
-                min_rr = config.get('global', {}).get('min_risk_reward', 'N/A')
-                bark_content_lines.append(f"🎯 当前ROI: {min_rr}:1")
-            else:
-                # 没有任何优化数据，使用历史统计数据
-                bark_content_lines.append(f"胜率{win_rate*100:.0f}% 盈亏比{win_loss_ratio:.1f}")
-                bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
-            
-            send_bark_notification(
-                "[DeepSeek]🤖AI参数优化V8.3.21",
-                "\n".join(bark_content_lines),
-            )
+                send_bark_notification(
+                    "[DeepSeek]🤖AI参数优化V8.3.21",
+                    "\n".join(bark_content_lines),
+                )
             
             # 🆕 发送邮件通知（详细版）
             try:
-                # 强制使用DeepSeek（避免环境变量污染）
-                model_name = "DeepSeek"
+                # 强制使用Qwen（避免环境变量污染）
+                model_name = "Qwen"
                 
                 # 构建参数调整详情（HTML格式）- 只显示有变化的参数
                 param_changes_html = ""
@@ -11327,7 +11179,8 @@ def analyze_and_adjust_params():
                         # 优先级1：是否被新参数错过（0=捕获，1=错过）
                         missed = 0 if opp.get('new_can_entry', False) else 1
                         # 优先级2：客观利润（越高越好）
-                        profit = opp.get('actual_profit_pct', 0)
+                        # 【V8.5.2.4.77】使用objective_profit而不是actual_profit_pct
+                        profit = opp.get('objective_profit', 0)
                         # 返回：(错过优先, 利润降序)
                         return (missed, -profit)
                     
@@ -11495,7 +11348,7 @@ def analyze_and_adjust_params():
                             old_exit_type = opp.get('old_exit_type', 'N/A')
                             new_exit_type = opp.get('new_exit_type', 'N/A')
                             was_traded = opp.get('was_traded', False)
-                        
+                            
                             # 【V8.2.2】修复显示格式：正确处理正负号
                             if old_can_entry:
                                 profit_sign = '+' if old_captured_profit >= 0 else ''  # 负数已经有"-"
@@ -11528,7 +11381,7 @@ def analyze_and_adjust_params():
                                 miss_reason = opp.get('miss_reason', '信号质量不足')
                                 analysis = miss_reason if miss_reason else '信号质量不足'
                                 row_bg = 'background: #ffebee;'
-                        
+                            
                             opportunity_stats_html += f'''
             <tr style="{row_bg}">
                 <td style="padding: 6px; border: 1px solid #e0e0e0;"><strong>{coin}</strong></td>
@@ -11802,8 +11655,8 @@ def analyze_and_adjust_params():
             <tr style="background: {bg_color};">
                 <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;"><strong>第{round_num}轮</strong></td>
                 <td style="padding: 8px; border: 1px solid #e0e0e0;">{direction[:50] if direction else 'N/A'}...</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;">{r.get('metric', 0):.4f} ({r.get('improvement_pct', 0):+.1f}%)</td>
                     <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;">{r.get('metric', 0):.4f} ({r.get('improvement_pct', 0):+.1f}%)</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #e0e0e0;">{status_icon}</td>
             </tr>
 """
                     
@@ -11985,8 +11838,9 @@ def analyze_and_adjust_params():
                 <li><strong>初始资金：</strong>100 USDT（本金）</li>
                 <li><strong>杠杆设置：</strong>最高5倍（系统动态调整）</li>
                 <li><strong>回测盈利：</strong>{backtest_profit:+.2f}% = {'盈利' if backtest_profit > 0 else '亏损' if backtest_profit < 0 else '持平'} {abs(backtest_profit):.2f} USDT</li>
-                <li><strong>⚠️ 重要：</strong>盈利百分比<strong>已包含杠杆效果</strong>，不是再乘以5倍！</li>
                     <li><strong>⚠️ 重要：</strong>盈利百分比<strong>已包含杠杆效果</strong>，不是再乘以5倍！</li>
+                <li><strong>实际收益：</strong>如果实际运行，100U本金 → {100 + backtest_profit:.2f}U（理论值）</li>
+            </ul>
             <p style="margin: 10px 0 0 0; padding: 10px; background: #fff3e0; border-radius: 3px; font-size: 0.9em;">
                 <strong>📌 说明：</strong>杠杆既放大盈利也放大亏损。如果使用5倍杠杆，价格波动1%，你的账户盈亏是5%。
                 最终的{abs(backtest_profit):.2f}%盈利，就是在使用杠杆的情况下，对你的本金的净影响。
@@ -12169,7 +12023,7 @@ def analyze_and_adjust_params():
                 <td style="padding: 6px; text-align: center; border: 1px solid #e0e0e0;"><strong>{coin}</strong></td>
                 <td style="padding: 6px; text-align: center; border: 1px solid #e0e0e0;">{side}</td>
                 <td style="padding: 6px; text-align: center; border: 1px solid #e0e0e0; font-size: 0.9em;">${entry_price:,.2f}</td>
-                <td style="padding: 6px; text-align: center; border: 1px solid #e0e0e0; font-size: 0.9em;">${exit_price:,.2f}</td>
+                    <td style="padding: 6px; text-align: center; border: 1px solid #e0e0e0; font-size: 0.9em;">${exit_price:,.2f}</td>
                 <td style="padding: 6px; text-align: center; border: 1px solid #e0e0e0;">{exit_type}</td>
                 <td style="padding: 6px; text-align: center; border: 1px solid #e0e0e0;"><span class="{pnl_class}">{pnl:+.2f}U</span></td>
                 <td style="padding: 6px; text-align: center; border: 1px solid #e0e0e0;">{max_profit:.1f}%</td>
@@ -12516,9 +12370,9 @@ def analyze_and_adjust_params():
                             learning_insights_html += "            </ol>\n        </div>\n"
                         
                         gen_time = ai_reflection.get('generated_at', 'N/A')
-                            learning_insights_html += f"""
-            <p style="color: #999; font-size: 0.85em; margin-top: 10px;">生成时间: {gen_time}</p>
-        </div>
+                        learning_insights_html += f"""
+        <p style="color: #999; font-size: 0.85em; margin-top: 10px;">生成时间: {gen_time}</p>
+    </div>
 """
                 
                 # 【V7.9新增】生成交易员执行摘要（分Scalping/Swing）
@@ -12963,97 +12817,16 @@ def analyze_and_adjust_params():
                     # 开仓统计（已删除）
                     if False and has_entry:
                         entry_stats = entry_analysis['entry_stats']
-                        # 【V8.5.2.4.82】计算分类合计和占比
-                        total_classified = (
-                            entry_stats.get('excellent_entries', 0) + 
-                            entry_stats.get('good_entries', 0) + 
-                            entry_stats.get('timing_issues', 0) + 
-                            entry_stats.get('false_entries', 0) + 
-                            entry_stats.get('reasonable_loss', 0) + 
-                            entry_stats.get('breakeven', 0) + 
-                            entry_stats.get('holding', 0)
-                        )
-                        ai_opened = entry_stats.get('ai_opened', 0)
-                        
-                        def calc_pct(count, total):
-                            return (count / total * 100) if total > 0 else 0
-                        
                         stats_html += f'''
     <div style="background: #fff; padding: 10px; border-radius: 5px; margin: 10px 0;">
-        <h3 style="color: #1976d2;">🚪 开仓质量统计（完整分类）</h3>
-        <p><strong>总机会数：</strong>{entry_stats.get('total_opportunities', 0)} | <strong>AI开仓：</strong>{ai_opened} ({calc_pct(ai_opened, entry_stats.get('total_opportunities', 1)):.0f}%)</p>
-        
-        <table style="width:100%; border-collapse: collapse; margin: 10px 0; font-size: 0.9em;">
-            <tr style="background: #e3f2fd;">
-                <th style="padding: 8px; border: 1px solid #90caf9; text-align: left;">评级</th>
-                <th style="padding: 8px; border: 1px solid #90caf9; text-align: center;">数量</th>
-                <th style="padding: 8px; border: 1px solid #90caf9; text-align: center;">占比</th>
-                <th style="padding: 8px; border: 1px solid #90caf9; text-align: left;">说明</th>
-            </tr>
-            <tr style="background: #d4edda;">
-                <td style="padding: 8px; border: 1px solid #c3e6cb;">✅ 优秀</td>
-                <td style="padding: 8px; border: 1px solid #c3e6cb; text-align: center;">{entry_stats.get('excellent_entries', 0)}笔</td>
-                <td style="padding: 8px; border: 1px solid #c3e6cb; text-align: center;">{calc_pct(entry_stats.get('excellent_entries', 0), ai_opened):.1f}%</td>
-                <td style="padding: 8px; border: 1px solid #c3e6cb;">正确识别，盈利>5U</td>
-            </tr>
-            <tr style="background: #d1ecf1;">
-                <td style="padding: 8px; border: 1px solid #bee5eb;">✔️ 良好</td>
-                <td style="padding: 8px; border: 1px solid #bee5eb; text-align: center;">{entry_stats.get('good_entries', 0)}笔</td>
-                <td style="padding: 8px; border: 1px solid #bee5eb; text-align: center;">{calc_pct(entry_stats.get('good_entries', 0), ai_opened):.1f}%</td>
-                <td style="padding: 8px; border: 1px solid #bee5eb;">盈利1-5U</td>
-            </tr>
-            <tr style="background: #fff3cd;">
-                <td style="padding: 8px; border: 1px solid #ffeaa7;">⚠️ 时机问题</td>
-                <td style="padding: 8px; border: 1px solid #ffeaa7; text-align: center;">{entry_stats.get('timing_issues', 0)}笔</td>
-                <td style="padding: 8px; border: 1px solid #ffeaa7; text-align: center;">{calc_pct(entry_stats.get('timing_issues', 0), ai_opened):.1f}%</td>
-                <td style="padding: 8px; border: 1px solid #ffeaa7;">方向对但时机欠佳</td>
-            </tr>
-            <tr style="background: #f8d7da;">
-                <td style="padding: 8px; border: 1px solid #f5c6cb;">❌ 虚假信号</td>
-                <td style="padding: 8px; border: 1px solid #f5c6cb; text-align: center;">{entry_stats.get('false_entries', 0)}笔</td>
-                <td style="padding: 8px; border: 1px solid #f5c6cb; text-align: center;">{calc_pct(entry_stats.get('false_entries', 0), ai_opened):.1f}%</td>
-                <td style="padding: 8px; border: 1px solid #f5c6cb;">快速止损，亏损>2U</td>
-            </tr>
-            <tr style="background: #e2e3e5;">
-                <td style="padding: 8px; border: 1px solid #d6d8db;">🔻 合理止损</td>
-                <td style="padding: 8px; border: 1px solid #d6d8db; text-align: center;">{entry_stats.get('reasonable_loss', 0)}笔</td>
-                <td style="padding: 8px; border: 1px solid #d6d8db; text-align: center;">{calc_pct(entry_stats.get('reasonable_loss', 0), ai_opened):.1f}%</td>
-                <td style="padding: 8px; border: 1px solid #d6d8db;">亏损1-2U，止损及时</td>
-            </tr>
-            <tr style="background: #e2e3e5;">
-                <td style="padding: 8px; border: 1px solid #d6d8db;">➡️ 平局</td>
-                <td style="padding: 8px; border: 1px solid #d6d8db; text-align: center;">{entry_stats.get('breakeven', 0)}笔</td>
-                <td style="padding: 8px; border: 1px solid #d6d8db; text-align: center;">{calc_pct(entry_stats.get('breakeven', 0), ai_opened):.1f}%</td>
-                <td style="padding: 8px; border: 1px solid #d6d8db;">盈亏接近0（±1U）</td>
-            </tr>
-            <tr style="background: #d1ecf1;">
-                <td style="padding: 8px; border: 1px solid #bee5eb;">⏳ 持仓中</td>
-                <td style="padding: 8px; border: 1px solid #bee5eb; text-align: center;">{entry_stats.get('holding', 0)}笔</td>
-                <td style="padding: 8px; border: 1px solid #bee5eb; text-align: center;">{calc_pct(entry_stats.get('holding', 0), ai_opened):.1f}%</td>
-                <td style="padding: 8px; border: 1px solid #bee5eb;">尚未平仓</td>
-            </tr>
-            <tr style="font-weight: bold; background: #e3f2fd;">
-                <td style="padding: 8px; border: 1px solid #90caf9;">合计</td>
-                <td style="padding: 8px; border: 1px solid #90caf9; text-align: center;">{total_classified}笔</td>
-                <td style="padding: 8px; border: 1px solid #90caf9; text-align: center;">100.0%</td>
-                <td style="padding: 8px; border: 1px solid #90caf9;">{'✅ 完整' if total_classified == ai_opened else f'❌ 缺失{ai_opened - total_classified}笔'}</td>
-            </tr>
-        </table>
-        
-        <p style="margin-top: 10px;">
-            <strong>其他：</strong>错过机会 {entry_stats.get('missed_profitable', 0)}笔 | 
-            正确过滤 {entry_stats.get('correctly_filtered', 0)}笔
-        </p>
-        
-        <p style="margin-top: 10px; color: #6c757d; font-size: 0.85em;">
-            💡 <strong>分类说明</strong>：<br/>
-            • 优秀：盈利>5U，入场时机和方向都正确<br/>
-            • 良好：盈利1-5U，或时机略欠佳但仍盈利<br/>
-            • 时机问题：方向正确但入场时机不佳，错过更大利润<br/>
-            • 虚假信号：快速止损，市场未按预期方向走<br/>
-            • 合理止损：亏损但止损及时，市场突然反转<br/>
-            • 平局：盈亏接近0（±1U），基本打平<br/>
-            • 持仓中：订单尚未平仓，暂无法评级
+        <h3 style="color: #1976d2;">🚪 开仓质量统计</h3>
+        <p><strong>总机会数：</strong>{entry_stats.get('total_opportunities', 0)} | <strong>AI开仓：</strong>{entry_stats.get('ai_opened', 0)} ({entry_stats.get('ai_opened', 0)/max(entry_stats.get('total_opportunities', 1), 1)*100:.0f}%)</p>
+        <p>
+            ├─ ✅ 正确开仓: {entry_stats.get('correct_entries', 0)}笔 | 
+            ❌ 虚假信号: {entry_stats.get('false_entries', 0)}笔 | 
+            ⚠️ 时机问题: {entry_stats.get('timing_issues', 0)}笔<br/>
+            └─ 错过机会: {entry_stats.get('missed_profitable', 0)}笔 | 
+            正确过滤: {entry_stats.get('correctly_filtered', 0)}笔
         </p>
     </div>
 '''
@@ -13359,8 +13132,8 @@ def analyze_and_adjust_params():
                 
                 # 发送邮件（复用之前构建的邮件HTML）
                 try:
-                    # 强制使用DeepSeek（避免环境变量污染）
-                    model_name = "DeepSeek"
+                    # 强制使用Qwen（避免环境变量污染）
+                    model_name = "Qwen"
                     # 构建简化的邮件（无参数变化）
                     # 由于没有参数变化，我们需要重新构建部分HTML
                     # 这里直接复用前面已经构建好的HTML变量（如果存在的话）
@@ -13468,8 +13241,8 @@ def chat_with_ai(user_message, context=None):
 {context.get('market_text', '暂无数据')}
 """
         
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",  # DeepSeek模型
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",  # Qwen模型
             messages=[
                 {
                     "role": "system",
@@ -13478,7 +13251,6 @@ def chat_with_ai(user_message, context=None):
                 {"role": "user", "content": user_message},
             ],
             stream=False,
-            max_tokens=8000,  # 🔧 增加到8000，避免推理过程被截断
         )
         
         ai_reply = response.choices[0].message.content
@@ -14605,10 +14377,10 @@ def detect_ytc_signals(df_15m: pd.DataFrame, df_1h: pd.DataFrame, sr_levels: dic
                     'signal_type': 'PB',
                     'direction': trend_direction,
                     'strength': 5 if weakness_score > 0.85 else 4,
-                    'entry_price': df_15m.iloc[-1]['close'],  # LWP for PB is often the close of the reversal candle
+                        'entry_price': df_15m.iloc[-1]['close'],  # LWP for PB is often the close of the reversal candle
                     'sr_strength': 3,  # PB不依赖S/R，强度默认为3
                     'rationale': f"Weak PB ({pullback_info['depth_pct']:.1f}%), weakness={weakness_score:.2f}, optimal entry against trapped reversal traders.",
-                    'weakness_score': weakness_score,
+                        'weakness_score': weakness_score,
                     'trapped_traders': trapped_traders
                 }
                 signals.append(pb_signal)
@@ -14620,7 +14392,7 @@ def detect_ytc_signals(df_15m: pd.DataFrame, df_1h: pd.DataFrame, sr_levels: dic
                     'direction': 'WAIT',  # 等待突破确认
                     'strength': 1,  # 最低强度，确保不会被选为主信号
                     'entry_price': 0,
-                    'sr_strength': 2,
+                        'sr_strength': 2,
                     'rationale': f"Complex pullback {pullback_info['depth_pct']:.1f}%, awaiting breakout confirmation. DO NOT ENTER.",
                     'weakness_score': weakness_score,
                     'trapped_traders': 'N/A - Wait Mode'
@@ -15085,7 +14857,7 @@ def calculate_unified_risk_reward_v2(entry_price, side, market_data, signal_clas
     
     Args:
         entry_price: 入场价格
-        side: 'long' 或 'short'
+            side: 'long' 或 'short'
         market_data: 完整市场数据（包含15m和1h数据）
         signal_classification: 信号分类信息
         min_rr: 最小盈亏比（可选）
@@ -16154,10 +15926,10 @@ Output JSON only:
     
     try:
         print(f"正在请求AI评估仓位调整...")
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=8000,  # 🔧 增加到8000，避免推理过程+JSON被截断
+            max_tokens=2000,  # Qwen标准输出限制
             temperature=0.3
         )
         
@@ -16976,8 +16748,8 @@ Your core principles:
 - Dynamically adjust positions to ensure total risk is controlled
 - Always respond in Chinese (中文)"""
         
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",  # DeepSeek推理模型
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",  # Qwen模型（思考模式，提升复杂策略分析能力）
             messages=[
                 {
                     "role": "system",
@@ -16986,7 +16758,7 @@ Your core principles:
                 {"role": "user", "content": prompt},
             ],
             stream=False,
-            max_tokens=8000,  # 🔧 DeepSeek-reasoner需要更多空间输出推理过程
+            max_tokens=5000,  # 🔧 增加到5000，避免复杂决策时JSON被截断
         )
         
         result = response.choices[0].message.content
@@ -18526,7 +18298,7 @@ def request_ai_close_confirmation(symbol, position, market_data, invalidation_re
 
 ## Position Details
 - Entry Price: ${entry_price:,.2f}
-- Current Price: ${current_price:,.2f}
+    - Current Price: ${current_price:,.2f}
 - Unrealized PnL: ${unrealized_pnl:+.2f} USDT
 - Holding Duration: {holding_hours:.1f} hours ({holding_hours*60:.0f} minutes)
 
@@ -18565,10 +18337,10 @@ Return JSON (reason MUST be in Chinese):
 """
         
         # 调用AI
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=8000,  # 🔧 增加到8000，避免推理过程+JSON被截断
+            max_tokens=300,
             temperature=0.7
         )
         
@@ -18600,7 +18372,7 @@ def ai_adjust_tp_sl_if_needed(symbol, position, market_data, entry_context, conf
         position: dict, 持仓信息
         market_data: dict, 当前市场数据
         entry_context: dict, 开仓时的上下文
-        config: dict, 学习配置
+            config: dict, 学习配置
     
     返回: dict, 调整建议 {'should_adjust': bool, 'new_tp': float, 'new_sl': float, 'reason': str}
     """
@@ -18652,10 +18424,10 @@ def ai_adjust_tp_sl_if_needed(symbol, position, market_data, entry_context, conf
 
 ## Position Status
 - Entry Price: ${entry_price:,.2f}
-- Current Price: ${current_price:,.2f}
+    - Current Price: ${current_price:,.2f}
 - Unrealized PnL: ${unrealized_pnl:+.2f}
 - Current TP: ${current_tp if current_tp else 'N/A'}
-- Current SL: ${current_sl if current_sl else 'N/A'}
+    - Current SL: ${current_sl if current_sl else 'N/A'}
 
 ## Original Entry Reason
 {entry_context.get('entry_reason', 'N/A')[:200]}
@@ -18679,17 +18451,17 @@ Return JSON:
 {{
   "should_adjust": true or false,
   "new_take_profit": float or null,  // New TP price, null if no change
-  "new_stop_loss": float or null,    // New SL price, null if no change
+      "new_stop_loss": float or null,    // New SL price, null if no change
   "reason": "Explanation (max 80 words)",
   "confidence": "HIGH|MEDIUM|LOW"
 }}
 """
         
         # 调用AI
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=8000,  # 🔧 增加到8000，避免推理过程+JSON被截断
+            max_tokens=400,
             temperature=0.7
         )
         
@@ -19222,7 +18994,7 @@ def monitor_positions_for_invalidation(market_data_list: list, current_positions
         allow_ai_confirmation = global_thresholds.get('allow_ai_confirmation', True)
         allow_dynamic_adjustment = tp_sl_strategy.get('allow_dynamic_adjustment', True)
         
-        model_name = os.getenv("MODEL_NAME", "deepseek")
+        model_name = os.getenv("MODEL_NAME", "qwen")
         
         for position in current_positions:
             symbol = position.get('symbol')
@@ -19292,7 +19064,7 @@ def monitor_positions_for_invalidation(market_data_list: list, current_positions
                     
                     # 保存更新后的context
                     try:
-                        model_name = os.getenv("MODEL_NAME", "deepseek")
+                        model_name = os.getenv("MODEL_NAME", "qwen")
                         context_file = Path("trading_data") / model_name / "position_contexts.json"
                         contexts = {}
                         if context_file.exists():
@@ -19591,7 +19363,7 @@ def _execute_single_close_action(action, current_positions):
                     "side": pos["side"],
                     "size": float(pos["contracts"]),
                     "entry_price": float(pos["entryPrice"]) if pos["entryPrice"] else 0,
-                    "unrealized_pnl": float(pos["unrealizedPnl"]) if pos["unrealizedPnl"] else 0,
+                        "unrealized_pnl": float(pos["unrealizedPnl"]) if pos["unrealizedPnl"] else 0,
                     "mark_price": float(pos["markPrice"]) if pos["markPrice"] else 0,
                         }
                 break
@@ -19687,7 +19459,7 @@ def _execute_single_close_action(action, current_positions):
             
             try:
                 # 从position_contexts读取原始止盈止损
-                model_name = os.getenv("MODEL_NAME", "deepseek")
+                model_name = os.getenv("MODEL_NAME", "qwen")
                 context_file = Path("trading_data") / model_name / "position_contexts.json"
                 original_sl = None
                 original_tp = None
@@ -19730,7 +19502,7 @@ def _execute_single_close_action(action, current_positions):
         actual_holding = 0
         try:
             # 读取position_contexts
-            model_name = os.getenv("MODEL_NAME", "deepseek")
+            model_name = os.getenv("MODEL_NAME", "qwen")
             context_file = Path("trading_data") / model_name / "position_contexts.json"
             if context_file.exists():
                 with open(context_file, 'r', encoding='utf-8') as f:
@@ -19775,7 +19547,7 @@ def _execute_single_close_action(action, current_positions):
         partial_mark = f"[分批{close_pct:.0f}%]" if close_pct < 100 else ""
         
         send_bark_notification(
-            f"[DS]{coin_name}平仓{pnl_emoji}{partial_mark}",
+            f"[DeepSeek]{coin_name}平仓{pnl_emoji}{partial_mark}",
             f"{position_type}仓 {pnl:+.2f}U {holding_info}\n开${real_pos.get('entry_price', 0):.0f}→平${real_pos.get('mark_price', 0):.0f}\n{close_reason}",
                 )
 
@@ -19818,7 +19590,7 @@ def _execute_single_close_action(action, current_positions):
                 f"[DeepSeek]{coin_name}平仓失败❌",
                 f"{position_type}仓 持有:{old_pos['size']:.4f}个\n"
                 f"开仓价:{old_pos.get('entry_price', 0):.2f} 当前盈亏:{old_pos['unrealized_pnl']:+.2f}U\n"
-                f"失败原因: {str(e)[:80]}\n"
+                    f"失败原因: {str(e)[:80]}\n"
                 f"平仓理由: {action.get('reason', 'N/A')[:60]}",
             )
 
@@ -20040,7 +19812,7 @@ def _execute_single_open_action_v55(
     if not direction_ok:
         print(f"❌ {direction_reason}")
         send_bark_notification(
-            f"[DS]{coin_name}开仓被拒❌",
+            f"[DeepSeek]{coin_name}开仓被拒❌",
             f"{direction_reason}",
         )
         return
@@ -20136,7 +19908,7 @@ def _execute_single_open_action_v55(
 
         print(f"✓ 当前价: ${entry_price:,.2f}")
         print(f"✓ 止损价: ${stop_loss:,.2f}")
-        print(f"✓ 止盈价: ${take_profit:,.2f}")
+        print(f"✓ 止盈价: ${take_profit:.2f}")
         print(f"✓ 盈亏比: {risk_reward:.2f}:1")
 
         # 盈亏比验证（使用币种特定参数）
@@ -20155,7 +19927,7 @@ def _execute_single_open_action_v55(
                 f"AI判断:{direction} 但盈亏比不足\n"
                 f"要求:{min_rr_required:.1f} 实际:{risk_reward:.2f}\n"
                 f"当前价:{entry_price:.2f} 止损:{stop_loss:.2f} 止盈:{take_profit:.2f}\n"
-                f"配置:{symbol_config.get('_source', '全局')}\n"
+                    f"配置:{symbol_config.get('_source', '全局')}\n"
                 f"AI理由: {action.get('reason', 'N/A')[:60]}",
             )
             return
@@ -20330,7 +20102,7 @@ def _execute_single_open_action_v55(
                     send_bark_notification(
                         f"[DeepSeek]{coin_name}拒绝开多❌",
                         f"追价过高：市价${entry_price:.2f} > LWP${lwp_reference:.2f}\n"
-                        f"偏离度:{deviation_pct*100:.1f}% (上限1.0%)\n"
+                            f"偏离度:{deviation_pct*100:.1f}% (上限1.0%)\n"
                         f"AI理由: {action.get('reason', 'N/A')[:60]}",
                     )
                     return
@@ -20375,7 +20147,7 @@ def _execute_single_open_action_v55(
                     send_bark_notification(
                         f"[DeepSeek]{coin_name}拒绝开空❌",
                         f"追价过低：市价${entry_price:.2f} < LWP${lwp_reference:.2f}\n"
-                        f"偏离度:{deviation_pct*100:.1f}% (上限1.0%)\n"
+                            f"偏离度:{deviation_pct*100:.1f}% (上限1.0%)\n"
                         f"AI理由: {action.get('reason', 'N/A')[:60]}",
                     )
                     return
@@ -20740,7 +20512,7 @@ def _execute_single_open_action_v55(
         open_reason_short = open_reason[:60] + "..." if len(open_reason) > 60 else open_reason
         
         send_bark_notification(
-            f"[DS]{coin_name}{period_name}{direction_emoji}",
+            f"[DeepSeek]{coin_name}{period_name}{direction_emoji}",
             f"{period_name}{action_name} {planned_position:.0f}U×{leverage}倍\n预期持仓{holding_str} R:R {risk_reward:.2f}:1 信号{score}分\n止损${stop_loss:.0f} 止盈${take_profit:.0f}\n{open_reason_short}",
         )
 
@@ -20782,9 +20554,9 @@ def _execute_single_open_action_v55(
             "平仓时间": None,
             "币种": coin_name,
             "方向": "多" if operation == "OPEN_LONG" else "空",
-            "数量": amount,
+                "数量": amount,
             "开仓价格": order.get("average", entry_price) if order else entry_price,
-            "平仓价格": None,
+                "平仓价格": None,
             "仓位(U)": planned_position,  # 标准字段
             "杠杆率": leverage,
             "止损": stop_loss,  # 标准字段
@@ -20796,7 +20568,7 @@ def _execute_single_open_action_v55(
             "信号分数": score,  # 🆕 V8.5.1.8: 信号分数
             "共振指标数": indicator_consensus,  # 🆕 V8.5.1.8: 共振指标数
             "信号类型": signal_classification.get('signal_type', 'unknown') if signal_classification else 'unknown',  # V7.9
-            "预期持仓(分钟)": signal_classification.get('expected_holding_minutes', 0) if signal_classification else 0,  # V7.9
+                "预期持仓(分钟)": signal_classification.get('expected_holding_minutes', 0) if signal_classification else 0,  # V7.9
         }
 
         # 使用标准保存函数
@@ -21124,7 +20896,7 @@ def execute_portfolio_actions(
                     f"AI判断:{direction} 但盈亏比不足\n"
                     f"要求:{min_rr_required:.1f} 实际:{risk_reward:.2f}\n"
                     f"当前价:{entry_price:.2f} 止损:{stop_loss:.2f} 止盈:{take_profit:.2f}\n"
-                    f"AI理由: {action.get('reason', 'N/A')[:80]}",
+                        f"AI理由: {action.get('reason', 'N/A')[:80]}",
                 )
                 continue
             else:
@@ -21291,7 +21063,7 @@ def execute_portfolio_actions(
                         elif 'consensus' in market_data:
                             indicator_consensus = market_data.get('consensus', 0)
                             print(f"     ✓ 从consensus获取: {indicator_consensus}")
-                    else:
+                        else:
                             print(f"     ❌ 所有共振字段都不存在！")
                     else:
                         print(f"     ❌ market_data为None！")
@@ -21306,7 +21078,7 @@ def execute_portfolio_actions(
                         "方向": "多",
                         "数量": amount,
                         "开仓价格": order.get("average", price) if order else price,
-                        "平仓价格": None,
+                            "平仓价格": None,
                         "仓位(U)": position_usd,
                         "杠杆率": leverage,
                         "止损": action.get("stop_loss_price", 0),
@@ -21407,7 +21179,7 @@ def execute_portfolio_actions(
                         elif 'consensus' in market_data:
                             indicator_consensus = market_data.get('consensus', 0)
                             print(f"     ✓ 从consensus获取: {indicator_consensus}")
-                    else:
+                        else:
                             print(f"     ❌ 所有共振字段都不存在！")
                     else:
                         print(f"     ❌ market_data为None！")
@@ -21422,7 +21194,7 @@ def execute_portfolio_actions(
                         "方向": "空",
                         "数量": amount,
                         "开仓价格": order.get("average", price) if order else price,
-                        "平仓价格": None,
+                            "平仓价格": None,
                         "仓位(U)": position_usd,
                         "杠杆率": leverage,
                         "止损": action.get("stop_loss_price", 0),
@@ -22206,8 +21978,8 @@ def recalculate_consensus_from_snapshot(snapshot_row):
     
     except Exception as e:
         # 出错时返回0（保守策略）
-            return 0
-    
+        return 0
+
 
 def recalculate_signal_score_from_snapshot(snapshot_row, signal_type, learning_config=None):
     """
@@ -22372,7 +22144,7 @@ def recalculate_signal_score_from_snapshot(snapshot_row, signal_type, learning_c
         return min(100, max(0, int(total_score)))
         
     except Exception as e:
-        print(f"⚠️ 【V8.5.2.3】真正重新计算signal_score失败: {e}")
+        print(f"⚠️ 【V8.5.2.2】真正重新计算signal_score失败: {e}")
         import traceback
         traceback.print_exc()
         return 50  # 默认值
@@ -22596,7 +22368,11 @@ def analyze_opportunities_with_new_params(market_snapshots, actual_trades, new_c
                     continue
             
             # ✅ 【V8.0】核心改动：根据信号类型使用对应参数
-            # 获取旧参数（根据机会类型）
+            # 【V8.5.2.4.77】明确新旧参数来源
+            # old_config = 优化前的参数（上一次的参数，在第9691行保存）
+            # new_config = 优化后的参数（本次应用的参数）
+            
+            # 获取旧参数（优化前，从old_config）
             old_params = get_params_for_signal_type(old_config if old_config else new_config, opp_type)
             
             # 模拟旧参数交易
@@ -22616,7 +22392,7 @@ def analyze_opportunities_with_new_params(market_snapshots, actual_trades, new_c
                 max_holding_hours=old_params.get('max_holding_hours')  # 【V8.1】时间限制
             )
             
-            # 获取新参数（根据机会类型）
+            # 获取新参数（优化后，从new_config）
             new_params = get_params_for_signal_type(new_config, opp_type)
             
             # 模拟新参数交易
@@ -22705,7 +22481,7 @@ def analyze_opportunities_with_new_params(market_snapshots, actual_trades, new_c
                 opportunity['miss_reason'] = ""
             
             all_opportunities.append(opportunity)
-        
+    
     # 【V8.1.4】分类统计：总体 + 超短线 + 波段
     old_captured = [o for o in all_opportunities if o['old_can_entry']]
     new_captured = [o for o in all_opportunities if o['new_can_entry']]
@@ -23231,7 +23007,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             print(f"  🔍 [{coin_idx}/{total_coins}] {coin}...", end='', flush=True)
             
             # 全点位分析（不采样）
-                sampled_indices = list(range(total_points))
+            sampled_indices = list(range(total_points))
             
             for idx_count, idx in enumerate(sampled_indices):
                 # 每200个点显示进度
@@ -23327,9 +23103,9 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         _, row_data = future_row
                         
                         # 计算当前利润
-                    if direction == 'long':
+                        if direction == 'long':
                             profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
-                    else:
+                        else:
                             profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
                         
                         # 启动跟踪
@@ -23414,7 +23190,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             gc.collect()
         
         print(f"\n  ✅ Phase 1.1完成: 收集到{len(all_profit_opportunities)}个盈利机会")
-            gc.collect()
+        gc.collect()
         
         # ========================================
         # 【Phase 1.2】统计分析与动态阈值
@@ -23671,7 +23447,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                 'market_state': market_state,
                 'thresholds': thresholds,
                 'stats': stats
-        }
+            }
         
         # 【V8.3.21】最后释放内存
         gc.collect()
@@ -23692,8 +23468,6 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             'swing': {'total_opportunities': 0, 'opportunities': []},
             'phase1_baseline': None  # 🔧 V8.5.2.4.28: 确保总是返回phase1_baseline字段
         }
-
-
 def simulate_params_on_opportunities(opportunities, params):
     """
     【V8.3.12】用指定参数模拟交易机会
@@ -24065,7 +23839,7 @@ IMPORTANT: Be aggressive in recommendations. If Time Exit > 50%, TP is definitel
     return prompt
 
 
-def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_name='deepseek'):
+def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_name='qwen'):
     """
     【V8.3.12.1】调用AI分析exit patterns并给出策略建议
     
@@ -24087,8 +23861,8 @@ def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_
         print(f"  🤖 调用AI分析{signal_type} exit patterns...")
         
         # 调用AI
-        response = deepseek_client.chat.completions.create(
-            model="deepseek-reasoner",
+        response = qwen_client.chat.completions.create(
+            model="qwen3-max",
             messages=[
                 {
                     "role": "system",
@@ -24096,8 +23870,7 @@ def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_
                 },
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.1,
-            max_tokens=8000,  # 🔧 增加到8000，避免推理过程+JSON被截断
+            temperature=0.1
         )
         
         ai_response = response.choices[0].message.content
@@ -24334,7 +24107,7 @@ def call_ai_for_round_decision(round_num, round_results, current_best_params, op
         all_rounds_results: 【V8.3.18.2】所有轮次结果
         signal_performance: 【V8.3.19 NEW】信号类型分析结果
     """
-    global deepseek_api_key  # 【修复】声明全局变量
+    global qwen_api_key  # 【修复】声明全局变量
     best_result = round_results[0] if round_results else None
     
     # 【V8.3.19】构建信号类型提示
@@ -24500,10 +24273,10 @@ Respond in JSON format ONLY:
     
     try:
         response = requests.post(
-            "https://api.deepseek.com/chat/completions",
-            headers={"Authorization": f"Bearer {deepseek_api_key}"},
+            "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+            headers={"Authorization": f"Bearer {qwen_api_key}"},
             json={
-                "model": "deepseek-chat",
+                "model": "qwen3-max",
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.3,
                 "max_tokens": 2000
@@ -24632,8 +24405,8 @@ def analyze_signal_type_performance(opportunities):
             signal_types.append('volume_surge')
         if not signal_types:
             signal_types.append('other')
-    
-    # 统计数据
+        
+        # 统计数据
         profit = opp.get('actual_profit', 0)
         time_hours = opp.get('holding_hours', 0)
         atr = snapshot.get('atr', 1)
@@ -25166,7 +24939,7 @@ def optimize_strategy_with_risk_control(strategy_data, strategy_type, phase1_bas
     dynamic_min_score = None
     dynamic_min_consensus = None
     
-    model_name = os.getenv("MODEL_NAME", "deepseek")
+    model_name = os.getenv("MODEL_NAME", "qwen")
     cache_file = Path("trading_data") / model_name / "optimization_cache.json"
     
     if cache_file.exists():
@@ -26831,13 +26604,13 @@ def analyze_exit_timing(yesterday_trades, kline_snapshots):
             'coin': coin,
             'side': side,
             'entry_price': entry_price,
-            'exit_price': exit_price,
+                'exit_price': exit_price,
             'exit_type': exit_type,
             'exit_reason': exit_reason,
             'pnl': pnl,
             'missed_profit_pct': missed_profit_pct,
             'max_potential_profit_pct': missed_profit_pct + (pnl / entry_price * 100) if entry_price > 0 else 0,  # 最大潜在利润 = 实际利润 + 错过利润
-            'is_premature': is_premature,
+                'is_premature': is_premature,
             'technical_support': technical_support
         }
         
@@ -27025,10 +26798,10 @@ def save_position_context(coin, decision, entry_price, signal_classification=Non
         coin: str, 币种名称
         decision: dict, AI决策内容
         entry_price: float, 开仓价格
-        signal_classification: dict, 信号分类信息（V7.9新增）
+            signal_classification: dict, 信号分类信息（V7.9新增）
         market_data: dict, 市场数据（用于提取关键位，V7.9新增）
     """
-    model_name = os.getenv("MODEL_NAME", "deepseek")
+    model_name = os.getenv("MODEL_NAME", "qwen")
     context_file = Path("trading_data") / model_name / "position_contexts.json"
     
     try:
@@ -27063,18 +26836,18 @@ def save_position_context(coin, decision, entry_price, signal_classification=Non
         # Save new context (V7.9扩展)
         contexts[coin] = {
             "entry_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "entry_price": entry_price,
+                "entry_price": entry_price,
             "entry_reason": decision.get("reason", "")[:100],
-            "target_tp": decision.get("take_profit_price", 0),
+                "target_tp": decision.get("take_profit_price", 0),
             "target_sl": decision.get("stop_loss_price", 0),
             "risk_reward": decision.get("risk_reward", 0),
             "ai_strategy": decision.get("strategy", "Trust the TP plan")[:80],
             
             # 【V7.9新增】信号分类信息
             "signal_type": signal_classification.get("signal_type", "swing") if signal_classification else "swing",
-            "signal_name": signal_classification.get("signal_name", "UNKNOWN") if signal_classification else "UNKNOWN",
+                "signal_name": signal_classification.get("signal_name", "UNKNOWN") if signal_classification else "UNKNOWN",
             "expected_holding_minutes": signal_classification.get("expected_holding_minutes", 120) if signal_classification else 120,
-            "classification_reason": signal_classification.get("reason", "") if signal_classification else "",
+                "classification_reason": signal_classification.get("reason", "") if signal_classification else "",
             
             # 【V7.9新增】关键位信息（用于判断硬失效）
             "key_levels": key_levels
@@ -27101,7 +26874,7 @@ def load_position_context(coin):
     返回:
         dict, 决策上下文
     """
-    model_name = os.getenv("MODEL_NAME", "deepseek")
+    model_name = os.getenv("MODEL_NAME", "qwen")
     context_file = Path("trading_data") / model_name / "position_contexts.json"
     
     try:
@@ -27110,25 +26883,25 @@ def load_position_context(coin):
                 contexts = json.load(f)
                 return contexts.get(coin, {
                     'entry_reason': 'N/A',
-                    'ai_strategy': 'Trust the plan',
+                        'ai_strategy': 'Trust the plan',
                     'entry_price': 0,
-                    'target_tp': 0,
+                        'target_tp': 0,
                     'target_sl': 0
                 })
         return {
             'entry_reason': 'N/A',
-            'ai_strategy': 'Trust the plan',
+                'ai_strategy': 'Trust the plan',
             'entry_price': 0,
-            'target_tp': 0,
+                'target_tp': 0,
             'target_sl': 0
         }
     except Exception as e:
         print(f"⚠️ 读取决策上下文失败: {e}")
         return {
             'entry_reason': 'N/A',
-            'ai_strategy': 'Trust the plan',
+                'ai_strategy': 'Trust the plan',
             'entry_price': 0,
-            'target_tp': 0,
+                'target_tp': 0,
             'target_sl': 0
         }
 
@@ -27140,7 +26913,7 @@ def clear_position_context(coin):
     参数:
         coin: str, 币种名称
     """
-    model_name = os.getenv("MODEL_NAME", "deepseek")
+    model_name = os.getenv("MODEL_NAME", "qwen")
     context_file = Path("trading_data") / model_name / "position_contexts.json"
     
     try:
@@ -27235,7 +27008,7 @@ def build_decision_context(current_positions=None):
         str, formatted decision context
     """
     context = ""
-    model_name = os.getenv("MODEL_NAME", "deepseek")
+    model_name = os.getenv("MODEL_NAME", "qwen")
     
     # 1. Read compressed insights from learning_config.json (~50 tokens)
     # 🔧 V7.7.0.19: 从 learning_config.json 读取 compressed_insights
@@ -27341,7 +27114,7 @@ def build_decision_context(current_positions=None):
                             
                             context += f"""**{coin}**: Target {target_tp:.0f} (distance {distance:.1f}%)
 - Entry Reason: {ctx.get('entry_reason', 'N/A')[:50]}
-- Commitment: {ctx.get('ai_strategy', 'Trust the plan')}
+    - Commitment: {ctx.get('ai_strategy', 'Trust the plan')}
 """
         except Exception as e:
             print(f"⚠️ Failed to read position contexts: {e}")
