@@ -10221,25 +10221,28 @@ def analyze_and_adjust_params():
                 swing_opps = full_analysis['swing']['opportunities']
                 all_opps = scalping_opps + swing_opps
                 
-                # 使用新参数过滤
+                # 【V8.5.2.4.76】修复：正确区分新旧参数
+                # old_config = 优化前的参数（上一次的参数）
+                # config = 优化后的参数（本次应用的参数）
                 from backtest_optimizer_v8321 import passes_basic_filter
                 
-                # 获取新参数
+                # 获取旧参数（优化前，从old_config）
+                old_scalping_params = old_config.get('scalping_params', {}) if old_config else {}
+                old_swing_params = old_config.get('swing_params', {}) if old_config else {}
+                
+                # 获取新参数（优化后，从config）
                 new_scalping_params = config.get('scalping_params', {})
                 new_swing_params = config.get('swing_params', {})
                 
-                # 获取旧参数（用于对比）
-                old_scalping_params = old_config.get('scalping_params', {}) if old_config else new_scalping_params
-                old_swing_params = old_config.get('swing_params', {}) if old_config else new_swing_params
-                
-                # 过滤机会
-                new_captured_scalping = [o for o in scalping_opps if passes_basic_filter(o, new_scalping_params)]
-                new_captured_swing = [o for o in swing_opps if passes_basic_filter(o, new_swing_params)]
-                new_captured = new_captured_scalping + new_captured_swing
-                
+                # 过滤机会：旧参数
                 old_captured_scalping = [o for o in scalping_opps if passes_basic_filter(o, old_scalping_params)]
                 old_captured_swing = [o for o in swing_opps if passes_basic_filter(o, old_swing_params)]
                 old_captured = old_captured_scalping + old_captured_swing
+                
+                # 过滤机会：新参数
+                new_captured_scalping = [o for o in scalping_opps if passes_basic_filter(o, new_scalping_params)]
+                new_captured_swing = [o for o in swing_opps if passes_basic_filter(o, new_swing_params)]
+                new_captured = new_captured_scalping + new_captured_swing
                 
                 # 计算统计
                 # 【V8.5.2.4.75】修复：使用objective_profit而不是actual_profit_pct

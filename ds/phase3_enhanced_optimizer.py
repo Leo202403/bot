@@ -677,27 +677,27 @@ def optimize_for_signal_type(
         }
         
         
-        # 【V8.5.2.4.75】添加trailing stop参数
+        # 【V8.5.2.4.76】调整trailing stop参数（让利润有更多空间）
         if enable_advanced_filters:
             param_grid.update({
                 'require_strong_pattern': [False, True],
                 'min_trend_strength': ['any', 'normal', 'strong'],
                 'require_near_sr': [False, True],
                 'trailing_stop_enabled': [False, True],
-                'trailing_stop_activation': [0.5, 1.0],
-                'trailing_stop_distance': [1.0, 1.5],
+                'trailing_stop_activation': [1.0, 2.0],  # 提高激活阈值（0.5→2.0）
+                'trailing_stop_distance': [1.5, 2.0],    # 提高跟踪距离（1.0→1.5）
             })
-            print(f"     🎨 【V8.5.2.4.75】高级筛选已启用（8维度探索+移动止损）")
+            print(f"     🎨 【V8.5.2.4.76】高级筛选已启用（8维度探索+移动止损）")
         else:
             param_grid.update({
                 'require_strong_pattern': [False],
                 'min_trend_strength': ['any'],
                 'require_near_sr': [False],
                 'trailing_stop_enabled': [True],
-                'trailing_stop_activation': [0.5],
-                'trailing_stop_distance': [1.0],
+                'trailing_stop_activation': [2.0],  # 提高激活阈值（盈利2倍ATR时启动）
+                'trailing_stop_distance': [1.5],    # 提高跟踪距离（回撤1.5倍ATR触发）
             })
-            print(f"     🎯 【V8.5.2.4.75】使用标准筛选+移动止损（5维度：基础+质量+TP）")
+            print(f"     🎯 【V8.5.2.4.76】使用标准筛选+移动止损（5维度：基础+质量+TP）")
         
         print(f"     📐 基础条件: score≥{param_grid['min_signal_score']}, consensus≥{param_grid['min_indicator_consensus']}")
         print(f"     💡 质量控制: R:R≥{param_grid['min_risk_reward']}, 密度≥{param_grid['min_profit_density']}")
@@ -732,27 +732,27 @@ def optimize_for_signal_type(
         }
         
         
-        # 【V8.5.2.4.75】添加trailing stop参数
+        # 【V8.5.2.4.76】调整trailing stop参数（让利润有更多空间）
         if enable_advanced_filters:
             param_grid.update({
                 'require_strong_pattern': [False, True],
                 'min_trend_strength': ['any', 'normal', 'strong'],
                 'require_near_sr': [False, True],
                 'trailing_stop_enabled': [False, True],
-                'trailing_stop_activation': [0.5, 1.0],
-                'trailing_stop_distance': [1.0, 1.5],
+                'trailing_stop_activation': [1.0, 2.0],  # 提高激活阈值（0.5→2.0）
+                'trailing_stop_distance': [1.5, 2.0],    # 提高跟踪距离（1.0→1.5）
             })
-            print(f"     🎨 【V8.5.2.4.75】高级筛选已启用（8维度探索+移动止损）")
+            print(f"     🎨 【V8.5.2.4.76】高级筛选已启用（8维度探索+移动止损）")
         else:
             param_grid.update({
                 'require_strong_pattern': [False],
                 'min_trend_strength': ['any'],
                 'require_near_sr': [False],
                 'trailing_stop_enabled': [True],
-                'trailing_stop_activation': [0.5],
-                'trailing_stop_distance': [1.0],
+                'trailing_stop_activation': [2.0],  # 提高激活阈值（盈利2倍ATR时启动）
+                'trailing_stop_distance': [1.5],    # 提高跟踪距离（回撤1.5倍ATR触发）
             })
-            print(f"     🎯 【V8.5.2.4.75】使用标准筛选+移动止损（5维度：基础+质量+TP）")
+            print(f"     🎯 【V8.5.2.4.76】使用标准筛选+移动止损（5维度：基础+质量+TP）")
         
         print(f"     📐 基础条件: score≥{param_grid['min_signal_score']}, consensus≥{param_grid['min_indicator_consensus']}")
         print(f"     💡 质量控制: R:R≥{param_grid['min_risk_reward']}, 密度≥{param_grid['min_profit_density']}")
