@@ -10924,6 +10924,9 @@ def analyze_and_adjust_params():
             # 【V8.5.2.4.81】收集Phase 1-4数据用于邮件和Bark
             print(f"\n[V8.5.2.4.81] 收集Phase数据...")
             
+            # 【V8.5.2.4.83】获取phase1_baseline（从快速探索结果中）
+            phase1_baseline = quick_search_baseline if 'quick_search_baseline' in locals() else None
+            
             # Phase 1数据（客观机会）
             phase1_data = {}
             if phase1_baseline:
