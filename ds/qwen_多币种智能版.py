@@ -7269,13 +7269,13 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         raise ValueError("【V8.5.2.3】quick_global_search_v8316必须提供confirmed_opportunities，不再支持降级使用market_snapshots")
     
     # 🔧 V8.5.2.4.33: 修复all_opportunities变量未定义 - 正确的缩进
-        print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
-        # 合并超短线和波段机会
-        all_opportunities = (
-            confirmed_opportunities['scalping']['opportunities'] + 
-            confirmed_opportunities['swing']['opportunities']
-        )
-        print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
+    print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
+    # 合并超短线和波段机会
+    all_opportunities = (
+        confirmed_opportunities['scalping']['opportunities'] + 
+        confirmed_opportunities['swing']['opportunities']
+    )
+    print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
     
     # 【V8.5.2.4.18】前向验证：分割训练集和验证集
     print(f"\n  📊 【前向验证】数据分割（70%训练/30%验证）...")
