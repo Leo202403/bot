@@ -12568,8 +12568,8 @@ def analyze_and_adjust_params():
                     # 调试输出：验证参数读取正确
                     scalping_params = config.get('scalping_params', {})
                     swing_params = config.get('swing_params', {})
-                        print(f"[参数调试] scalping_params keys: {list(scalping_params.keys()) if scalping_params else 'None'}")
-                        print(f"[参数调试] swing_params keys: {list(swing_params.keys()) if swing_params else 'None'}")
+                    print(f"[参数调试] scalping_params keys: {list(scalping_params.keys()) if scalping_params else 'None'}")
+                    print(f"[参数调试] swing_params keys: {list(swing_params.keys()) if swing_params else 'None'}")
                 except Exception as e:
                     print(f"⚠️ 参数调试失败: {e}")
                 
@@ -21087,7 +21087,7 @@ def execute_portfolio_actions(
                         elif 'consensus' in market_data:
                             indicator_consensus = market_data.get('consensus', 0)
                             print(f"     ✓ 从consensus获取: {indicator_consensus}")
-                    else:
+                        else:
                             print(f"     ❌ 所有共振字段都不存在！")
                     else:
                         print(f"     ❌ market_data为None！")
@@ -21203,7 +21203,7 @@ def execute_portfolio_actions(
                         elif 'consensus' in market_data:
                             indicator_consensus = market_data.get('consensus', 0)
                             print(f"     ✓ 从consensus获取: {indicator_consensus}")
-                    else:
+                        else:
                             print(f"     ❌ 所有共振字段都不存在！")
                     else:
                         print(f"     ❌ market_data为None！")
@@ -23032,7 +23032,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             print(f"  🔍 [{coin_idx}/{total_coins}] {coin}...", end='', flush=True)
             
             # 全点位分析（不采样）
-                sampled_indices = list(range(total_points))
+            sampled_indices = list(range(total_points))
             
             for idx_count, idx in enumerate(sampled_indices):
                 # 每200个点显示进度
