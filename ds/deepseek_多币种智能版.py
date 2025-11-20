@@ -9790,30 +9790,12 @@ def analyze_and_adjust_params():
         print("\n【错过机会分析】")
         print(f"ℹ️  跳过旧版错过机会分析（已由开仓时机分析V2模块完全替代）")
         
-        # 保留old_config定义（后续代码可能需要）
-        config = load_learning_config()
-        import copy
-        old_config = copy.deepcopy(config)
-        
-        # 如果config中没有这些参数，从global中提取作为旧参数
-        if 'scalping_params' not in old_config:
-            old_config['scalping_params'] = {
-                'atr_tp_multiplier': old_config.get('global', {}).get('atr_tp_multiplier', 2.0),
-                'atr_stop_multiplier': old_config.get('global', {}).get('atr_stop_multiplier', 1.5),
-                'min_risk_reward': old_config.get('global', {}).get('min_risk_reward', 1.5),
-                'min_signal_score': old_config.get('global', {}).get('min_signal_score', 60),
-                'min_indicator_consensus': old_config.get('global', {}).get('min_indicator_consensus', 1),
-                'max_holding_hours': 12
-            }
-        if 'swing_params' not in old_config:
-            old_config['swing_params'] = {
-                'atr_tp_multiplier': old_config.get('global', {}).get('atr_tp_multiplier', 3.0),
-                'atr_stop_multiplier': old_config.get('global', {}).get('atr_stop_multiplier', 1.5),
-                'min_risk_reward': old_config.get('global', {}).get('min_risk_reward', 2.0),
-                'min_signal_score': old_config.get('global', {}).get('min_signal_score', 60),
-                'min_indicator_consensus': old_config.get('global', {}).get('min_indicator_consensus', 1),
-                'max_holding_hours': 72
-            }
+        # 【V8.5.2.4.89】延迟加载old_config - 在Phase 2之后再加载（节省Phase 1阶段的内存）
+        # old_config只在Phase 2之后计算参数变化时使用（第10840行附近）
+        # 在此处过早加载会导致OOM（Phase 1的4000个机会 + config的deepcopy）
+        # config = load_learning_config()  ← 延迟到Phase 2之后
+        # import copy
+        # old_config = copy.deepcopy(config)  ← 延迟到Phase 2之后
         
         # 【V8.5.2.4.89】完全禁用旧版analyze_missed_opportunities调用
         # 原因：
@@ -10826,6 +10808,31 @@ def analyze_and_adjust_params():
             
             # 【V8.5.2.4.89】只在必要时加载一次config（获取Phase 2保存的数据）
             config = load_learning_config()
+            
+            # 【V8.5.2.4.89】在此处加载old_config（Phase 2之后，真正需要时才加载）
+            # 之前在Phase 1之后就加载，导致整个Phase 1+2期间old_config占用内存
+            import copy
+            old_config = copy.deepcopy(config)
+            
+            # 如果config中没有这些参数，从global中提取作为旧参数
+            if 'scalping_params' not in old_config:
+                old_config['scalping_params'] = {
+                    'atr_tp_multiplier': old_config.get('global', {}).get('atr_tp_multiplier', 2.0),
+                    'atr_stop_multiplier': old_config.get('global', {}).get('atr_stop_multiplier', 1.5),
+                    'min_risk_reward': old_config.get('global', {}).get('min_risk_reward', 1.5),
+                    'min_signal_score': old_config.get('global', {}).get('min_signal_score', 60),
+                    'min_indicator_consensus': old_config.get('global', {}).get('min_indicator_consensus', 1),
+                    'max_holding_hours': 12
+                }
+            if 'swing_params' not in old_config:
+                old_config['swing_params'] = {
+                    'atr_tp_multiplier': old_config.get('global', {}).get('atr_tp_multiplier', 3.0),
+                    'atr_stop_multiplier': old_config.get('global', {}).get('atr_stop_multiplier', 1.5),
+                    'min_risk_reward': old_config.get('global', {}).get('min_risk_reward', 2.0),
+                    'min_signal_score': old_config.get('global', {}).get('min_signal_score', 60),
+                    'min_indicator_consensus': old_config.get('global', {}).get('min_indicator_consensus', 1),
+                    'max_holding_hours': 72
+                }
 
             # 🆕 V8.5.6: 区分"测试参数"和"实际调整参数"
             # adjusted_count统计所有在adjustments中的参数（包括测试过但未改变的）
