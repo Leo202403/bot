@@ -10601,11 +10601,11 @@ def analyze_and_adjust_params():
         # print("\n【第3步：Phase 3风险控制优化】")  ← 已删除
         scalping_optimization = None
         swing_optimization = None
-        profit_comparison = {
-            'has_data': False,
-            'scalping': {},
-            'swing': {}
-        }
+            profit_comparison = {
+                'has_data': False,
+                'scalping': {},
+                'swing': {}
+            }
             
         # ========== 【V8.5.2.4.47】DEPRECATED - 旧Phase 3代码已被phase3_enhanced_optimizer.py替代 ==========
         # 此段代码导致Phase 3重复执行（新Phase 3在quick_global_search_v8316中执行）
@@ -12369,7 +12369,7 @@ def analyze_and_adjust_params():
                         
                         # 错过机会教训
                         if ai_reflection.get('missed_lessons'):
-                                    learning_insights_html += """
+                            learning_insights_html += """
         <div style="background: #fff; padding: 15px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #f44336;">
             <h3 style="color: #f44336; margin: 0 0 10px 0;">📉 错过机会教训</h3>
             <ul style="list-style-type: disc; padding-left: 20px; margin: 5px 0;">
