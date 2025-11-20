@@ -9786,11 +9786,12 @@ def analyze_and_adjust_params():
             print(f"✓ 完成{len(trade_analyses)}笔交易分析")
         
         # 🆕 V3.0: 错过机会分析
+        # 【V8.5.2.4.89】禁用旧版错过机会分析（已由开仓时机分析V2模块完全替代，且会导致OOM）
         print("\n【错过机会分析】")
-        config = load_learning_config()
+        print(f"ℹ️  跳过旧版错过机会分析（已由开仓时机分析V2模块完全替代）")
         
-        # 🔧 V7.8.0: 保存旧参数配置的副本（用于新旧参数对比）
-        # 【V8.5.1修复】确保old_config包含scalping_params和swing_params
+        # 保留old_config定义（后续代码可能需要）
+        config = load_learning_config()
         import copy
         old_config = copy.deepcopy(config)
         
@@ -9814,21 +9815,11 @@ def analyze_and_adjust_params():
                 'max_holding_hours': 72
             }
         
-        if kline_snapshots is not None and len(trends) > 0:
-            try:
-                yesterday_opened_trades_list = yesterday_opened_trades.to_dict('records')
-                missed_opportunities = analyze_missed_opportunities(trends, yesterday_opened_trades_list, config)
-                
-                if missed_opportunities:
-                    print(f"✓ 发现{len(missed_opportunities)}个错过的机会")
-                    for opp in missed_opportunities[:3]:  # 只打印前3个
-                        print(f"  • {opp['trend']['coin']}: {opp['trend']['type']} {opp['potential_profit_pct']:.1f}%")
-                        print(f"    原因: {opp['reason']}")
-                else:
-                    print("✓ 所有重要机会都已把握")
-            except Exception as e:
-                # 🔧 V8.3.25.12: 旧的错过机会分析已弃用，跳过错误
-                print(f"ℹ️  跳过旧版错过机会分析（已由V2模块替代）")
+        # 【V8.5.2.4.89】完全禁用旧版analyze_missed_opportunities调用
+        # 原因：
+        # 1. 处理3000+个机会时内存爆发（OOM）
+        # 2. 已被entry_exit_timing_analyzer_v2完全替代
+        # 3. 新版在开仓时机分析环节提供更全面的错过机会分析
 
         # 🆕 V7.7.0.15: 平仓时机分析
         # 🔧 V8.3.25.8: 使用新的V2分析（完整的市场对比）
