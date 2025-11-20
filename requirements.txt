@@ -1,0 +1,19 @@
+# V8.5.2.4.88 依赖包列表
+
+# 核心依赖
+schedule>=1.2.0
+openai>=1.0.0
+ccxt>=4.0.0
+pandas>=2.0.0
+numpy>=1.24.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+scipy>=1.11.0
+
+# 邮件相关（内置，无需安装）
+# smtplib
+# email
+
+# 其他
+typing-extensions>=4.8.0
+
