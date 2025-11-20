@@ -589,7 +589,7 @@ def call_ai_unified(prompt: str, model_name: str) -> str:
     if model_name == "deepseek":
         api_key = os.getenv("DEEPSEEK_API_KEY")
         api_url = "https://api.deepseek.com/v1/chat/completions"
-        model_id = "deepseek-chat"
+        model_id = "deepseek-reasoner"
     else:  # qwen
         api_key = os.getenv("DASHSCOPE_API_KEY")
         api_url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"

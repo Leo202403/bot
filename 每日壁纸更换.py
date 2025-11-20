@@ -2392,11 +2392,11 @@ def trading_chat():
         if model == 'qwen':
             api_key = os.getenv('QWEN_API_KEY', '')
             api_url = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
-            ai_model = 'qwen-turbo'
+            ai_model = 'qwen3-max'
         else:  # deepseek
             api_key = os.getenv('DEEPSEEK_API_KEY', 'sk-1d8568a372774640ad4daac128ede404')
             api_url = 'https://api.deepseek.com/chat/completions'
-            ai_model = 'deepseek-chat'
+            ai_model = 'deepseek-reasoner'
         
         response = requests.post(
             api_url,

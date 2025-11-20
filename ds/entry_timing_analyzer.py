@@ -427,7 +427,7 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
             api_key = deepseek_key.strip()
             base_url = "https://api.deepseek.com"
             model_type = "DeepSeek"
-            model_name = "deepseek-chat"  # 🔧 V8.5.2.4.28: 使用deepseek-chat代替reasoner（reasoner可能返回空响应）
+            model_name = "deepseek-reasoner"  # 🔧 V8.5.2.4.28: 使用deepseek-reasoner代替reasoner（reasoner可能返回空响应）
         elif qwen_key:
             api_key = qwen_key.strip()
             base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -995,7 +995,7 @@ def generate_ai_exit_insights(exit_analysis, entry_analysis=None, market_context
             api_key = deepseek_key.strip()
             base_url = "https://api.deepseek.com"
             model_type = "DeepSeek"
-            model_name = "deepseek-chat"  # 🔧 V8.5.2.4.28: 使用deepseek-chat代替reasoner（reasoner可能返回空响应）
+            model_name = "deepseek-reasoner"  # 🔧 V8.5.2.4.28: 使用deepseek-reasoner代替reasoner（reasoner可能返回空响应）
         elif qwen_key:
             api_key = qwen_key.strip()
             base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"

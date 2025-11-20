@@ -41,7 +41,7 @@ def generate_simple_ai_reflection(entry_analysis, exit_analysis, ai_decisions):
         if deepseek_key:
             api_key = deepseek_key.strip()
             base_url = "https://api.deepseek.com"
-            model_name = "deepseek-chat"
+            model_name = "deepseek-reasoner"
             model_type = "DeepSeek"
         elif qwen_key:
             api_key = qwen_key.strip()
