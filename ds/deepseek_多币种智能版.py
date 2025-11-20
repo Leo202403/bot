@@ -7732,6 +7732,59 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             print(f"     ⚡ 超短线真实持仓: {scalping_real_holding:.1f}h | 最优权重: {best_scalping_weights['name']}")
             print(f"     🌊 波段真实持仓: {swing_real_holding:.1f}h | 最优权重: {best_swing_weights['name']}")
             print(f"     🏆 Top5参数组合已保存（供Phase 3使用）")
+            
+            # 【V8.5.2.4.80】保存Phase 2学习成果到config
+            # 目的：保留learned_features供下次回测参考，但不保存完整参数
+            # 这样既保留了学习成果，又不影响Phase 3-4的参数优化流程
+            try:
+                from datetime import datetime
+                
+                # 初始化phase2_learning结构
+                if 'phase2_learning' not in current_config:
+                    current_config['phase2_learning'] = {
+                        'latest': None,
+                        'history': []
+                    }
+                
+                # 构建本次学习成果
+                learning_record = {
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'learned_features': phase2_baseline['learned_features'],
+                    'performance': {
+                        'capture_rate': phase2_baseline.get('capture_rate', 0),
+                        'avg_profit': phase2_baseline.get('avg_profit', 0),
+                        'captured_count': phase2_baseline.get('captured_count', 0)
+                    }
+                }
+                
+                # 如果有旧的latest，移到history
+                if current_config['phase2_learning']['latest']:
+                    current_config['phase2_learning']['history'].insert(
+                        0, 
+                        current_config['phase2_learning']['latest']
+                    )
+                
+                # 更新latest
+                current_config['phase2_learning']['latest'] = learning_record
+                
+                # 只保留最近5次历史记录（避免文件过大）
+                if len(current_config['phase2_learning']['history']) > 5:
+                    current_config['phase2_learning']['history'] = \
+                        current_config['phase2_learning']['history'][:5]
+                
+                # 立即保存learned_features（独立于Phase 3-4流程）
+                save_learning_config(current_config)
+                
+                print(f"\n  💾 【Phase 2学习成果已保存到配置文件】")
+                print(f"     ✅ 信号分权重: 超短线={best_scalping_weights['name']}, 波段={best_swing_weights['name']}")
+                print(f"     ✅ Top5参数组合: {len(top5_results)}组")
+                if phase2_baseline['learned_features'].get('optimal_tp_sl'):
+                    opt_tp_sl = phase2_baseline['learned_features']['optimal_tp_sl']
+                    print(f"     ✅ 最优TP/SL: 超短线TP={opt_tp_sl.get('scalping', {}).get('tp', 'N/A')}x, 波段TP={opt_tp_sl.get('swing', {}).get('tp', 'N/A')}x")
+                print(f"     ✅ 真实持仓: 超短线{scalping_real_holding:.1f}h, 波段{swing_real_holding:.1f}h")
+                print(f"     📊 历史记录: {len(current_config['phase2_learning']['history'])}次")
+            except Exception as e:
+                print(f"     ⚠️  保存Phase 2学习成果失败: {e}")
         else:
             # 【V8.5.2.4.22】即使无捕获机会，也生成baseline（避免Phase 3被跳过）
             print(f"  ⚠️  当前参数未捕获到任何机会，生成空baseline")
