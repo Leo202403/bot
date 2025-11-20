@@ -12567,8 +12567,8 @@ def analyze_and_adjust_params():
                     # 调试输出：验证参数读取正确
                     scalping_params = config.get('scalping_params', {})
                     swing_params = config.get('swing_params', {})
-                        print(f"[参数调试] scalping_params keys: {list(scalping_params.keys()) if scalping_params else 'None'}")
-                        print(f"[参数调试] swing_params keys: {list(swing_params.keys()) if swing_params else 'None'}")
+                    print(f"[参数调试] scalping_params keys: {list(scalping_params.keys()) if scalping_params else 'None'}")
+                    print(f"[参数调试] swing_params keys: {list(swing_params.keys()) if swing_params else 'None'}")
                 except Exception as e:
                     print(f"⚠️ 参数调试失败: {e}")
                 
@@ -21086,7 +21086,7 @@ def execute_portfolio_actions(
                         elif 'consensus' in market_data:
                             indicator_consensus = market_data.get('consensus', 0)
                             print(f"     ✓ 从consensus获取: {indicator_consensus}")
-                    else:
+                        else:
                             print(f"     ❌ 所有共振字段都不存在！")
                     else:
                         print(f"     ❌ market_data为None！")
@@ -21202,7 +21202,7 @@ def execute_portfolio_actions(
                         elif 'consensus' in market_data:
                             indicator_consensus = market_data.get('consensus', 0)
                             print(f"     ✓ 从consensus获取: {indicator_consensus}")
-                    else:
+                        else:
                             print(f"     ❌ 所有共振字段都不存在！")
                     else:
                         print(f"     ❌ market_data为None！")
@@ -23031,7 +23031,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             print(f"  🔍 [{coin_idx}/{total_coins}] {coin}...", end='', flush=True)
             
             # 全点位分析（不采样）
-                sampled_indices = list(range(total_points))
+            sampled_indices = list(range(total_points))
             
             for idx_count, idx in enumerate(sampled_indices):
                 # 每200个点显示进度
@@ -23128,20 +23128,20 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         
                         # 计算当前利润
                     if direction == 'long':
-                            profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
+                        profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
                     else:
-                            profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
-                        
-                        # 启动跟踪
-                        if not tracking_started and profit_pct >= MIN_PROFIT_THRESHOLD:
-                            tracking_started = True
-                            max_profit_seen = profit_pct
-                            bars_to_max_profit = bar_idx
-                        
-                        # 更新最大利润
-                        if tracking_started and profit_pct > max_profit_seen:
-                            max_profit_seen = profit_pct
-                            bars_to_max_profit = bar_idx
+                        profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
+                    
+                    # 启动跟踪
+                    if not tracking_started and profit_pct >= MIN_PROFIT_THRESHOLD:
+                        tracking_started = True
+                        max_profit_seen = profit_pct
+                        bars_to_max_profit = bar_idx
+                    
+                    # 更新最大利润
+                    if tracking_started and profit_pct > max_profit_seen:
+                        max_profit_seen = profit_pct
+                        bars_to_max_profit = bar_idx
                     
                     if not tracking_started:
                         continue
@@ -23214,7 +23214,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             gc.collect()
         
         print(f"\n  ✅ Phase 1.1完成: 收集到{len(all_profit_opportunities)}个盈利机会")
-            gc.collect()
+        gc.collect()
         
         # ========================================
         # 【Phase 1.2】统计分析与动态阈值
