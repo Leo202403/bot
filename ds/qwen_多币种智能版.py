@@ -10913,8 +10913,10 @@ def analyze_and_adjust_params():
             # 【V8.5.2.4.83】获取phase1_baseline（从快速探索结果中）
             phase1_baseline = quick_search_baseline if 'quick_search_baseline' in locals() else None
             
-            # 【V8.5.2.4.89】获取phase2_baseline（从快速探索结果中）
+            # 【V8.5.2.4.89】获取phase2_baseline和phase3_result（从optimize函数返回值或iterative_result中）
             phase2_baseline = phase2_baseline_result if 'phase2_baseline_result' in locals() else None
+            phase3_result = iterative_result.get('phase3_result') if iterative_result and 'phase3_result' in iterative_result else None
+            phase4_result = iterative_result.get('phase4_result') if iterative_result and 'phase4_result' in iterative_result else None
             
             # Phase 1数据（客观机会）
             phase1_data = {}
@@ -20918,7 +20920,7 @@ def execute_portfolio_actions(
                     f"AI判断:{direction} 但盈亏比不足\n"
                     f"要求:{min_rr_required:.1f} 实际:{risk_reward:.2f}\n"
                     f"当前价:{entry_price:.2f} 止损:{stop_loss:.2f} 止盈:{take_profit:.2f}\n"
-                    f"AI理由: {action.get('reason', 'N/A')[:80]}",
+                        f"AI理由: {action.get('reason', 'N/A')[:80]}",
                 )
                 continue
             else:
