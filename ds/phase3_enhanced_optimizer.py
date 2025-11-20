@@ -729,21 +729,23 @@ def optimize_for_signal_type(
         
         # 【V8.5.2.4.75】Phase 3进一步放宽筛选 + 提高TP + 强制移动止损
         # 目标：在Phase 2基础上提高利润（当前6.46% → 目标10-15%）
-        # 策略：大幅放宽5维度筛选 + 提高TP上限 + 强制移动止损
+        # 【V8.5.2.4.89】内存优化：减少测试组合数（108→18）
+        # 策略：保留核心维度 + 减少档位
         param_grid = {
-            # 核心筛选条件（大幅放宽）
-            'min_indicator_consensus': [1, 2],               # 共振度（保持2档）
-            'min_signal_score': [60, 70, 75],                # 信号分（降低起点70→60）
+            # 核心筛选条件（减少档位）
+            'min_indicator_consensus': [1],                  # 共振度（只保留最宽松）
+            'min_signal_score': [60, 75],                    # 信号分（2档：宽松+标准）
             
-            # 质量控制条件（大幅放宽）
-            'min_risk_reward': [1.0, 1.2],                   # R:R（降低起点1.2→1.0）
-            'min_profit_density': [4.0, 6.0, 8.0],           # 利润密度（降低起点6.0→4.0）
+            # 质量控制条件（减少档位）
+            'min_risk_reward': [1.0],                        # R:R（只保留最宽松）
+            'min_profit_density': [4.0, 6.0],                # 利润密度（2档）
             
-            # TP/SL优化（提高TP上限）
-            'atr_tp_multiplier': [optimal_tp, optimal_tp * 1.25, optimal_tp * 1.5],  # 扩大TP范围
+            # TP/SL优化（减少档位）
+            'atr_tp_multiplier': [optimal_tp, optimal_tp * 1.5],  # TP（2档：标准+扩大）
             'atr_stop_multiplier': [optimal_sl],
             'max_holding_hours': [int(avg_holding)],
         }
+        # 计算：1×2×1×2×2 = 8组/起点，4起点 = 32组总计
         
         
         # 【V8.5.2.4.76】调整trailing stop参数（让利润有更多空间）
@@ -784,21 +786,23 @@ def optimize_for_signal_type(
         
         # 【V8.5.2.4.75】Phase 3进一步放宽筛选 + 提高TP + 强制移动止损
         # 目标：在Phase 2基础上提高利润（当前6.49% → 目标10-15%）
-        # 策略：大幅放宽5维度筛选 + 提高TP上限 + 强制移动止损
+        # 【V8.5.2.4.89】内存优化：减少测试组合数（108→18）
+        # 策略：保留核心维度 + 减少档位
         param_grid = {
-            # 核心筛选条件（大幅放宽）
-            'min_indicator_consensus': [1, 2],               # 共振度（保持2档）
-            'min_signal_score': [65, 75, 80],                # 信号分（降低起点75→65）
+            # 核心筛选条件（减少档位）
+            'min_indicator_consensus': [1],                  # 共振度（只保留最宽松）
+            'min_signal_score': [65, 80],                    # 信号分（2档：宽松+标准）
             
-            # 质量控制条件（大幅放宽）
-            'min_risk_reward': [1.0, 1.2],                   # R:R（降低起点1.2→1.0）
-            'min_profit_density': [0.2, 0.3, 0.5],           # 利润密度（降低起点0.3→0.2）
+            # 质量控制条件（减少档位）
+            'min_risk_reward': [1.0],                        # R:R（只保留最宽松）
+            'min_profit_density': [0.2, 0.5],                # 利润密度（2档）
             
-            # TP/SL优化（提高TP上限）
-            'atr_tp_multiplier': [optimal_tp, optimal_tp * 1.27, optimal_tp * 1.59],  # 扩大TP范围（22→28→35）
+            # TP/SL优化（减少档位）
+            'atr_tp_multiplier': [optimal_tp, optimal_tp * 1.5],  # TP（2档：标准+扩大）
             'atr_stop_multiplier': [optimal_sl],
             'max_holding_hours': [int(avg_holding)],
         }
+        # 计算：1×2×1×2×2 = 8组/起点，4起点 = 32组总计
         
         
         # 【V8.5.2.4.76】调整trailing stop参数（让利润有更多空间）
