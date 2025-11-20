@@ -21615,9 +21615,10 @@ def main():
     schedule.every().day.at("00:05").do(analyze_and_adjust_params)
     print("AI参数优化: 每日北京时间08:05 (UTC 00:05)")
     
-    # 立即执行一次
-    print("\n开始首次分析...")
-    trading_bot()
+    # 【V8.5.2.4.88修复】移除立即执行，避免与schedule任务冲突导致OOM
+    # 让schedule自然触发，最多等待15分钟
+    print("\n等待schedule任务触发...")
+    print(f"下次执行时间: 每小时的 [1, 16, 31, 46] 分")
     
     # 循环执行（增强版：防止 schedule 僵死）
     # 心跳文件（用于外部监控）
