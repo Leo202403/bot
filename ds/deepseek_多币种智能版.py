@@ -6316,6 +6316,9 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     
     耗时：约1-2分钟（使用confirmed_opportunities更快）
     """
+    # 【V8.5.2.4.85】确保datetime在当前作用域可用
+    from datetime import datetime
+    
     print(f"\n{'='*70}")
     print(f"【V8.3.16 快速全局探索】")
     print(f"{'='*70}")
