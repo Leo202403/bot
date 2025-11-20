@@ -10601,12 +10601,12 @@ def analyze_and_adjust_params():
         # print("\n【第3步：Phase 3风险控制优化】")  ← 已删除
         scalping_optimization = None
         swing_optimization = None
-            profit_comparison = {
-                'has_data': False,
-                'scalping': {},
-                'swing': {}
-            }
-            
+        profit_comparison = {
+            'has_data': False,
+            'scalping': {},
+            'swing': {}
+        }
+        
         # ========== 【V8.5.2.4.47】DEPRECATED - 旧Phase 3代码已被phase3_enhanced_optimizer.py替代 ==========
         # 此段代码导致Phase 3重复执行（新Phase 3在quick_global_search_v8316中执行）
         # 导致内存耗尽（OOM Killed）：
@@ -12390,7 +12390,7 @@ def analyze_and_adjust_params():
                             learning_insights_html += "            </ol>\n        </div>\n"
                         
                         gen_time = ai_reflection.get('generated_at', 'N/A')
-                            learning_insights_html += f"""
+                        learning_insights_html += f"""
             <p style="color: #999; font-size: 0.85em; margin-top: 10px;">生成时间: {gen_time}</p>
         </div>
 """
@@ -21112,7 +21112,7 @@ def execute_portfolio_actions(
                         elif 'consensus' in market_data:
                             indicator_consensus = market_data.get('consensus', 0)
                             print(f"     ✓ 从consensus获取: {indicator_consensus}")
-                    else:
+                        else:
                             print(f"     ❌ 所有共振字段都不存在！")
                     else:
                         print(f"     ❌ market_data为None！")
@@ -21228,7 +21228,7 @@ def execute_portfolio_actions(
                         elif 'consensus' in market_data:
                             indicator_consensus = market_data.get('consensus', 0)
                             print(f"     ✓ 从consensus获取: {indicator_consensus}")
-                    else:
+                        else:
                             print(f"     ❌ 所有共振字段都不存在！")
                     else:
                         print(f"     ❌ market_data为None！")
@@ -23057,7 +23057,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             print(f"  🔍 [{coin_idx}/{total_coins}] {coin}...", end='', flush=True)
             
             # 全点位分析（不采样）
-                sampled_indices = list(range(total_points))
+            sampled_indices = list(range(total_points))
             
             for idx_count, idx in enumerate(sampled_indices):
                 # 每200个点显示进度
@@ -23153,9 +23153,9 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         _, row_data = future_row
                         
                         # 计算当前利润
-                    if direction == 'long':
+                        if direction == 'long':
                             profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
-                    else:
+                        else:
                             profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
                         
                         # 启动跟踪
