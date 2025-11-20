@@ -658,20 +658,20 @@ def optimize_for_signal_type(
         # 从learned_features或全局配置中获取（默认关闭）
         enable_advanced_filters = learned_features.get('enable_advanced_filters', False)
         
-        # 【V8.5.2.4.73】Phase 3全维度智能筛选 + 微调TP/SL
+        # 【V8.5.2.4.75】Phase 3放宽筛选 + 提高TP + 强制移动止损
         # 目标：在Phase 2基础上提高利润（当前6.46% → 目标10-15%）
-        # 策略：K线形态+趋势强度+支撑阻力+利润密度+微调TP
+        # 策略：放宽5维度筛选 + 提高TP上限 + 强制移动止损
         param_grid = {
-            # 核心筛选条件
-            'min_indicator_consensus': [1, 2, 3],             # 共振度
-            'min_signal_score': [75, 80, 85],                # 信号分（减少1个，因为增加其他维度）
+            # 核心筛选条件（放宽）
+            'min_indicator_consensus': [1, 2],               # 共振度（减少到2档）
+            'min_signal_score': [70, 75, 80],                # 信号分（降低起点70→70）
             
-            # 质量控制条件
-            'min_risk_reward': [1.5, 2.0],                   # R:R（减少1个）
-            'min_profit_density': [8.0, 10.0, 12.0],         # 利润密度（超短线）
+            # 质量控制条件（放宽）
+            'min_risk_reward': [1.2, 1.5],                   # R:R（降低起点1.5→1.2）
+            'min_profit_density': [6.0, 8.0, 10.0],          # 利润密度（降低起点8.0→6.0）
             
-            # TP/SL优化
-            'atr_tp_multiplier': [optimal_tp * 0.9, optimal_tp, optimal_tp * 1.1],
+            # TP/SL优化（提高TP上限）
+            'atr_tp_multiplier': [optimal_tp, optimal_tp * 1.25, optimal_tp * 1.5],  # 扩大TP范围
             'atr_stop_multiplier': [optimal_sl],
             'max_holding_hours': [int(avg_holding)],
         }
@@ -697,8 +697,8 @@ def optimize_for_signal_type(
         
         print(f"     📐 基础条件: score≥{param_grid['min_signal_score']}, consensus≥{param_grid['min_indicator_consensus']}")
         print(f"     💡 质量控制: R:R≥{param_grid['min_risk_reward']}, 密度≥{param_grid['min_profit_density']}")
-        print(f"     🎯 TP微调（±10%）: 范围[{optimal_tp*0.9:.1f}, {optimal_tp:.1f}, {optimal_tp*1.1:.1f}], SL={optimal_sl:.1f}")
-        print(f"     🚀 目标：{'全维度筛选' if enable_advanced_filters else '标准筛选+移动止损'}，提高平均利润（当前6.46% → 目标10-15%）")
+        print(f"     🎯 TP扩大（+25%/+50%）: 范围[{optimal_tp:.1f}, {optimal_tp*1.25:.1f}, {optimal_tp*1.5:.1f}], SL={optimal_sl:.1f}")
+        print(f"     🚀 目标：{'全维度筛选' if enable_advanced_filters else '放宽筛选+提高TP+强制移动止损'}，提高平均利润（当前6.46% → 目标10-15%）")
     else:  # swing
         # 【V8.5.2.4.68】固定Phase 2最优TP/SL，重点测试筛选条件
         swing_optimal = optimal_tp_sl.get('swing', {})
@@ -709,20 +709,20 @@ def optimize_for_signal_type(
         # 从learned_features或全局配置中获取（默认关闭）
         enable_advanced_filters = learned_features.get('enable_advanced_filters', False)
         
-        # 【V8.5.2.4.73】Phase 3全维度智能筛选 + 微调TP/SL
+        # 【V8.5.2.4.75】Phase 3放宽筛选 + 提高TP + 强制移动止损
         # 目标：在Phase 2基础上提高利润（当前6.49% → 目标10-15%）
-        # 策略：K线形态+趋势强度+支撑阻力+利润密度+微调TP
+        # 策略：放宽5维度筛选 + 提高TP上限 + 强制移动止损
         param_grid = {
-            # 核心筛选条件
-            'min_indicator_consensus': [1, 2, 3],             # 共振度
-            'min_signal_score': [80, 85, 90],                # 信号分（减少1个）
+            # 核心筛选条件（放宽）
+            'min_indicator_consensus': [1, 2],               # 共振度（减少到2档）
+            'min_signal_score': [75, 80, 85],                # 信号分（降低起点90→75）
             
-            # 质量控制条件
-            'min_risk_reward': [1.5, 2.0],                   # R:R（减少1个）
-            'min_profit_density': [0.5, 0.8, 1.0],           # 利润密度（波段）
+            # 质量控制条件（放宽）
+            'min_risk_reward': [1.2, 1.5],                   # R:R（降低起点1.5→1.2）
+            'min_profit_density': [0.3, 0.5, 0.8],           # 利润密度（降低起点0.5→0.3）
             
-            # TP/SL优化
-            'atr_tp_multiplier': [optimal_tp * 0.9, optimal_tp, optimal_tp * 1.1],
+            # TP/SL优化（提高TP上限）
+            'atr_tp_multiplier': [optimal_tp, optimal_tp * 1.27, optimal_tp * 1.59],  # 扩大TP范围（22→28→35）
             'atr_stop_multiplier': [optimal_sl],
             'max_holding_hours': [int(avg_holding)],
         }
@@ -748,9 +748,8 @@ def optimize_for_signal_type(
         
         print(f"     📐 基础条件: score≥{param_grid['min_signal_score']}, consensus≥{param_grid['min_indicator_consensus']}")
         print(f"     💡 质量控制: R:R≥{param_grid['min_risk_reward']}, 密度≥{param_grid['min_profit_density']}")
-        print(f"     🎯 TP微调（±10%）: 范围[{optimal_tp*0.9:.1f}, {optimal_tp:.1f}, {optimal_tp*1.1:.1f}], SL={optimal_sl:.1f}")
-        print(f"     🚀 目标：{'全维度筛选' if enable_advanced_filters else '标准筛选+移动止损'}，提高平均利润（当前6.49% → 目标10-15%）")
-        print(f"     🎯 目标：去掉杂音，提高平均利润（预期7% → 10-14%）")
+        print(f"     🎯 TP扩大（+27%/+59%）: 范围[{optimal_tp:.1f}, {optimal_tp*1.27:.1f}, {optimal_tp*1.59:.1f}], SL={optimal_sl:.1f}")
+        print(f"     🚀 目标：{'全维度筛选' if enable_advanced_filters else '放宽筛选+提高TP+强制移动止损'}，提高平均利润（当前6.49% → 目标10-15%）")
     
     # 多起点搜索
     all_results = []

@@ -17849,7 +17849,7 @@ def prioritize_signals(market_data_list, ai_actions):
             print(f"     - 是否有indicators: {'indicators' in market_data}")
             if 'indicator_consensus' in market_data:
                 print(f"     - indicator_consensus值: {market_data['indicator_consensus']}")
-            
+
             scored_actions.append(
                 {
                     "action": action,
@@ -20819,7 +20819,7 @@ def execute_portfolio_actions(
                         elif 'consensus' in market_data:
                             indicator_consensus = market_data.get('consensus', 0)
                             print(f"     ✓ 从consensus获取: {indicator_consensus}")
-                        else:
+                    else:
                             print(f"     ❌ 所有共振字段都不存在！")
                     else:
                         print(f"     ❌ market_data为None！")
@@ -20935,7 +20935,7 @@ def execute_portfolio_actions(
                         elif 'consensus' in market_data:
                             indicator_consensus = market_data.get('consensus', 0)
                             print(f"     ✓ 从consensus获取: {indicator_consensus}")
-                        else:
+                    else:
                             print(f"     ❌ 所有共振字段都不存在！")
                     else:
                         print(f"     ❌ market_data为None！")
