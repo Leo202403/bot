@@ -7,6 +7,10 @@
 2. 获取当前持仓
 3. 获取历史订单
 4. 恢复到system_status.json和trades_history.csv
+
+重要：DeepSeek和Qwen使用不同的币安账户
+- deepseek: 使用 ds/.env 文件
+- qwen: 使用 ds/.env.qwen 文件
 """
 
 import os
@@ -18,51 +22,69 @@ from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 
-# 加载环境变量
-env_file = Path(__file__).parent.parent / ".env"
-if env_file.exists():
-    load_dotenv(env_file)
-else:
-    print(f"⚠️  环境变量文件不存在: {env_file}")
-    print("将尝试使用系统环境变量")
+# 全局变量存储两个交易所实例
+exchanges = {}
 
-# 配置
-BINANCE_API_KEY = os.getenv("BINANCE_API_KEY", "").strip()
-BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY", "").strip()
-USE_PORTFOLIO_MARGIN = True  # 统一账户模式
 
-if not BINANCE_API_KEY or not BINANCE_SECRET_KEY:
-    print("❌ 币安API密钥未配置，请检查环境变量")
-    sys.exit(1)
+def init_exchange(model_name):
+    """初始化指定模型的交易所实例"""
+    # 确定环境变量文件
+    if model_name == 'deepseek':
+        env_file = Path(__file__).parent / ".env"
+    elif model_name == 'qwen':
+        env_file = Path(__file__).parent / ".env.qwen"
+    else:
+        print(f"❌ 未知的模型: {model_name}")
+        return None
+    
+    if not env_file.exists():
+        print(f"❌ 环境变量文件不存在: {env_file}")
+        return None
+    
+    # 加载环境变量
+    load_dotenv(env_file, override=True)
+    
+    # 获取API密钥
+    api_key = os.getenv("BINANCE_API_KEY", "").strip()
+    secret_key = os.getenv("BINANCE_SECRET_KEY", "").strip()
+    use_portfolio = os.getenv("USE_PORTFOLIO_MARGIN", "true").lower() == "true"
+    
+    if not api_key or not secret_key:
+        print(f"❌ {model_name}: 币安API密钥未配置")
+        return None
+    
+    # 初始化交易所
+    exchange = ccxt.binance({
+        "apiKey": api_key,
+        "secret": secret_key,
+        "options": {
+            "defaultType": "future",
+            "portfolioMargin": use_portfolio,
+            "recvWindow": 60000,
+        },
+        "timeout": 30000,
+        "enableRateLimit": True,
+    })
+    
+    print(f"✅ {model_name}: 已连接 (API Key: {api_key[:10]}...)")
+    
+    return exchange
 
-# 初始化交易所
-exchange = ccxt.binance({
-    "apiKey": BINANCE_API_KEY,
-    "secret": BINANCE_SECRET_KEY,
-    "options": {
-        "defaultType": "future",  # 合约
-        "portfolioMargin": USE_PORTFOLIO_MARGIN,  # 统一账户模式
-        "recvWindow": 60000,
-    },
-    "timeout": 30000,
-    "enableRateLimit": True,
-})
 
 print("=" * 60)
 print("📊 从币安统一账户恢复数据")
 print("=" * 60)
-print(f"API Key: {BINANCE_API_KEY[:10]}...")
-print(f"统一账户模式: {USE_PORTFOLIO_MARGIN}")
+print("⚠️  注意: DeepSeek和Qwen使用不同的币安账户")
 print("")
 
 
-def get_account_balance():
+def get_account_balance(exchange, model_name):
     """获取账户余额和总资产"""
     try:
         # 对于统一账户，使用fapiPrivateV2GetAccount或直接fetch_balance
         balance = exchange.fetch_balance()
         
-        print("📌 账户余额信息:")
+        print(f"📌 {model_name} 账户余额信息:")
         print(f"  总权益: {balance.get('total', {}).get('USDT', 0):.2f} USDT")
         print(f"  可用余额: {balance.get('free', {}).get('USDT', 0):.2f} USDT")
         print(f"  冻结余额: {balance.get('used', {}).get('USDT', 0):.2f} USDT")
@@ -112,7 +134,7 @@ def get_account_balance():
         return None
 
 
-def get_open_positions():
+def get_open_positions(exchange, model_name):
     """获取当前持仓"""
     try:
         # 使用fetch_positions获取持仓
@@ -121,7 +143,7 @@ def get_open_positions():
         # 过滤出有持仓的
         open_positions = [p for p in positions if float(p.get('contracts', 0)) > 0]
         
-        print(f"\n📋 当前持仓: {len(open_positions)} 个")
+        print(f"\n📋 {model_name} 当前持仓: {len(open_positions)} 个")
         
         formatted_positions = []
         for pos in open_positions:
@@ -172,10 +194,10 @@ def get_open_positions():
         return []
 
 
-def get_order_history(symbol=None, limit=500):
+def get_order_history(exchange, model_name, symbol=None, limit=500):
     """获取历史订单"""
     try:
-        print(f"\n📜 获取订单历史...")
+        print(f"\n📜 {model_name} 获取订单历史...")
         
         # 支持的交易对
         symbols = [
@@ -350,38 +372,11 @@ def restore_to_trades_history(model_name, orders, positions):
 
 def main():
     """主函数"""
-    # 1. 获取账户数据
-    print("\n【步骤1】获取账户余额")
-    account_data = get_account_balance()
-    
-    if not account_data:
-        print("❌ 无法获取账户数据，退出")
-        return
-    
-    # 2. 获取持仓
-    print("\n【步骤2】获取当前持仓")
-    positions = get_open_positions()
-    
-    # 3. 获取订单历史
-    print("\n【步骤3】获取订单历史")
-    orders = get_order_history(limit=500)
-    
-    # 4. 显示总结
-    print("\n" + "=" * 60)
-    print("📊 数据汇总")
-    print("=" * 60)
-    print(f"总资产: {account_data['total_assets']:.2f} USDT")
-    print(f"可用余额: {account_data['available_balance']:.2f} USDT")
-    print(f"未实现盈亏: {account_data['unrealized_profit']:+.2f} USDT")
-    print(f"当前持仓: {len(positions)} 个")
-    print(f"历史订单: {len(orders)} 笔")
-    print("")
-    
-    # 5. 选择恢复模式
-    print("请选择恢复模式:")
-    print("  1) 恢复 DeepSeek")
-    print("  2) 恢复 Qwen")
-    print("  3) 恢复两者（DeepSeek + Qwen）")
+    # 1. 选择要恢复的模型
+    print("请选择要恢复的账户:")
+    print("  1) DeepSeek账户 (使用 ds/.env)")
+    print("  2) Qwen账户 (使用 ds/.env.qwen)")
+    print("  3) 两个账户都恢复")
     print("  4) 仅查看数据，不恢复")
     print("")
     
@@ -395,18 +390,90 @@ def main():
     elif choice == '3':
         models = ['deepseek', 'qwen']
     elif choice == '4':
-        print("\n✅ 数据查看完成")
-        return
+        view_only = True
+        models = ['deepseek', 'qwen']
     else:
         print("❌ 无效选项")
         return
     
-    # 6. 执行恢复
+    view_only = (choice == '4')
+    
+    # 2. 为每个模型获取数据
+    model_data = {}
+    
+    for model in models:
+        print("\n" + "=" * 60)
+        print(f"📊 处理 {model.upper()} 账户")
+        print("=" * 60)
+        
+        # 初始化交易所
+        exchange = init_exchange(model)
+        if not exchange:
+            print(f"⚠️  跳过 {model}")
+            continue
+        
+        # 获取账户数据
+        print(f"\n【步骤1】获取 {model} 账户余额")
+        account_data = get_account_balance(exchange, model)
+        
+        if not account_data:
+            print(f"❌ 无法获取 {model} 账户数据")
+            continue
+        
+        # 获取持仓
+        print(f"\n【步骤2】获取 {model} 当前持仓")
+        positions = get_open_positions(exchange, model)
+        
+        # 获取订单历史
+        print(f"\n【步骤3】获取 {model} 订单历史")
+        orders = get_order_history(exchange, model, limit=500)
+        
+        # 保存数据
+        model_data[model] = {
+            'account_data': account_data,
+            'positions': positions,
+            'orders': orders
+        }
+        
+        # 显示总结
+        print(f"\n{'=' * 60}")
+        print(f"📊 {model.upper()} 数据汇总")
+        print(f"{'=' * 60}")
+        print(f"总资产: {account_data['total_assets']:.2f} USDT")
+        print(f"可用余额: {account_data['available_balance']:.2f} USDT")
+        print(f"未实现盈亏: {account_data['unrealized_profit']:+.2f} USDT")
+        print(f"当前持仓: {len(positions)} 个")
+        print(f"历史订单: {len(orders)} 笔")
+    
+    # 如果只是查看，到此结束
+    if view_only:
+        print("\n✅ 数据查看完成")
+        return
+    
+    # 3. 确认恢复
+    print("\n" + "=" * 60)
+    print("⚠️  确认恢复")
+    print("=" * 60)
+    
+    for model in model_data.keys():
+        data = model_data[model]
+        print(f"\n{model.upper()}:")
+        print(f"  将恢复总资产: {data['account_data']['total_assets']:.2f} USDT")
+        print(f"  将恢复持仓: {len(data['positions'])} 个")
+    
+    print("")
+    confirm = input("确认执行恢复? (y/n): ").strip().lower()
+    
+    if confirm != 'y':
+        print("❌ 已取消")
+        return
+    
+    # 4. 执行恢复
     print("\n" + "=" * 60)
     print("🔧 开始恢复数据")
     print("=" * 60)
     
-    for model in models:
+    for model, data in model_data.items():
         print(f"\n【{model.upper()}】")
         
         # 备份
@@ -418,15 +485,15 @@ def main():
             src = data_dir / file
             if src.exists():
                 import shutil
-                shutil.copy2(src, backup_dir / file)
+                shutil.copy2(src, backup_dir / f"{model}_{file}")
         
         print(f"  ✓ 已备份到: {backup_dir}")
         
         # 恢复system_status.json
-        restore_to_system_status(model, account_data, positions)
+        restore_to_system_status(model, data['account_data'], data['positions'])
         
         # 恢复trades_history.csv（只添加缺失的持仓记录）
-        restore_to_trades_history(model, orders, positions)
+        restore_to_trades_history(model, data['orders'], data['positions'])
     
     print("\n" + "=" * 60)
     print("✅ 数据恢复完成！")

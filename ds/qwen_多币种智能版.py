@@ -18818,6 +18818,10 @@ def check_signal_type_switch(position, market_data, entry_context, config):
     try:
         from datetime import datetime
         
+        # 检查参数有效性
+        if not market_data:
+            return False, '', {}, "市场数据缺失"
+        
         signal_type = entry_context.get('signal_type', 'swing')
         entry_time_str = position.get('open_time')
         unrealized_pnl = position.get('unrealized_pnl', 0)
@@ -18900,6 +18904,10 @@ def check_swing_trailing_stop(position, market_data, entry_context, config):
         (should_update_sl: bool, new_sl: float, reason: str)
     """
     try:
+        # 检查参数有效性
+        if not market_data:
+            return False, 0, "市场数据缺失"
+        
         signal_type = entry_context.get('signal_type', 'swing')
         if signal_type != 'swing':
             return False, 0, "非Swing订单"
@@ -18954,6 +18962,10 @@ def check_swing_partial_exit(position, market_data, entry_context, config):
         (should_partial_exit: bool, exit_pct: float, reason: str)
     """
     try:
+        # 检查参数有效性
+        if not market_data:
+            return False, 0, "市场数据缺失"
+        
         signal_type = entry_context.get('signal_type', 'swing')
         if signal_type != 'swing':
             return False, 0, "非Swing订单"
