@@ -8007,6 +8007,11 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     print(f"        共振阈值: {swing_params.get('min_indicator_consensus', 'N/A')}")
                     print(f"        信号分阈值: {swing_params.get('min_signal_score', 'N/A')}")
                 
+                # 【V8.5.2.4.78】立即保存Phase 3参数到文件
+                # 确保邮件生成时能读取到最新参数
+                save_learning_config(current_config)
+                print(f"     💾 Phase 3参数已保存到配置文件")
+                
                 # 保存Phase 4验证状态到current_config
                 current_config['_phase4_status'] = overall_status
                 current_config['_phase4_validation'] = phase4_result
