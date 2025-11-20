@@ -15307,13 +15307,21 @@ def get_ohlcv_data(symbol, skip_timing_check=False):
         skip_timing_check: 是否跳过时机检查（回测模式使用）
     """
     try:
-        # 【V8.5.2.3新增】确保获取完整的15分钟K线数据
-        # 方法：获取数据后，移除最后一根K线（可能还在形成中）
+        # 【V8.5.2.4.88修复】区分实盘和回测的数据量
+        # 实盘：只需要计算指标的最少数据（MA72需要72根，留余量100根）
+        # 回测：需要完整历史数据用于模拟
         from datetime import datetime
+        import os
+        
+        is_backtest = os.getenv("MANUAL_BACKTEST") == "true" or skip_timing_check
         
         # === 15分钟K线数据（短期） ===
         # 多获取1根，然后移除最后一根（可能未完成）
-        limit_15m = 1345  # 14天数据 + 1根（用于移除）
+        if is_backtest:
+            limit_15m = 1345  # 回测：14天数据 + 1根
+        else:
+            limit_15m = 100  # 实盘：只需100根（足够计算MA72和其他指标）
+        
         ohlcv_15m = exchange.fetch_ohlcv(
             symbol, TRADE_CONFIG["timeframe"], limit=limit_15m
         )
@@ -15331,7 +15339,13 @@ def get_ohlcv_data(symbol, skip_timing_check=False):
         
         # === 4小时K线数据（长期趋势） ===
         try:
-            ohlcv_4h = exchange.fetch_ohlcv(symbol, "4h", limit=169)  # 约1个月 + 1根
+            # 【V8.5.2.4.88修复】区分实盘和回测
+            if is_backtest:
+                limit_4h = 169  # 回测：约1个月
+            else:
+                limit_4h = 50  # 实盘：约8天（足够计算趋势）
+            
+            ohlcv_4h = exchange.fetch_ohlcv(symbol, "4h", limit=limit_4h)
             # 【V8.5.2.3】移除最后一根K线（可能未完成）
             if len(ohlcv_4h) > 0:
                 ohlcv_4h = ohlcv_4h[:-1]
@@ -15355,7 +15369,13 @@ def get_ohlcv_data(symbol, skip_timing_check=False):
         
         # === 1小时K线数据（止损止盈位 + 中期趋势）V6.5 ===
         try:
-            ohlcv_1h = exchange.fetch_ohlcv(symbol, "1h", limit=673)  # 约1个月 + 1根
+            # 【V8.5.2.4.88修复】区分实盘和回测
+            if is_backtest:
+                limit_1h = 673  # 回测：约1个月
+            else:
+                limit_1h = 100  # 实盘：约4天（足够S/R分析）
+            
+            ohlcv_1h = exchange.fetch_ohlcv(symbol, "1h", limit=limit_1h)
             # 【V8.5.2.3】移除最后一根K线（可能未完成）
             if len(ohlcv_1h) > 0:
                 ohlcv_1h = ohlcv_1h[:-1]
