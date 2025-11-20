@@ -12407,7 +12407,7 @@ def analyze_and_adjust_params():
                         
                         # 错过机会教训
                         if ai_reflection.get('missed_lessons'):
-                                    learning_insights_html += """
+                            learning_insights_html += """
         <div style="background: #fff; padding: 15px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #f44336;">
             <h3 style="color: #f44336; margin: 0 0 10px 0;">📉 错过机会教训</h3>
             <ul style="list-style-type: disc; padding-left: 20px; margin: 5px 0;">
@@ -12428,7 +12428,7 @@ def analyze_and_adjust_params():
                             learning_insights_html += "            </ol>\n        </div>\n"
                         
                         gen_time = ai_reflection.get('generated_at', 'N/A')
-                            learning_insights_html += f"""
+                        learning_insights_html += f"""
             <p style="color: #999; font-size: 0.85em; margin-top: 10px;">生成时间: {gen_time}</p>
         </div>
 """
