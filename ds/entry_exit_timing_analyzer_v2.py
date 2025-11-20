@@ -430,13 +430,13 @@ def analyze_entry_timing_v2(
                     
                     # 构建基础记录
                     entry_record = {
-                        'coin': coin,
-                        'time': timestamp_str,
-                        'signal_score': signal_score,
-                        'consensus': consensus,
-                        'pnl': pnl,
-                        'ai_open_reason': trade.get('开仓理由', 'N/A'),
-                        'ai_close_reason': trade.get('平仓理由', 'N/A')
+                            'coin': coin,
+                            'time': timestamp_str,
+                            'signal_score': signal_score,
+                            'consensus': consensus,
+                            'pnl': pnl,
+                            'ai_open_reason': trade.get('开仓理由', 'N/A'),
+                            'ai_close_reason': trade.get('平仓理由', 'N/A')
                     }
                     
                     # 根据分类添加到对应列表
