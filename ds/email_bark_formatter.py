@@ -408,7 +408,7 @@ def generate_profit_comparison_table(phase_data):
 
 def generate_optimized_bark_content(yesterday_data, phase2_data, phase4_data):
     """
-    【V8.5.2.4.89.2】生成优化后的Bark推送内容（增强容错）
+    【V8.5.2.4.89.5】生成优化后的Bark推送内容（增强容错+调试）
     
     Args:
         yesterday_data: {
@@ -431,12 +431,20 @@ def generate_optimized_bark_content(yesterday_data, phase2_data, phase4_data):
     Returns:
         str: Bark内容
     """
-    # 【V8.5.2.4.89.3】确保所有参数都是字典类型
+    # 【V8.5.2.4.89.5】调试：打印参数类型
+    print(f"[Bark Debug] yesterday_data type: {type(yesterday_data)}")
+    print(f"[Bark Debug] phase2_data type: {type(phase2_data)}")
+    print(f"[Bark Debug] phase4_data type: {type(phase4_data)}")
+    
+    # 【V8.5.2.4.89.5】确保所有参数都是字典类型（增强版）
     if not isinstance(yesterday_data, dict):
+        print(f"[Bark Debug] yesterday_data is not dict: {yesterday_data}")
         yesterday_data = {}
     if not isinstance(phase2_data, dict):
+        print(f"[Bark Debug] phase2_data is not dict: {phase2_data}")
         phase2_data = {}
     if not isinstance(phase4_data, dict):
+        print(f"[Bark Debug] phase4_data is not dict: {phase4_data}")
         phase4_data = {}
     
     yesterday_data = yesterday_data or {}
