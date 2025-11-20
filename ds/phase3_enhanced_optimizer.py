@@ -590,10 +590,12 @@ def call_ai_unified(prompt: str, model_name: str) -> str:
         api_key = os.getenv("DEEPSEEK_API_KEY")
         api_url = "https://api.deepseek.com/v1/chat/completions"
         model_id = "deepseek-reasoner"
+        max_tokens = 8000  # DeepSeek支持更高限制
     else:  # qwen
         api_key = os.getenv("DASHSCOPE_API_KEY")
         api_url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
         model_id = "qwen-plus"
+        max_tokens = 2000  # Qwen-plus官方限制为2000
     
     if not api_key:
         raise ValueError(f"API key not found for {model_name}")
@@ -617,7 +619,7 @@ def call_ai_unified(prompt: str, model_name: str) -> str:
             }
         ],
         "temperature": 0.7,
-        "max_tokens": 2000
+        "max_tokens": max_tokens
     }
     
     # 发送请求
