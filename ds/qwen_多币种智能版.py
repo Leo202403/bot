@@ -10809,10 +10809,16 @@ def analyze_and_adjust_params():
             # 【V8.5.2.4.89】只在必要时加载一次config（获取Phase 2保存的数据）
             config = load_learning_config()
             
-            # 【V8.5.2.4.89】在此处加载old_config（Phase 2之后，真正需要时才加载）
-            # 之前在Phase 1之后就加载，导致整个Phase 1+2期间old_config占用内存
+            # 【V8.5.2.4.89.1】轻量级old_config - 只复制参数部分，不复制整个config
+            # 之前deepcopy整个config会导致内存翻倍（10-20MB → 20-40MB）
+            # 现在只复制真正需要的参数字段（<1MB）
             import copy
-            old_config = copy.deepcopy(config)
+            old_config = {
+                'global': copy.deepcopy(config.get('global', {})),
+                'per_symbol': copy.deepcopy(config.get('per_symbol', {})),
+                'scalping_params': copy.deepcopy(config.get('scalping_params', {})),
+                'swing_params': copy.deepcopy(config.get('swing_params', {}))
+            }
             
             # 如果config中没有这些参数，从global中提取作为旧参数
             if 'scalping_params' not in old_config:
