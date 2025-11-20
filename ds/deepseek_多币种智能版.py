@@ -10242,14 +10242,16 @@ def analyze_and_adjust_params():
                 old_captured = old_captured_scalping + old_captured_swing
                 
                 # 计算统计
+                # 【V8.5.2.4.75】修复：使用objective_profit而不是actual_profit_pct
+                # 原因：actual_profit_pct需要特定参数回测，而objective_profit是客观最大利润
                 total_opps = len(all_opps)
-                avg_actual_profit = sum(o.get('actual_profit_pct', 0) for o in all_opps) / total_opps if total_opps > 0 else 0
+                avg_actual_profit = sum(o.get('objective_profit', 0) for o in all_opps) / total_opps if total_opps > 0 else 0
                 
                 old_count = len(old_captured)
-                old_avg_profit = sum(o.get('actual_profit_pct', 0) for o in old_captured) / old_count if old_count > 0 else 0
+                old_avg_profit = sum(o.get('objective_profit', 0) for o in old_captured) / old_count if old_count > 0 else 0
                 
                 new_count = len(new_captured)
-                new_avg_profit = sum(o.get('actual_profit_pct', 0) for o in new_captured) / new_count if new_count > 0 else 0
+                new_avg_profit = sum(o.get('objective_profit', 0) for o in new_captured) / new_count if new_count > 0 else 0
                 
                 # 【V8.5.1】计算分类捕获率
                 scalping_total = len(scalping_opps)
