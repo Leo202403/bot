@@ -7269,13 +7269,13 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         raise ValueError("【V8.5.2.3】quick_global_search_v8316必须提供confirmed_opportunities，不再支持降级使用market_snapshots")
     
     # 🔧 V8.5.2.4.33: 修复all_opportunities变量未定义 - 正确的缩进
-    print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
-    # 合并超短线和波段机会
-    all_opportunities = (
-        confirmed_opportunities['scalping']['opportunities'] + 
-        confirmed_opportunities['swing']['opportunities']
-    )
-    print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
+        print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
+        # 合并超短线和波段机会
+        all_opportunities = (
+            confirmed_opportunities['scalping']['opportunities'] + 
+            confirmed_opportunities['swing']['opportunities']
+        )
+        print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
     
     # 【V8.5.2.4.18】前向验证：分割训练集和验证集
     print(f"\n  📊 【前向验证】数据分割（70%训练/30%验证）...")
@@ -10005,7 +10005,7 @@ def analyze_and_adjust_params():
                         'missed_lessons': ai_insights.get('missed_lessons', []),
                         'improvements': ai_insights.get('improvements', []),
                         'generated_at': ai_insights['generated_at']
-                    }
+                        }
                     
                     save_learning_config(config)
                     print(f"  ✓ AI自我反思已保存到learning_config.json")
@@ -10283,13 +10283,13 @@ def analyze_and_adjust_params():
                 else:
                     # 【V8.5.2.4.11】生成全量数据用于Phase 4验证
                     print("  ℹ️  生成全量历史数据用于验证...")
-                    full_analysis = analyze_separated_opportunities(
-                        market_snapshots=kline_snapshots,
-                        old_config=config
-                    )
-                    # 提取机会
-                    scalping_opps = full_analysis['scalping']['opportunities']
-                    swing_opps = full_analysis['swing']['opportunities']
+                full_analysis = analyze_separated_opportunities(
+                    market_snapshots=kline_snapshots,
+                    old_config=config
+                )
+                # 提取机会
+                scalping_opps = full_analysis['scalping']['opportunities']
+                swing_opps = full_analysis['swing']['opportunities']
                 
                 # 合并机会（无论是从缓存还是新计算）
                 all_opps = scalping_opps + swing_opps
@@ -10460,18 +10460,22 @@ def analyze_and_adjust_params():
                 scalping_opps = [opp for opp in all_opportunities_sorted if opp.get('signal_type') == 'scalping']
                 swing_opps = [opp for opp in all_opportunities_sorted if opp.get('signal_type') == 'swing']
                 
-                # 【V8.5.2.4.89.7】获取历史参数（优化前的参数）
-                # 从iterative_result的最后一次迭代中获取
+                # 【V8.5.2.4.89.8】获取历史参数（优化前的参数）
+                # 从iterative_result的基准配置中获取
                 old_scalping_params = {}
                 old_swing_params = {}
                 
                 if iterative_result and '_iterative_history' in config:
                     history = config['_iterative_history']
-                    if history:
-                        last_iter = history[-1]  # 最后一次迭代即为本次优化前的状态
-                        old_scalping_params = last_iter.get('scalping_params', {})
-                        old_swing_params = last_iter.get('swing_params', {})
-                        print(f"     ✓ 使用历史参数: 迭代#{len(history)}")
+                    # iterative_result是字典，包含baseline_config（优化前）和best_config（优化后）
+                    if isinstance(history, dict) and 'baseline_config' in history:
+                        baseline = history['baseline_config']
+                        old_scalping_params = baseline.get('scalping_params', {})
+                        old_swing_params = baseline.get('swing_params', {})
+                        print(f"     ✓ 使用基准参数（优化前配置）")
+                    elif isinstance(history, dict):
+                        # 如果没有baseline_config，尝试从best_config回推（降级）
+                        print(f"     ⚠️ 无baseline_config，使用global参数")
                 
                 # 如果没有历史记录，使用当前global参数作为基准（降级方案）
                 if not old_scalping_params:
@@ -10632,12 +10636,12 @@ def analyze_and_adjust_params():
         # print("\n【第3步：Phase 3风险控制优化】")  ← 已删除
         scalping_optimization = None
         swing_optimization = None
-        profit_comparison = {
-            'has_data': False,
-            'scalping': {},
-            'swing': {}
-        }
-        
+            profit_comparison = {
+                'has_data': False,
+                'scalping': {},
+                'swing': {}
+            }
+            
         # ========== 【V8.5.2.4.47】DEPRECATED - 旧Phase 3代码已被phase3_enhanced_optimizer.py替代 ==========
         # 此段代码导致Phase 3重复执行（新Phase 3在quick_global_search_v8316中执行）
         # 导致内存耗尽（OOM Killed）：
@@ -11123,55 +11127,57 @@ def analyze_and_adjust_params():
                 
             except Exception as e:
                 print(f"[V8.5.2.4.81] 新Bark格式失败，使用旧格式: {e}")
+                import traceback
+                traceback.print_exc()
                 
                 # 降级：使用旧的Bark格式
                 # 检查是否有任何优化数据
                 has_scalp_data = scalp_opt or scalp_perf
                 has_swing_data = swing_opt or swing_perf
-                
-                if has_scalp_data or has_swing_data:
-                    # 标题行
-                    bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
-                    bark_content_lines.append("")
-                    bark_content_lines.append("📊 优化后预期收益:")
                     
-                    # 超短线数据（优先使用scalp_opt）
-                    if has_scalp_data:
-                        if scalp_opt:
-                            # 使用scalping_optimization的数据
-                            cap_rate = scalp_opt.get('new_capture_rate', 0)
-                            avg_profit = scalp_opt.get('new_avg_profit', 0) / 100  # 转为小数
-                        else:
-                            # 使用v8321_insights的数据
-                            cap_rate = scalp_perf.get('capture_rate', 0)
-                            avg_profit = scalp_perf.get('avg_profit', 0)
-                        bark_content_lines.append(f"⚡超短线: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
+                    if has_scalp_data or has_swing_data:
+                        # 标题行
+                        bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
+                        bark_content_lines.append("")
+                        bark_content_lines.append("📊 优化后预期收益:")
+                        
+                        # 超短线数据（优先使用scalp_opt）
+                        if has_scalp_data:
+                            if scalp_opt:
+                                # 使用scalping_optimization的数据
+                                cap_rate = scalp_opt.get('new_capture_rate', 0)
+                                avg_profit = scalp_opt.get('new_avg_profit', 0) / 100  # 转为小数
+                            else:
+                                # 使用v8321_insights的数据
+                                cap_rate = scalp_perf.get('capture_rate', 0)
+                                avg_profit = scalp_perf.get('avg_profit', 0)
+                            bark_content_lines.append(f"⚡超短线: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
+                        
+                        # 波段数据（优先使用swing_opt）
+                        if has_swing_data:
+                            if swing_opt:
+                                # 使用swing_optimization的数据
+                                cap_rate = swing_opt.get('new_capture_rate', 0)
+                                avg_profit = swing_opt.get('new_avg_profit', 0) / 100  # 转为小数
+                            else:
+                                # 使用v8321_insights的数据
+                                cap_rate = swing_perf.get('capture_rate', 0)
+                                avg_profit = swing_perf.get('avg_profit', 0)
+                            bark_content_lines.append(f"🌊波段: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
+                        
+                        # 显示当前ROI参数
+                        bark_content_lines.append("")
+                        min_rr = config.get('global', {}).get('min_risk_reward', 'N/A')
+                        bark_content_lines.append(f"🎯 当前ROI: {min_rr}:1")
+                    else:
+                        # 没有任何优化数据，使用历史统计数据
+                        bark_content_lines.append(f"胜率{win_rate*100:.0f}% 盈亏比{win_loss_ratio:.1f}")
+                        bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
                     
-                    # 波段数据（优先使用swing_opt）
-                    if has_swing_data:
-                        if swing_opt:
-                            # 使用swing_optimization的数据
-                            cap_rate = swing_opt.get('new_capture_rate', 0)
-                            avg_profit = swing_opt.get('new_avg_profit', 0) / 100  # 转为小数
-                        else:
-                            # 使用v8321_insights的数据
-                            cap_rate = swing_perf.get('capture_rate', 0)
-                            avg_profit = swing_perf.get('avg_profit', 0)
-                        bark_content_lines.append(f"🌊波段: 捕获{cap_rate*100:.0f}% 平均+{avg_profit*100:.1f}%")
-                    
-                    # 显示当前ROI参数
-                    bark_content_lines.append("")
-                    min_rr = config.get('global', {}).get('min_risk_reward', 'N/A')
-                    bark_content_lines.append(f"🎯 当前ROI: {min_rr}:1")
-                else:
-                    # 没有任何优化数据，使用历史统计数据
-                    bark_content_lines.append(f"胜率{win_rate*100:.0f}% 盈亏比{win_loss_ratio:.1f}")
-                    bark_content_lines.append(f"{iter_desc} 调整{adjusted_count}个参数")
-                
-                send_bark_notification(
-                    "[通义千问]🤖AI参数优化V8.3.21",
-                    "\n".join(bark_content_lines),
-                )
+                    send_bark_notification(
+                        "[通义千问]🤖AI参数优化V8.3.21",
+                        "\n".join(bark_content_lines),
+                    )
             
             # 🆕 发送邮件通知（详细版）
             try:
@@ -12400,7 +12406,7 @@ def analyze_and_adjust_params():
                         
                         # 错过机会教训
                         if ai_reflection.get('missed_lessons'):
-                            learning_insights_html += """
+                                    learning_insights_html += """
         <div style="background: #fff; padding: 15px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #f44336;">
             <h3 style="color: #f44336; margin: 0 0 10px 0;">📉 错过机会教训</h3>
             <ul style="list-style-type: disc; padding-left: 20px; margin: 5px 0;">
@@ -12421,9 +12427,9 @@ def analyze_and_adjust_params():
                             learning_insights_html += "            </ol>\n        </div>\n"
                         
                         gen_time = ai_reflection.get('generated_at', 'N/A')
-                        learning_insights_html += f"""
-        <p style="color: #999; font-size: 0.85em; margin-top: 10px;">生成时间: {gen_time}</p>
-    </div>
+                            learning_insights_html += f"""
+            <p style="color: #999; font-size: 0.85em; margin-top: 10px;">生成时间: {gen_time}</p>
+        </div>
 """
                 
                 # 【V7.9新增】生成交易员执行摘要（分Scalping/Swing）
@@ -12561,8 +12567,8 @@ def analyze_and_adjust_params():
                     # 调试输出：验证参数读取正确
                     scalping_params = config.get('scalping_params', {})
                     swing_params = config.get('swing_params', {})
-                    print(f"[参数调试] scalping_params keys: {list(scalping_params.keys()) if scalping_params else 'None'}")
-                    print(f"[参数调试] swing_params keys: {list(swing_params.keys()) if swing_params else 'None'}")
+                        print(f"[参数调试] scalping_params keys: {list(scalping_params.keys()) if scalping_params else 'None'}")
+                        print(f"[参数调试] swing_params keys: {list(swing_params.keys()) if swing_params else 'None'}")
                 except Exception as e:
                     print(f"⚠️ 参数调试失败: {e}")
                 
@@ -21080,7 +21086,7 @@ def execute_portfolio_actions(
                         elif 'consensus' in market_data:
                             indicator_consensus = market_data.get('consensus', 0)
                             print(f"     ✓ 从consensus获取: {indicator_consensus}")
-                        else:
+                    else:
                             print(f"     ❌ 所有共振字段都不存在！")
                     else:
                         print(f"     ❌ market_data为None！")
@@ -21196,7 +21202,7 @@ def execute_portfolio_actions(
                         elif 'consensus' in market_data:
                             indicator_consensus = market_data.get('consensus', 0)
                             print(f"     ✓ 从consensus获取: {indicator_consensus}")
-                        else:
+                    else:
                             print(f"     ❌ 所有共振字段都不存在！")
                     else:
                         print(f"     ❌ market_data为None！")
@@ -21996,8 +22002,8 @@ def recalculate_consensus_from_snapshot(snapshot_row):
     
     except Exception as e:
         # 出错时返回0（保守策略）
-        return 0
-
+            return 0
+    
 
 def recalculate_signal_score_from_snapshot(snapshot_row, signal_type, learning_config=None):
     """
@@ -23025,7 +23031,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             print(f"  🔍 [{coin_idx}/{total_coins}] {coin}...", end='', flush=True)
             
             # 全点位分析（不采样）
-            sampled_indices = list(range(total_points))
+                sampled_indices = list(range(total_points))
             
             for idx_count, idx in enumerate(sampled_indices):
                 # 每200个点显示进度
@@ -23121,9 +23127,9 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         _, row_data = future_row
                         
                         # 计算当前利润
-                        if direction == 'long':
+                    if direction == 'long':
                             profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
-                        else:
+                    else:
                             profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
                         
                         # 启动跟踪
@@ -23208,7 +23214,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             gc.collect()
         
         print(f"\n  ✅ Phase 1.1完成: 收集到{len(all_profit_opportunities)}个盈利机会")
-        gc.collect()
+            gc.collect()
         
         # ========================================
         # 【Phase 1.2】统计分析与动态阈值
@@ -23465,7 +23471,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                 'market_state': market_state,
                 'thresholds': thresholds,
                 'stats': stats
-            }
+        }
         
         # 【V8.3.21】最后释放内存
         gc.collect()
