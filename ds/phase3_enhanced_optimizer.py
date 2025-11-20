@@ -403,12 +403,19 @@ def phase3_enhanced_optimization(
     print(f"     超短线机会: {len(scalping_opps)}个")
     print(f"     波段机会: {len(swing_opps)}个")
     
+    # 【V8.5.2.4.89方案C+】分离优化：只使用Phase 3找到的最佳起点
+    # 原因：两阶段搜索已经找到最优起点，分离优化应该在最佳起点上精调，而不是重新搜索4个起点
+    best_starting_point_params = best_search_result.get('params') if best_search_result else (candidate_starting_points[0]['params'] if candidate_starting_points else phase2_baseline.get('params'))
+    best_starting_point_list = [{'name': 'Phase3最佳', 'params': best_starting_point_params, 'source': 'phase3_best'}]
+    
+    print(f"\n     💡 【内存优化】分离优化只使用Phase 3找到的最佳起点（4→1起点，节省75%内存）")
+    
     # 优化超短线参数
     scalping_result = optimize_for_signal_type(
         opportunities=scalping_opps,
         signal_type='scalping',
         learned_features=learned_features,
-        starting_points=candidate_starting_points,
+        starting_points=best_starting_point_list,  # 【V8.5.2.4.89】只用1个最佳起点
         kline_snapshots=kline_snapshots
     )
     
@@ -423,7 +430,7 @@ def phase3_enhanced_optimization(
         opportunities=swing_opps,
         signal_type='swing',
         learned_features=learned_features,
-        starting_points=candidate_starting_points,
+        starting_points=best_starting_point_list,  # 【V8.5.2.4.89】只用1个最佳起点
         kline_snapshots=kline_snapshots
     )
     
