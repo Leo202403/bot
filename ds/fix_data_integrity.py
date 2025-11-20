@@ -5,14 +5,56 @@
 解决问题：
 1. 总资产数量计算错误
 2. 订单记录丢失
+
+使用方法:
+    python3 fix_data_integrity.py              # 检查并修正
+    python3 fix_data_integrity.py --check-only  # 仅检查
+    python3 fix_data_integrity.py --help        # 显示帮助
 """
 
 import json
 import csv
 import os
+import sys
 from pathlib import Path
 from datetime import datetime
 import shutil
+
+
+def show_help():
+    """显示帮助信息"""
+    print("""
+数据完整性修正工具
+================
+
+用途:
+  检查并修正交易系统中的数据完整性问题:
+  1. 总资产计算错误
+  2. 订单记录丢失
+
+使用方法:
+  python3 fix_data_integrity.py              检查并修正数据
+  python3 fix_data_integrity.py -c           仅检查，不修正
+  python3 fix_data_integrity.py --check-only 仅检查，不修正
+  python3 fix_data_integrity.py -h           显示此帮助
+  python3 fix_data_integrity.py --help       显示此帮助
+
+功能:
+  ✓ 自动备份原始数据
+  ✓ 检查订单完整性
+  ✓ 重新计算总资产
+  ✓ 修正system_status.json
+  ✓ 恢复缺失订单记录
+
+注意:
+  - 修正前会自动备份所有数据
+  - 建议在系统停止时运行
+  - 如有问题可从备份恢复
+
+文档:
+  README_数据修正.md    - 快速指南
+  数据修正说明.md       - 详细文档
+    """)
 
 
 def backup_files(model_name):
@@ -279,26 +321,31 @@ def restore_missing_trades_from_positions(model_name):
     # 恢复订单记录
     recovered_trades = []
     for pos in missing_positions:
-        trade_record = {
-            '币种': pos.get('币种', ''),
-            '方向': pos.get('方向', ''),
-            '开仓时间': pos.get('开仓时间', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
-            '开仓价格': pos.get('开仓价格', 0),
-            '数量': pos.get('数量', 0),
-            '杠杆': pos.get('杠杆', 1),
-            '平仓时间': '',
-            '平仓价格': '',
-            '盈亏(U)': '',
-            '订单编号': pos.get('订单编号', f"{model_name}_{pos.get('币种', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
-        }
+        # 初始化空记录（使用CSV实际的字段名）
+        trade_record = {}
         
-        # 补充其他字段
+        # 遍历CSV的所有字段，尝试从持仓信息中获取
         for field in fieldnames:
-            if field not in trade_record:
-                trade_record[field] = pos.get(field, '')
+            field_stripped = field.strip()
+            
+            # 直接从pos中获取（字段名完全匹配）
+            if field_stripped in pos:
+                trade_record[field] = pos[field_stripped]
+            # 尝试去除空格的匹配
+            elif field in pos:
+                trade_record[field] = pos[field]
+            else:
+                # 字段不存在，填充默认值或空值
+                trade_record[field] = ''
+        
+        # 显示恢复信息（兼容中英文字段名）
+        symbol = (trade_record.get('币种') or trade_record.get('symbol') or 
+                 trade_record.get('交易对') or 'Unknown').strip()
+        direction = (trade_record.get('方向') or trade_record.get('direction') or 
+                    trade_record.get('side') or 'Unknown').strip()
         
         recovered_trades.append(trade_record)
-        print(f"   ✓ 恢复: {trade_record['币种']} {trade_record['方向']}")
+        print(f"   ✓ 恢复: {symbol} {direction}")
     
     # 追加到trades_history.csv
     with open(trades_file, 'a', encoding='utf-8', newline='') as f:
@@ -312,13 +359,15 @@ def restore_missing_trades_from_positions(model_name):
 
 def main():
     """主函数"""
-    import sys
+    # 检查命令行参数
+    if '--help' in sys.argv or '-h' in sys.argv:
+        show_help()
+        return
     
     print("=" * 60)
     print("🔧 数据完整性修正工具")
     print("=" * 60)
     
-    # 检查命令行参数
     check_only = '--check-only' in sys.argv or '-c' in sys.argv
     
     if check_only:
