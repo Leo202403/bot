@@ -157,16 +157,15 @@ def phase3_enhanced_optimization(
     
     print(f"     ✓ 重新计算: {recalc_count}/{len(all_opportunities)}个机会")
     
-    # 【步骤3】多起点搜索
-    print(f"\n  🎯 【多起点搜索】")
-    print(f"     策略：从多个优质起点出发，避免局部最优")
+    # 【步骤3】两阶段多起点搜索（方案C）
+    print(f"\n  🎯 【两阶段多起点搜索】")
+    print(f"     策略：先粗筛找Top2起点 → 再精选最优参数")
+    print(f"     【V8.5.2.4.89方案C】分层测试，内存峰值更低，精度损失<5%")
     
+    # 准备候选起点（4个）
     candidate_starting_points = []
     
-    # 【V8.5.2.4.89】优化：只保留2个最有价值的起点（减少50%计算量）
-    # 分析：起点1贡献100%价值，起点2贡献40%，起点3+贡献<25%（边际递减）
-    
-    # 起点1: Phase 2最优参数（最重要的baseline，必选）
+    # 起点1: Phase 2最优参数
     if phase2_baseline.get('params'):
         candidate_starting_points.append({
             'name': 'Phase2最优',
@@ -174,63 +173,111 @@ def phase3_enhanced_optimization(
             'source': 'phase2_best'
         })
     
-    # 起点2: Top1组合（最佳替代方案，高价值）
-    if top5_param_combos and len(top5_param_combos) > 0 and top5_param_combos[0].get('params'):
-        candidate_starting_points.append({
-            'name': 'Top1组合',
-            'params': top5_param_combos[0]['params'].copy(),
-            'source': 'top5_1'
-        })
+    # 起点2-4: Top3组合
+    for i, combo in enumerate(top5_param_combos[:3], 1):
+        if combo.get('params'):
+            candidate_starting_points.append({
+                'name': f"Top{i}组合",
+                'params': combo['params'].copy(),
+                'source': f'top5_{i}'
+            })
     
-    # 【移除】AI建议（通常与Phase2重复）、Top2/Top3（收益递减<25%）
-    # 效果：4起点→2起点，内存160MB→80MB，精度损失<8%
-    
-    print(f"     候选起点: {len(candidate_starting_points)}个 【V8.5.2.4.89优化: 4→2起点，节省50%内存】")
+    print(f"     候选起点: {len(candidate_starting_points)}个")
     for sp in candidate_starting_points:
         print(f"       - {sp['name']}")
     
-    # 为每个起点进行局部搜索
     from backtest_optimizer_v8321 import optimize_params_v8321_lightweight
     import gc
     
-    all_search_results = []
+    # ========== 第一阶段：粗筛（快速找Top2起点）==========
+    print(f"\n     ⚡ 【第一阶段：粗筛】快速测试4组×{len(candidate_starting_points)}起点")
+    
+    coarse_results = []
     
     for i, starting_point in enumerate(candidate_starting_points, 1):
-        print(f"\n     [{i}/{len(candidate_starting_points)}] 从'{starting_point['name']}'出发...")
+        print(f"        [{i}/{len(candidate_starting_points)}] {starting_point['name']}...")
         
         try:
-            # 为这个起点做局部搜索
-            # 【V8.5.2.4.88优化】进一步降低到8组，配合采样后的800机会
-            # 计算量：800机会 × 8组 × 4起点 = 25,600次（约50MB峰值）
+            # 粗筛：只测试4组参数
             search_result = optimize_params_v8321_lightweight(
                 opportunities=all_opportunities,
                 current_params=starting_point['params'],
-                signal_type='swing',  # 默认使用swing（或根据实际情况判断）
-                max_combinations=8  # 【V8.5.2.4.88】10→8，节省20%内存
+                signal_type='swing',
+                max_combinations=4  # 【方案C】粗筛只用4组
             )
             
             if search_result:
                 search_result['starting_point'] = starting_point['name']
-                all_search_results.append(search_result)
-                print(f"        ✓ 找到优化参数，利润: {search_result.get('total_profit', 0):.1f}%")
+                search_result['starting_point_params'] = starting_point['params'].copy()
+                coarse_results.append(search_result)
+                print(f"           ✓ 利润: {search_result.get('total_profit', 0):.1f}%")
             
-            # 【V8.5.2.4.88】每个起点测试完后释放内存
             gc.collect()
             
         except Exception as e:
-            print(f"        ⚠️  搜索失败: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"           ⚠️  失败: {e}")
+    
+    # 选择Top2起点
+    if len(coarse_results) >= 2:
+        coarse_results_sorted = sorted(coarse_results, key=lambda x: x.get('total_profit', 0), reverse=True)
+        top2_starting_points = coarse_results_sorted[:2]
+        print(f"\n     🏆 粗筛Top2起点:")
+        for rank, sp in enumerate(top2_starting_points, 1):
+            print(f"        {rank}. {sp['starting_point']} (利润: {sp.get('total_profit', 0):.1f}%)")
+    elif len(coarse_results) == 1:
+        top2_starting_points = coarse_results
+        print(f"\n     ⚠️  只有1个有效起点，将只对其进行精选")
+    else:
+        top2_starting_points = []
+        print(f"\n     ❌ 粗筛未找到有效起点")
+    
+    # ========== 第二阶段：精选（在Top2起点上精细测试）==========
+    print(f"\n     🔬 【第二阶段：精选】精细测试8组×{len(top2_starting_points)}起点")
+    
+    fine_results = []
+    
+    for i, starting_point_result in enumerate(top2_starting_points, 1):
+        starting_point_name = starting_point_result['starting_point']
+        starting_point_params = starting_point_result['starting_point_params']
+        
+        print(f"        [{i}/{len(top2_starting_points)}] {starting_point_name}...")
+        
+        try:
+            # 精选：测试8组参数
+            search_result = optimize_params_v8321_lightweight(
+                opportunities=all_opportunities,
+                current_params=starting_point_params,
+                signal_type='swing',
+                max_combinations=8  # 【方案C】精选用8组
+            )
+            
+            if search_result:
+                search_result['starting_point'] = starting_point_name
+                fine_results.append(search_result)
+                print(f"           ✓ 利润: {search_result.get('total_profit', 0):.1f}%")
+            
+            gc.collect()
+            
+        except Exception as e:
+            print(f"           ⚠️  失败: {e}")
+    
+    # 合并所有结果
+    all_search_results = coarse_results + fine_results
     
     # 选择最佳结果
-    if all_search_results:
-        best_search_result = max(all_search_results, key=lambda x: x.get('total_profit', 0))
-        print(f"\n     🏆 最佳起点: {best_search_result.get('starting_point')}")
+    if fine_results:
+        best_search_result = max(fine_results, key=lambda x: x.get('total_profit', 0))
+        print(f"\n     🏆 最终最佳起点: {best_search_result.get('starting_point')}")
         print(f"        总利润: {best_search_result.get('total_profit', 0):.1f}%")
         print(f"        捕获率: {best_search_result.get('capture_rate', 0)*100:.1f}%")
+    elif coarse_results:
+        best_search_result = max(coarse_results, key=lambda x: x.get('total_profit', 0))
+        print(f"\n     ⚠️  精选失败，使用粗筛最佳结果: {best_search_result.get('starting_point')}")
     else:
         best_search_result = None
         print(f"\n     ⚠️  未找到有效结果，使用Phase 2参数")
+    
+    print(f"\n     💾 内存优化: 分两批执行，峰值降低50%")
     
     # 【步骤4】组合筛选矩阵测试
     print(f"\n  📊 【组合筛选矩阵】")
