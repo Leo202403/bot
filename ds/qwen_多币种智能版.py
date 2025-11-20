@@ -9971,11 +9971,8 @@ def analyze_and_adjust_params():
             except Exception as e:
                 print(f"  ⚠️  预分析失败: {e}，将在第2步使用默认参数")
         
-        # 🆕 V8.3.23: AI深度分析（开仓 + 平仓）
-        # 🆕 V8.3.24: 每天都运行（确保持续学习）
-        print("\n【AI深度学习分析】")
-        ai_entry_insights = None
-        ai_exit_insights = None
+        # 【V8.5.2.4.87】简化版AI自我反思分析
+        print("\n【AI自我反思分析】")
         
         # 🔧 V8.3.24修改：每天都运行AI分析（不再设置门槛）
         # 原因：持续学习比节省成本更重要，每天$0.004可接受
@@ -10014,75 +10011,34 @@ def analyze_and_adjust_params():
                 except Exception as e:
                     print(f"  ⚠️ 加载AI决策失败: {e}")
                 
-                # AI分析开仓质量（包含自我反思）
-                if entry_analysis:
-                    print("  🤖 AI analyzing entry quality with self-reflection...")
-                    ai_entry_insights = generate_ai_entry_insights(
-                        entry_analysis, 
-                        exit_analysis,
-                        ai_decisions=ai_decisions  # 传入历史决策
-                    )
-                    
-                    if ai_entry_insights and 'error' not in ai_entry_insights:
-                        print(f"  ✓ Entry Analysis: {ai_entry_insights['diagnosis']}")
-                        print(f"  ✓ Learning Insights: {len(ai_entry_insights.get('learning_insights', []))} generated")
-                        print(f"  ✓ Cost: ${ai_entry_insights.get('cost_usd', 0):.6f}")
+                # 【V8.5.2.4.87】调用简化版AI自我反思分析
+                from simple_ai_analyzer import generate_simple_ai_reflection
                 
-                # AI分析平仓质量（包含自我反思）
-                if exit_analysis:
-                    print("  🤖 AI analyzing exit quality with self-reflection...")
-                    ai_exit_insights = generate_ai_exit_insights(
-                        exit_analysis,
-                        entry_analysis,
-                        ai_decisions=ai_decisions  # 传入历史决策
-                    )
-                    
-                    if ai_exit_insights and 'error' not in ai_exit_insights:
-                        print(f"  ✓ Exit Analysis: {ai_exit_insights['diagnosis']}")
-                        print(f"  ✓ Learning Insights: {len(ai_exit_insights.get('learning_insights', []))} generated")
-                        print(f"  ✓ Cost: ${ai_exit_insights.get('cost_usd', 0):.6f}")
+                ai_insights = generate_simple_ai_reflection(
+                    entry_analysis=entry_analysis,
+                    exit_analysis=exit_analysis,
+                    ai_decisions=ai_decisions
+                )
                 
-                # 保存AI洞察到compressed_insights（供实时AI参考）
-                if ai_entry_insights or ai_exit_insights:
+                if ai_insights and 'error' not in ai_insights:
+                    # 保存到compressed_insights
                     config = load_learning_config()
                     if 'compressed_insights' not in config:
                         config['compressed_insights'] = {}
                     
-                    if ai_entry_insights and 'error' not in ai_entry_insights:
-                        config['compressed_insights']['ai_entry_analysis'] = {
-                            'diagnosis': ai_entry_insights['diagnosis'],
-                            'learning_insights': ai_entry_insights.get('learning_insights', []),
-                            'key_recommendations': [
-                                {
-                                    'action': r['action'],
-                                    'threshold': r['threshold'],
-                                    'priority': r['priority']
-                                }
-                                for r in ai_entry_insights.get('recommendations', [])[:3]  # TOP3
-                            ],
-                            'generated_at': ai_entry_insights['generated_at']
-                        }
-                    
-                    if ai_exit_insights and 'error' not in ai_exit_insights:
-                        config['compressed_insights']['ai_exit_analysis'] = {
-                            'diagnosis': ai_exit_insights['diagnosis'],
-                            'learning_insights': ai_exit_insights.get('learning_insights', []),
-                            'key_recommendations': [
-                                {
-                                    'action': r['action'],
-                                    'threshold': r['threshold'],
-                                    'priority': r['priority']
-                                }
-                                for r in ai_exit_insights.get('recommendations', [])[:3]
-                            ],
-                            'generated_at': ai_exit_insights['generated_at']
-                        }
+                    config['compressed_insights']['ai_self_reflection'] = {
+                        'entry_lessons': ai_insights.get('entry_lessons', []),
+                        'exit_lessons': ai_insights.get('exit_lessons', []),
+                        'missed_lessons': ai_insights.get('missed_lessons', []),
+                        'improvements': ai_insights.get('improvements', []),
+                        'generated_at': ai_insights['generated_at']
+                    }
                     
                     save_learning_config(config)
-                    print(f"  ✓ AI洞察已保存到learning_config.json")
+                    print(f"  ✓ AI自我反思已保存到learning_config.json")
                     
             except Exception as e:
-                print(f"  ⚠️ AI深度分析失败: {e}")
+                print(f"  ⚠️ AI自我反思失败: {e}")
                 import traceback
                 traceback.print_exc()
 
@@ -12353,98 +12309,67 @@ def analyze_and_adjust_params():
                         
                         learning_insights_html += "    </div>\n"
                     
-                    # 🆕 V8.3.25.5: 添加AI深度分析（开仓+平仓质量）
-                    ai_entry = insights.get('ai_entry_analysis', {})
-                    ai_exit = insights.get('ai_exit_analysis', {})
+                    # 【V8.5.2.4.87】添加简化版AI自我反思
+                    ai_reflection = insights.get('ai_self_reflection', {})
                     
-                    if ai_entry or ai_exit:
+                    if ai_reflection and (ai_reflection.get('entry_lessons') or ai_reflection.get('exit_lessons')):
                         learning_insights_html += """
-    <div class="summary-box" style="background: #fff3e0; border: 2px solid #ff9800;">
-        <h2>🧠 AI深度学习分析（AI Self-Reflection）</h2>
+    <div class="summary-box" style="background: #e3f2fd; border: 2px solid #2196f3;">
+        <h2>🤖 AI自我反思（AI Self-Reflection）</h2>
         <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
-            💡 AI分析自己的决策逻辑，识别错误模式并提出改进建议（已保存供实时AI参考）
+            💡 AI回顾昨日决策，总结教训并制定改进计划
         </p>
 """
                         
-                        # 开仓质量分析
-                        if ai_entry and ai_entry.get('learning_insights'):
+                        # 开仓教训
+                        if ai_reflection.get('entry_lessons'):
                             learning_insights_html += """
-        <h3>🚪 开仓质量分析</h3>
-        <div style="background: #fff; padding: 15px; border-radius: 5px; margin: 10px 0;">
+        <div style="background: #fff; padding: 15px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #4caf50;">
+            <h3 style="color: #4caf50; margin: 0 0 10px 0;">✅ 开仓教训</h3>
+            <ul style="list-style-type: disc; padding-left: 20px; margin: 5px 0;">
 """
-                            diagnosis = ai_entry.get('diagnosis', '')
-                            if diagnosis:
-                                learning_insights_html += f"""
-            <p><strong>📋 诊断：</strong>{diagnosis}</p>
-"""
-                            
-                            # 学习洞察
-                            learning_insights_html += """
-            <p><strong>💡 关键洞察（Key Learnings）：</strong></p>
-            <ul style="list-style-type: disc; padding-left: 20px; font-size: 0.9em;">
-"""
-                            for insight in ai_entry['learning_insights'][:5]:
-                                learning_insights_html += f"                <li>{insight}</li>\n"
-                            learning_insights_html += "            </ul>\n"
-                            
-                            # 高优先级建议
-                            if ai_entry.get('key_recommendations'):
-                                high_priority = [r for r in ai_entry['key_recommendations'] if r.get('priority') == 'High']
-                                if high_priority:
-                                    learning_insights_html += """
-            <p><strong>🎯 高优先级改进（High Priority Actions）：</strong></p>
-            <ul style="list-style-type: disc; padding-left: 20px; font-size: 0.9em;">
-"""
-                                    for rec in high_priority:
-                                        learning_insights_html += f"""                <li><strong>{rec.get('action', '')}</strong>: {rec.get('threshold', '')}</li>\n"""
-                                    learning_insights_html += "            </ul>\n"
-                            
-                            gen_time = ai_entry.get('generated_at', 'N/A')
-                            learning_insights_html += f"""
-            <p style="color: #999; font-size: 0.85em; margin-top: 10px;">生成时间: {gen_time}</p>
-        </div>
-"""
+                            for lesson in ai_reflection['entry_lessons']:
+                                learning_insights_html += f"                <li>{lesson}</li>\n"
+                            learning_insights_html += "            </ul>\n        </div>\n"
                         
-                        # 平仓质量分析
-                        if ai_exit and ai_exit.get('learning_insights'):
+                        # 平仓教训
+                        if ai_reflection.get('exit_lessons'):
                             learning_insights_html += """
-        <h3>🔄 平仓质量分析</h3>
-        <div style="background: #fff; padding: 15px; border-radius: 5px; margin: 10px 0;">
+        <div style="background: #fff; padding: 15px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #ff9800;">
+            <h3 style="color: #ff9800; margin: 0 0 10px 0;">🚪 平仓教训</h3>
+            <ul style="list-style-type: disc; padding-left: 20px; margin: 5px 0;">
 """
-                            diagnosis = ai_exit.get('diagnosis', '')
-                            if diagnosis:
-                                learning_insights_html += f"""
-            <p><strong>📋 诊断：</strong>{diagnosis}</p>
-"""
-                            
-                            # 学习洞察
-                            learning_insights_html += """
-            <p><strong>💡 关键洞察（Key Learnings）：</strong></p>
-            <ul style="list-style-type: disc; padding-left: 20px; font-size: 0.9em;">
-"""
-                            for insight in ai_exit['learning_insights'][:5]:
-                                learning_insights_html += f"                <li>{insight}</li>\n"
-                            learning_insights_html += "            </ul>\n"
-                            
-                            # 高优先级建议
-                            if ai_exit.get('key_recommendations'):
-                                high_priority = [r for r in ai_exit['key_recommendations'] if r.get('priority') == 'High']
-                                if high_priority:
-                                    learning_insights_html += """
-            <p><strong>🎯 高优先级改进（High Priority Actions）：</strong></p>
-            <ul style="list-style-type: disc; padding-left: 20px; font-size: 0.9em;">
-"""
-                                    for rec in high_priority:
-                                        learning_insights_html += f"""                <li><strong>{rec.get('action', '')}</strong>: {rec.get('threshold', '')}</li>\n"""
-                                    learning_insights_html += "            </ul>\n"
-                            
-                            gen_time = ai_exit.get('generated_at', 'N/A')
-                            learning_insights_html += f"""
-            <p style="color: #999; font-size: 0.85em; margin-top: 10px;">生成时间: {gen_time}</p>
-        </div>
-"""
+                            for lesson in ai_reflection['exit_lessons']:
+                                learning_insights_html += f"                <li>{lesson}</li>\n"
+                            learning_insights_html += "            </ul>\n        </div>\n"
                         
-                        learning_insights_html += "    </div>\n"
+                        # 错过机会教训
+                        if ai_reflection.get('missed_lessons'):
+                            learning_insights_html += """
+        <div style="background: #fff; padding: 15px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #f44336;">
+            <h3 style="color: #f44336; margin: 0 0 10px 0;">📉 错过机会教训</h3>
+            <ul style="list-style-type: disc; padding-left: 20px; margin: 5px 0;">
+"""
+                            for lesson in ai_reflection['missed_lessons']:
+                                learning_insights_html += f"                <li>{lesson}</li>\n"
+                            learning_insights_html += "            </ul>\n        </div>\n"
+                        
+                        # 明日改进计划
+                        if ai_reflection.get('improvements'):
+                            learning_insights_html += """
+        <div style="background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #1976d2;">
+            <h3 style="color: #1976d2; margin: 0 0 10px 0;">🎯 明日改进计划</h3>
+            <ol style="padding-left: 20px; margin: 5px 0;">
+"""
+                            for improvement in ai_reflection['improvements']:
+                                learning_insights_html += f"                <li>{improvement}</li>\n"
+                            learning_insights_html += "            </ol>\n        </div>\n"
+                        
+                        gen_time = ai_reflection.get('generated_at', 'N/A')
+                        learning_insights_html += f"""
+        <p style="color: #999; font-size: 0.85em; margin-top: 10px;">生成时间: {gen_time}</p>
+    </div>
+"""
                 
                 # 【V7.9新增】生成交易员执行摘要（分Scalping/Swing）
                 trader_summary_html = ""
