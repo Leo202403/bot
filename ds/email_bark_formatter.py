@@ -408,7 +408,7 @@ def generate_profit_comparison_table(phase_data):
 
 def generate_optimized_bark_content(yesterday_data, phase2_data, phase4_data):
     """
-    生成优化后的Bark推送内容
+    【V8.5.2.4.89.2】生成优化后的Bark推送内容（增强容错）
     
     Args:
         yesterday_data: {
@@ -431,6 +431,11 @@ def generate_optimized_bark_content(yesterday_data, phase2_data, phase4_data):
     Returns:
         str: Bark内容
     """
+    # 【V8.5.2.4.89.2】确保所有字典有默认值
+    yesterday_data = yesterday_data or {}
+    phase2_data = phase2_data or {}
+    phase4_data = phase4_data or {}
+    
     lines = []
     
     # 1️⃣ 前一天情况总结

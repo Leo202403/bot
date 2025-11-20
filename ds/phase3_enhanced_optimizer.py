@@ -516,7 +516,12 @@ def request_ai_analysis(
         return recommendation
         
     except Exception as e:
-        print(f"     ⚠️  AI Call Failed: {e}")
+        # 【V8.5.2.4.89.2】更友好的错误提示
+        if "API key not found" in str(e):
+            print(f"     ⚠️  AI辅助决策跳过: 未配置API密钥（fallback到默认参数）")
+            print(f"     💡 此功能可选，不影响回测完成")
+        else:
+            print(f"     ⚠️  AI Call Failed: {e}")
         return {}
 
 
