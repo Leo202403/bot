@@ -15303,7 +15303,7 @@ def get_ohlcv_data(symbol, skip_timing_check=False):
         # 4. YTC信号检测（BOF/BPB/TST）
         ytc_signal = detect_ytc_signals(df_15m, df_1h, sr_levels, momentum_slope_15m)
         
-        return {
+        data = {
             "symbol": symbol,
             "coin": symbol.split("/")[0],  # V6.5新增：币种名称
             "price": current_data["close"],
