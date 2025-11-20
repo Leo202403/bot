@@ -707,15 +707,11 @@ def analyze_entry_timing_v2(
             })
     
     # 【V8.5.2.4.82】Step 3.5: 确保所有交易都被分类
-    # 检查是否有未分类的交易
+    # 【V8.5.2.4.86】检查是否有未分类的交易（3类分类）
     total_classified = (
-        entry_stats['excellent_entries'] + 
-        entry_stats['good_entries'] + 
+        entry_stats['correct_entries'] + 
         entry_stats['timing_issues'] + 
-        entry_stats['false_entries'] + 
-        entry_stats['reasonable_loss'] + 
-        entry_stats['breakeven'] + 
-        entry_stats['holding']
+        entry_stats['false_entries']
     )
     
     if total_classified < entry_stats['ai_opened']:
