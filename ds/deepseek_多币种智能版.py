@@ -10882,6 +10882,64 @@ def analyze_and_adjust_params():
             print(f"  Phase 3: 超短线{phase3_data.get('scalping_capture', 0):.1f}%, 波段{phase3_data.get('swing_capture', 0):.1f}%")
             print(f"  Phase 4: 超短线{phase4_data.get('scalping_capture', 0):.1f}%, 波段{phase4_data.get('swing_capture', 0):.1f}%")
             
+            # 【V8.5.2.4.89.67】生成分类利润对比数据（基于Phase 2和Phase 4）
+            try:
+                # 从Phase 2和Phase 4提取数据
+                scalping_old_count = phase2_data.get('scalping_count', 0)
+                scalping_new_count = phase4_data.get('scalping_count', 0)
+                scalping_old_avg = phase2_data.get('scalping_profit', 0)
+                scalping_new_avg = phase4_data.get('scalping_profit', 0)
+                
+                swing_old_count = phase2_data.get('swing_count', 0)
+                swing_new_count = phase4_data.get('swing_count', 0)
+                swing_old_avg = phase2_data.get('swing_profit', 0)
+                swing_new_avg = phase4_data.get('swing_profit', 0)
+                
+                # 计算总利润
+                scalping_old_total = scalping_old_count * scalping_old_avg / 100 if scalping_old_avg else 0
+                scalping_new_total = scalping_new_count * scalping_new_avg / 100 if scalping_new_avg else 0
+                swing_old_total = swing_old_count * swing_old_avg / 100 if swing_old_avg else 0
+                swing_new_total = swing_new_count * swing_new_avg / 100 if swing_new_avg else 0
+                
+                # 更新profit_comparison
+                profit_comparison = {
+                    'has_data': True,
+                    'scalping': {
+                        'old_count': scalping_old_count,
+                        'new_count': scalping_new_count,
+                        'count_diff': scalping_new_count - scalping_old_count,
+                        'old_avg_profit': scalping_old_avg,
+                        'new_avg_profit': scalping_new_avg,
+                        'avg_profit_diff': scalping_new_avg - scalping_old_avg,
+                        'old_total_profit': scalping_old_total,
+                        'new_total_profit': scalping_new_total,
+                        'profit_diff': scalping_new_total - scalping_old_total
+                    },
+                    'swing': {
+                        'old_count': swing_old_count,
+                        'new_count': swing_new_count,
+                        'count_diff': swing_new_count - swing_old_count,
+                        'old_avg_profit': swing_old_avg,
+                        'new_avg_profit': swing_new_avg,
+                        'avg_profit_diff': swing_new_avg - swing_old_avg,
+                        'old_total_profit': swing_old_total,
+                        'new_total_profit': swing_new_total,
+                        'profit_diff': swing_new_total - swing_old_total
+                    },
+                    'total': {
+                        'old': scalping_old_total + swing_old_total,
+                        'new': scalping_new_total + swing_new_total,
+                        'diff': (scalping_new_total + swing_new_total) - (scalping_old_total + swing_old_total),
+                        'diff_pct': ((scalping_new_total + swing_new_total) / (scalping_old_total + swing_old_total) - 1) * 100 if (scalping_old_total + swing_old_total) > 0 else 0
+                    }
+                }
+                
+                # 保存到config
+                config['_v854_profit_comparison'] = profit_comparison
+                print("  ✅ 分类利润对比数据已生成")
+            except Exception as e:
+                print(f"  ⚠️ 生成分类利润对比数据失败: {e}")
+            
             # 🔄 V8.3.21.8: 构建Bark通知内容（优先显示优化后预期收益）
             bark_content_lines = []
             
