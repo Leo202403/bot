@@ -65,7 +65,7 @@ def analyze_entry_timing(yesterday_trades, kline_snapshots, missed_opportunities
         
         try:
             entry_time = pd.to_datetime(entry_time_str)
-        except:
+        except Exception:
             continue
         
         # 获取该币种的K线数据
@@ -143,7 +143,7 @@ def analyze_entry_timing(yesterday_trades, kline_snapshots, missed_opportunities
                         'best_entry': best_entry_price,
                         'missed_improvement': price_improvement_pct,
                         'issue': f"错过更低{price_improvement_pct:.1f}%的入场点",
-                        'lesson': f"信号出现时应立即执行，避免等待"
+                        'lesson': "信号出现时应立即执行，避免等待"
                     })
             else:
                 # 空单：入场前2小时的最高价
@@ -160,7 +160,7 @@ def analyze_entry_timing(yesterday_trades, kline_snapshots, missed_opportunities
                         'best_entry': best_entry_price,
                         'missed_improvement': price_improvement_pct,
                         'issue': f"错过更高{price_improvement_pct:.1f}%的入场点",
-                        'lesson': f"信号出现时应立即执行，避免等待"
+                        'lesson': "信号出现时应立即执行，避免等待"
                     })
         
         # 【过早开仓判断】：入场后短期震荡，被洗盘止损
@@ -187,7 +187,7 @@ def analyze_entry_timing(yesterday_trades, kline_snapshots, missed_opportunities
                             'pnl': pnl,
                             'later_move': later_rally_pct,
                             'issue': f"被洗盘止损，但后续上涨{later_rally_pct:.1f}%",
-                            'lesson': f"应等待回调确认或更明确的突破信号"
+                            'lesson': "应等待回调确认或更明确的突破信号"
                         })
                 else:
                     # 空单止损后，如果后续下跌超过5%，说明方向对但入场早了
@@ -204,7 +204,7 @@ def analyze_entry_timing(yesterday_trades, kline_snapshots, missed_opportunities
                             'pnl': pnl,
                             'later_move': later_drop_pct,
                             'issue': f"被洗盘止损，但后续下跌{later_drop_pct:.1f}%",
-                            'lesson': f"应等待回调确认或更明确的突破信号"
+                            'lesson': "应等待回调确认或更明确的突破信号"
                         })
     
     # 计算最优入场数量
@@ -489,7 +489,7 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
         
         # 🆕 V8.3.24: 提取AI决策理由（用于自我反思）
         # 🔧 V8.3.25: 增强 - 为每笔交易匹配对应的AI决策（时间窗口±5分钟）
-        from datetime import datetime, timedelta
+        from datetime import datetime
         
         def find_ai_decision_for_trade(trade_time_str, coin, ai_decisions):
             """为交易匹配AI决策（容错跳过）"""
@@ -521,9 +521,9 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
                                         'action_reason': action.get('reason', '')[:100],
                                         'time_diff_seconds': int(time_diff)
                                     }
-                    except:
+                    except Exception:
                         continue
-            except:
+            except Exception:
                 pass
             
             return None
@@ -572,7 +572,9 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
         
         # 🆕 V8.3.25: 为错过的机会也匹配AI决策（分析"为什么没开仓"）
         missed_with_ai_decisions = []
-        if ai_decisions and 'missed_opportunities' in locals():
+        # 从 entry_analysis 中获取 missed_opportunities（如果存在）
+        missed_opportunities = entry_analysis.get('missed_quality_analysis', {}).get('high_quality_missed', [])
+        if ai_decisions and missed_opportunities:
             for opp in missed_opportunities[:10]:  # 只分析TOP10错过的机会
                 opp_time = opp.get('time', '')
                 opp_coin = opp.get('coin', '')
@@ -614,9 +616,9 @@ def generate_ai_entry_insights(entry_analysis, exit_analysis, market_context=Non
                                     'time_diff_seconds': int(time_diff)
                                 })
                                 break
-                        except:
+                        except Exception:
                             continue
-                except:
+                except Exception:
                     continue
             
             if missed_with_ai_decisions:
@@ -910,6 +912,7 @@ The AI's past exit decisions and reasoning:
 ```json
 {json.dumps(analysis_data, indent=2)}
 ```
+{ai_reasoning_note}
 
 # Your Task
 Perform deep analysis and generate insights that can be used by the AI trading system to improve future exit decisions.

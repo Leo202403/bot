@@ -9,8 +9,8 @@
 import os
 import sys
 import csv
-import ccxt
-import pandas as pd
+import ccxt  # type: ignore[import-untyped]
+import pandas as pd  # type: ignore[import-untyped]
 import numpy as np
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -60,7 +60,7 @@ except ImportError:
             
             score = min(100, max(0, score))
             return score, 0.30, 2
-        except:
+        except (KeyError, TypeError, AttributeError):
             return 50, 0.30, 2
 
 # 加载环境变量
@@ -126,7 +126,7 @@ def get_kline_context(klines, count=10):
         
         # 计算K线特征
         bodies = [abs(c - o) for c, o in zip(closes, opens)]
-        ranges = [h - l for h, l in zip(highs, lows)]
+        ranges = [h - low for h, low in zip(highs, lows)]
         
         # 阳线/阴线数量
         bullish = sum(1 for c, o in zip(closes, opens) if c > o)
@@ -205,7 +205,7 @@ def analyze_market_structure(klines, timeframe_hours=0.25):
         
         if len(swing_highs) >= 2 and len(swing_lows) >= 2:
             last_2_highs = [h for _, h in swing_highs[-2:]]
-            last_2_lows = [l for _, l in swing_lows[-2:]]
+            last_2_lows = [low_val for _, low_val in swing_lows[-2:]]
             
             # HH-HL (上升结构)
             if last_2_highs[-1] > last_2_highs[0] and last_2_lows[-1] > last_2_lows[0]:
@@ -592,7 +592,7 @@ def export_date(date_str, output_dirs):
                     elif row.close < row.open and prev_row['close'] > prev_row['open']:
                         engulfing_data = "bearish_engulfing"  # ✅ 修复：添加_engulfing后缀
             
-            market_data_for_score = {
+            {
                 "price": row.close,  # ← 【修复】添加price字段
                 "current_price": row.close,  # ← 【V8.2.3.4】添加current_price字段
                 "price_action": {
@@ -950,10 +950,7 @@ def export_date(date_str, output_dirs):
                 'volume_confirmed_score': components.get('volume_confirmed_score', 0),
                 # ❌ 不再保存signal_score（回测时动态计算）
                 
-                'risk_reward': risk_reward,  # 【V7.8关键修复】盈亏比
-                'trend_1h': row.trend_1h,
-                'ema20_1h': round(row.ema20_1h, 8) if pd.notna(row.ema20_1h) else row.close,
-                'ema50_1h': round(row.ema50_1h, 8) if pd.notna(row.ema50_1h) else row.close,
+                'risk_reward': risk_reward,
                 'macd_1h_line': round(row.macd_1h_line, 8) if pd.notna(row.macd_1h_line) else 0,
                 'macd_1h_signal': round(row.macd_1h_signal, 8) if pd.notna(row.macd_1h_signal) else 0,
                 'macd_1h_histogram': round(row.macd_1h_histogram, 8) if pd.notna(row.macd_1h_histogram) else 0,
@@ -966,12 +963,6 @@ def export_date(date_str, output_dirs):
                 'engulfing': '',
                 'pullback_type': 'simple_pullback' if abs(row.close - row.open) / row.open > 0.002 else '',
                 'pullback_depth': round(abs(row.high - row.low) / row.open, 8),
-                
-                # === 【V8.3.19.2】信号评分维度（用于信号类型识别）===
-                'volume_surge_type': components.get('volume_surge_type', ''),
-                'volume_surge_score': components.get('volume_surge_score', 0),
-                'has_breakout': components.get('has_breakout', False),
-                'breakout_score': components.get('breakout_score', 0),
                 
                 'momentum_slope': round((row.close - row.open) / row.open, 8),
                 'pullback_weakness_score': 0.4,
@@ -1096,12 +1087,12 @@ def main():
         output_dir.mkdir(parents=True, exist_ok=True)
     
     print(f"\n{'='*60}")
-    print(f"加密货币历史数据导出工具 (Market Snapshots)")
+    print("加密货币历史数据导出工具 (Market Snapshots)")
     print(f"{'='*60}")
     print(f"当前UTC时间: {now_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC")
     print(f"日期范围: {start_date} ~ {end_date}")
     print(f"币种数量: {len(SYMBOLS)}")
-    print(f"输出目录:")
+    print("输出目录:")
     for output_dir in output_dirs:
         print(f"  - {output_dir}")
     print(f"{'='*60}\n")
@@ -1124,11 +1115,11 @@ def main():
         current += timedelta(days=1)
     
     print(f"\n{'='*60}")
-    print(f"✓ 导出完成！")
+    print("✓ 导出完成！")
     print(f"  成功: {success_count} 天")
     if fail_count > 0:
         print(f"  失败: {fail_count} 天")
-    print(f"  文件位置:")
+    print("  文件位置:")
     for output_dir in output_dirs:
         print(f"    {output_dir}")
     print(f"{'='*60}\n")

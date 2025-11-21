@@ -2,8 +2,10 @@
 【V8.5.2.4.81】邮件和Bark格式化辅助函数
 用于生成优化后的邮件HTML和Bark内容
 """
+from typing import Dict, Any, Optional
 
-def generate_phase_summary_table(phase_data):
+
+def generate_phase_summary_table(phase_data: Dict[str, Any]) -> str:
     """
     生成Phase 1-4汇总表HTML
     
@@ -153,7 +155,11 @@ def generate_phase_summary_table(phase_data):
     return html
 
 
-def generate_params_comparison_table(scalping_params, swing_params, learned_features=None):
+def generate_params_comparison_table(
+    scalping_params: Optional[Dict[str, Any]],
+    swing_params: Optional[Dict[str, Any]],
+    learned_features: Optional[Dict[str, Any]] = None
+) -> str:
     """
     【V8.5.2.4.89.6】生成超短线/波段参数对比表HTML（包含密度信息+处理None）
     
@@ -172,7 +178,7 @@ def generate_params_comparison_table(scalping_params, swing_params, learned_feat
         swing_params = {}
     
     # 安全获取参数值
-    def safe_get(params, key, default='N/A'):
+    def safe_get(params: Optional[Dict[str, Any]], key: str, default: str = 'N/A') -> str:
         if not params:  # 如果params为空字典
             return default
         value = params.get(key, default)
@@ -289,7 +295,7 @@ def generate_params_comparison_table(scalping_params, swing_params, learned_feat
     return html
 
 
-def generate_profit_comparison_table(phase_data):
+def generate_profit_comparison_table(phase_data: Dict[str, Any]) -> str:
     """
     生成总利润对比分析表HTML
     
@@ -417,7 +423,11 @@ def generate_profit_comparison_table(phase_data):
     return html
 
 
-def generate_optimized_bark_content(yesterday_data, phase2_data, phase4_data):
+def generate_optimized_bark_content(
+    yesterday_data: Dict[str, Any],
+    phase2_data: Dict[str, Any],
+    phase4_data: Dict[str, Any]
+) -> str:
     """
     【V8.5.2.4.89.27】生成优化后的Bark推送内容（多行清晰版）
     

@@ -11,12 +11,7 @@
 """
 
 import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-import json
-from pathlib import Path
-import os
-from openai import OpenAI
+from datetime import timedelta
 
 
 def classify_entry_quality(trade, objective_profit=None, matched_opportunity=None):
@@ -52,7 +47,7 @@ def classify_entry_quality(trade, objective_profit=None, matched_opportunity=Non
         else:
             try:
                 pnl = float(pnl_raw)
-            except:
+            except (ValueError, TypeError):
                 pnl = 0
         
         if pnl > 1.0:
@@ -116,7 +111,7 @@ def analyze_entry_timing_v2(
         }
     """
     
-    print(f"\n【开仓时机完整分析 V8.5.2.4.86 - 3类简化版】")
+    print("\n【开仓时机完整分析 V8.5.2.4.86 - 3类简化版】")
     
     # 初始化统计（3类分类）
     entry_stats = {
@@ -126,18 +121,20 @@ def analyze_entry_timing_v2(
         'timing_issues': 0,  # ⚠️ 时机问题
         'false_entries': 0,  # ❌ 虚假信号
         'missed_profitable': 0,  # 错过的盈利机会
-        'correctly_filtered': 0  # 正确过滤的虚假信号
+        'correctly_filtered': 0,  # 正确过滤的虚假信号
+        'holding': 0  # 持仓中的交易
     }
     
     correct_entries = []
     timing_issues = []
     false_entries = []
     missed_opportunities = []
+    holding_entries = []  # 持仓中的交易
     entry_table_data = []
     
     # ===== Step 1: 获取昨日所有市场快照 =====
     if market_snapshots_df is None or market_snapshots_df.empty:
-        print(f"⚠️ 无市场快照数据，无法进行开仓时机分析")
+        print("⚠️ 无市场快照数据，无法进行开仓时机分析")
         return {
             'entry_stats': entry_stats,
             'correct_entries': [],
@@ -153,7 +150,7 @@ def analyze_entry_timing_v2(
     yesterday_date_yyyymmdd = yesterday_date_str.replace('-', '')  # "2025-11-11" -> "20251111"
     
     if 'snapshot_date' not in market_snapshots_df.columns:
-        print(f"⚠️ 市场快照数据缺少snapshot_date列（旧格式），无法筛选昨日数据")
+        print("⚠️ 市场快照数据缺少snapshot_date列（旧格式），无法筛选昨日数据")
         return {
             'entry_stats': entry_stats,
             'excellent_entries': [],
@@ -202,7 +199,7 @@ def analyze_entry_timing_v2(
                 'entry_price': opp.get('entry_price', 0)
             })
     else:
-        print(f"  ⚠️ 未提供confirmed_opportunities，使用原逻辑（所有market snapshots）")
+        print("  ⚠️ 未提供confirmed_opportunities，使用原逻辑（所有market snapshots）")
         entry_stats['total_opportunities'] = len(yesterday_snapshots)
         opportunities_to_check = None  # 标记使用原逻辑
     
@@ -221,7 +218,7 @@ def analyze_entry_timing_v2(
             
             # 🔧 V8.3.32: 如果actions为空，打印所有字段以便调试
             if not actions:
-                print(f"      ⚠️  actions字段为空，显示所有可用字段:")
+                print("      ⚠️  actions字段为空，显示所有可用字段:")
                 for key in first_decision.keys():
                     value = first_decision[key]
                     if isinstance(value, str):
@@ -237,12 +234,12 @@ def analyze_entry_timing_v2(
                 print(f"      样例: {coin_display} - {operation_display}")
                 print(f"            理由: {reason[:80]}...")
     else:
-        print(f"  ⚠️  【AI决策数据】未传入ai_decisions_list，错过机会的AI分析将不可用")
+        print("  ⚠️  【AI决策数据】未传入ai_decisions_list，错过机会的AI分析将不可用")
     
     # 🔧 V8.3.25.12: 调试快照数据
     if len(yesterday_snapshots) > 0:
         first_snapshot = yesterday_snapshots.iloc[0]
-        print(f"  🔍 【调试】第一个快照数据:")
+        print("  🔍 【调试】第一个快照数据:")
         print(f"      币种: {first_snapshot.get('coin')}")
         print(f"      time: {first_snapshot.get('time')}")
         print(f"      snapshot_date: {first_snapshot.get('snapshot_date')}")
@@ -250,7 +247,7 @@ def analyze_entry_timing_v2(
     
     # ===== Step 2: 获取昨日AI实际开仓记录 =====
     if yesterday_trades_df.empty:
-        print(f"  ℹ️  昨日无实际开仓")
+        print("  ℹ️  昨日无实际开仓")
         # 所有机会都是错过的
         for idx, snapshot in yesterday_snapshots.iterrows():
             missed_opportunities.append({
@@ -268,7 +265,7 @@ def analyze_entry_timing_v2(
         
         # 🔧 V8.3.25.12: 添加调试信息（打印前3笔交易数据 + AI决策理由）
         if len(yesterday_trades_df) > 0:
-            print(f"\n  🔍 调试：前3笔交易数据样本（含AI决策）")
+            print("\n  🔍 调试：前3笔交易数据样本（含AI决策）")
             for idx_debug, trade_debug in yesterday_trades_df.head(3).iterrows():
                 # 🔧 V8.3.25.12: 尝试多个字段名
                 pnl_debug = trade_debug.get('盈亏(U)', trade_debug.get('盈亏', trade_debug.get('PnL', trade_debug.get('实际盈亏'))))
@@ -300,7 +297,7 @@ def analyze_entry_timing_v2(
                 # 解析时间戳
                 try:
                     opp_time_dt = pd.to_datetime(timestamp_str)
-                except:
+                except (ValueError, TypeError):
                     continue
                 
                 # 匹配AI开仓记录（±5分钟）
@@ -317,7 +314,7 @@ def analyze_entry_timing_v2(
                     
                     # 🔧 V8.3.32: 添加调试输出
                     if False:  # 设置为True时启用调试
-                        print(f"  🔍 【调试AI匹配】错过的机会")
+                        print("  🔍 【调试AI匹配】错过的机会")
                         print(f"     币种: {coin}")
                         print(f"     机会时间: {timestamp_str}")
                         print(f"     机会时间解析: {opp_time_dt}")
@@ -337,7 +334,7 @@ def analyze_entry_timing_v2(
                             if timestamps_ai:
                                 earliest_ai_time = min(timestamps_ai)
                                 latest_ai_time = max(timestamps_ai)
-                        except:
+                        except (ValueError, TypeError):
                             pass
                         
                         # 2. 判断机会时间是否在AI运行期间
@@ -365,7 +362,7 @@ def analyze_entry_timing_v2(
                                         if time_diff_seconds < 7200 and time_diff_seconds < min_time_diff:
                                             min_time_diff = time_diff_seconds
                                             closest_decision = decision
-                                    except Exception as e:
+                                    except Exception:
                                         continue
                             
                             # 如果找到最接近的决策
@@ -461,7 +458,7 @@ def analyze_entry_timing_v2(
                         holding_entries.append(entry_record)
                         entry_stats['holding'] += 1
                     elif category in ['holding_weak', 'holding_unknown']:
-                        entry_record['reason'] = f'⏳ 持仓中（弱信号或无匹配）'
+                        entry_record['reason'] = '⏳ 持仓中（弱信号或无匹配）'
                         holding_entries.append(entry_record)
                         entry_stats['holding'] += 1
         else:
@@ -480,12 +477,12 @@ def analyze_entry_timing_v2(
                     # Fallback：尝试从snapshot_date和time构建时间戳
                     try:
                         snapshot_time_dt = pd.to_datetime(f"{snapshot['snapshot_date']} {snapshot_time}", format='%Y%m%d %H:%M')
-                    except:
+                    except (ValueError, TypeError):
                         continue  # 无法解析时间，跳过此快照
                 
                 # 🔧 V8.3.25.12: 调试第一个snapshot
                 if debug_first_snapshot:
-                    print(f"  🔍 【调试】第一个snapshot:")
+                    print("  🔍 【调试】第一个snapshot:")
                     print(f"      币种: {coin}")
                     print(f"      snapshot_time_dt: {snapshot_time_dt} (type: {type(snapshot_time_dt)})")
                     print(f"      匹配窗口: {snapshot_time_dt - timedelta(minutes=5)} ~ {snapshot_time_dt + timedelta(minutes=5)}")
@@ -695,7 +692,7 @@ def analyze_entry_timing_v2(
         
         # 🔧 V8.3.25.12: 打印错过机会的详细信息（包括AI决策）
         if missed_opportunities:
-            print(f"\n  💡 错过机会详细分析（TOP 5）:")
+            print("\n  💡 错过机会详细分析（TOP 5）:")
             for idx, opp in enumerate(missed_opportunities[:5], 1):
                 print(f"     [{idx}] {opp['coin']} @ {opp['time']}")
                 print(f"         信号质量: {opp['signal_score']}分 / {opp['consensus']}共振")
@@ -718,7 +715,7 @@ def analyze_entry_timing_v2(
                     if matching_decisions:
                         print(f"         🤖 AI当时决策: {matching_decisions[0][:80]}...")
                     else:
-                        print(f"         🤖 AI当时决策: 无匹配记录（可能未到达决策阈值）")
+                        print("         🤖 AI当时决策: 无匹配记录（可能未到达决策阈值）")
                 print()
         
         # 添加错过的机会到表格
@@ -803,7 +800,7 @@ def analyze_entry_timing_v2(
         entry_lessons.append(f"时机问题{entry_stats['timing_issues']}笔：优化开仓时机判断（等待更强确认信号）")
     
     # 【V8.5.2.4.86】打印统计（3类简化版）
-    print(f"\n  📊 开仓质量统计：")
+    print("\n  📊 开仓质量统计：")
     print(f"     总机会数: {entry_stats['total_opportunities']}")
     print(f"     AI开仓: {entry_stats['ai_opened']} ({entry_stats['ai_opened']/max(entry_stats['total_opportunities'],1)*100:.0f}%)")
     
@@ -889,7 +886,7 @@ def analyze_exit_timing_v2(
         }
     """
     
-    print(f"\n【平仓时机完整分析 V8.3.25.8】")
+    print("\n【平仓时机完整分析 V8.3.25.8】")
     
     # 初始化统计
     exit_stats = {
@@ -909,7 +906,7 @@ def analyze_exit_timing_v2(
     exit_table_data = []
     
     if yesterday_closed_trades_df.empty:
-        print(f"⚠️ 昨日无平仓交易")
+        print("⚠️ 昨日无平仓交易")
         return {
             'exit_stats': exit_stats,
             'premature_exits': [],
@@ -939,7 +936,7 @@ def analyze_exit_timing_v2(
         
         try:
             exit_time = pd.to_datetime(exit_time_str)
-        except:
+        except (ValueError, TypeError):
             continue
         
         # 判断平仓类型
@@ -1099,12 +1096,12 @@ def analyze_exit_timing_v2(
         exit_lessons.append(f"平仓质量良好：{exit_stats['optimal_exits']}/{exit_stats['total_exits']}笔为最优")
     
     # 打印统计
-    print(f"\n  📊 平仓质量统计：")
+    print("\n  📊 平仓质量统计：")
     print(f"     总平仓数: {exit_stats['total_exits']}")
     print(f"     ├─ 止盈: {exit_stats['tp_exits']}笔")
     print(f"     ├─ 止损: {exit_stats['sl_exits']}笔")
     print(f"     └─ 手动: {exit_stats['manual_exits']}笔")
-    print(f"     质量评估：")
+    print("     质量评估：")
     print(f"     ├─ ✅ 最优: {exit_stats['optimal_exits']}笔")
     print(f"     ├─ ⚠️ 过早: {exit_stats['premature_exits']}笔 (平均错过{exit_stats['avg_missed_profit_pct']:.1f}%)")
     print(f"     └─ ⚠️ 延迟: {exit_stats['delayed_exits']}笔")

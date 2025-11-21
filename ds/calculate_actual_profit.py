@@ -59,7 +59,7 @@ def calculate_single_actual_profit(
             if atr <= 0:
                 print(f"  🐛 atr无效: {atr}")
             if not future_data:
-                print(f"  🐛 future_data缺失")
+                print("  🐛 future_data缺失")
             if entry_price <= 0 or atr <= 0:
                 return 0  # 数据不完整，返回0
         
@@ -74,7 +74,7 @@ def calculate_single_actual_profit(
             if max_high == entry_price or min_low == entry_price:
                 print(f"  🐛 future_data无效: max_high={max_high}, min_low={min_low}, entry={entry_price}")
                 if not future_data:
-                    print(f"     future_data为空dict")
+                    print("     future_data为空dict")
         
         # 3. 计算止盈止损价格
         atr_stop_mult = strategy_params.get('atr_stop_multiplier', 1.5)
@@ -297,7 +297,7 @@ def add_actual_profit_to_opportunities(
     """
     if phase1_mode:
         # 【V8.5.2.4.8】Phase 1纯客观统计：只统计objective_profit
-        print(f"\n  📊 Phase 1客观统计（最大潜在利润）...")
+        print("\n  📊 Phase 1客观统计（最大潜在利润）...")
         
         if scalping_opps:
             avg_obj_profit = np.mean([o.get('objective_profit', 0) for o in scalping_opps])
@@ -310,7 +310,7 @@ def add_actual_profit_to_opportunities(
         return scalping_opps, swing_opps
     
     # Phase 2-5：使用参数模拟实际利润
-    print(f"\n  🔄 计算实际利润（基于止盈止损模拟）...")
+    print("\n  🔄 计算实际利润（基于止盈止损模拟）...")
     
     # 超短线
     if scalping_opps:
@@ -381,11 +381,14 @@ if __name__ == '__main__':
         use_dynamic_atr=True
     )
     
-    print(f"入场价: ${test_opp['entry_price']}")
-    print(f"止损: ${test_opp['entry_price'] - 500}")
-    print(f"止盈: ${test_opp['entry_price'] + 750}")
-    print(f"未来24小时: 最高${test_opp['future_data']['max_high']}, 最低${test_opp['future_data']['min_low']}")
+    entry_price_val = test_opp['entry_price']
+    future_data_val = test_opp['future_data']
+    
+    print(f"入场价: ${entry_price_val}")
+    print(f"止损: ${entry_price_val - 500}")  # type: ignore[operator]
+    print(f"止盈: ${entry_price_val + 750}")  # type: ignore[operator]
+    print(f"未来24小时: 最高${future_data_val['max_high']}, 最低${future_data_val['min_low']}")  # type: ignore[index]
     print(f"实际利润: {actual_profit:.2f}%")
     print(f"退出原因: {test_opp.get('exit_reason', 'unknown')}")
-    print(f"理论利润(objective): {(test_opp['future_data']['max_high'] - test_opp['entry_price']) / test_opp['entry_price'] * 100:.2f}%")
+    print(f"理论利润(objective): {(future_data_val['max_high'] - entry_price_val) / entry_price_val * 100:.2f}%")  # type: ignore[operator,index]
 

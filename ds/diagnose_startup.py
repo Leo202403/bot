@@ -47,7 +47,7 @@ print("\n3. 尝试导入主模块:")
 try:
     sys.path.insert(0, str(Path(__file__).parent))
     # 只导入，不执行
-    import deepseek_多币种智能版
+    import deepseek_多币种智能版  # noqa: F401
     print("   ✓ 模块导入成功")
 except FileNotFoundError as e:
     print(f"   ✗ 文件未找到: {e}")

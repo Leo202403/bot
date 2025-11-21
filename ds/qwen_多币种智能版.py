@@ -17,7 +17,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import hashlib
 import hmac
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 import re  # 🔧 V7.6.7: 用于AI响应解析
 from urllib.parse import urlencode
 
@@ -29,10 +29,6 @@ from entry_exit_timing_analyzer_v2 import (
     analyze_exit_timing_v2
 )
 # 保留AI深度分析功能
-from entry_timing_analyzer import (
-    generate_ai_entry_insights, 
-    generate_ai_exit_insights
-)
 
 # 🔧 明确指定 .env.qwen 文件路径
 _env_file = Path(__file__).parent / '.env.qwen'
@@ -119,7 +115,7 @@ def extract_json_from_ai_response(ai_content: str) -> dict:
     except json.JSONDecodeError:
         pass
     
-    raise ValueError(f"无法从AI响应中提取有效JSON")
+    raise ValueError("无法从AI响应中提取有效JSON")
 
 # ==================== AI调用优化器 ====================
 
@@ -597,7 +593,7 @@ if EXCHANGE_TYPE == "binance":
             print(f"⚠️  服务器时间差异: {time_diff}ms (>{5}s)")
             print(f"   本地时间: {datetime.fromtimestamp(local_time/1000)}")
             print(f"   币安时间: {datetime.fromtimestamp(server_time/1000)}")
-            print(f"   建议执行: sudo ntpdate -u time.nist.gov")
+            print("   建议执行: sudo ntpdate -u time.nist.gov")
         else:
             print(f"✓ 时间同步正常 (差异{time_diff}ms)")
     except Exception as e:
@@ -854,7 +850,7 @@ def send_bark_notification(title, content):
                 f"✓ Bark通知已发送到 {success_count}/{len(bark_keys)} 个设备: {title}"
             )
         else:
-            print(f"✗ Bark通知全部失败！请检查网络或Bark Key配置")
+            print("✗ Bark通知全部失败！请检查网络或Bark Key配置")
 
     except Exception as e:
         print(f"✗ Bark推送函数异常: {e}")
@@ -919,7 +915,6 @@ def save_open_position(trade_info):
     """保存开仓记录（新增）- 加固版"""
     import fcntl
     import shutil
-    from pathlib import Path
 
     # 定义标准列顺序，确保一致性
     STANDARD_COLUMNS = [
@@ -1009,10 +1004,10 @@ def save_open_position(trade_info):
             # 如果有备份，尝试恢复
             backup_path = TRADES_FILE.parent / f"{TRADES_FILE.name}.backup"
             if backup_path.exists() and attempt == max_retries - 1:
-                print(f"⚠️ 尝试从备份恢复...")
+                print("⚠️ 尝试从备份恢复...")
                 try:
                     shutil.copy2(backup_path, TRADES_FILE)
-                    print(f"✓ 已从备份恢复")
+                    print("✓ 已从备份恢复")
                 except:
                     pass
 
@@ -1040,7 +1035,6 @@ def update_close_position(coin_name, side, close_time, close_price, pnl, close_r
     """更新平仓记录（找到对应的开仓记录并更新）- 支持分批平仓"""
     import fcntl
     import shutil
-    from pathlib import Path
 
     max_retries = 3
     for attempt in range(max_retries):
@@ -1048,7 +1042,7 @@ def update_close_position(coin_name, side, close_time, close_price, pnl, close_r
         try:
             # 1. 检查文件是否存在
             if not TRADES_FILE.exists():
-                print(f"✗ 交易记录文件不存在")
+                print("✗ 交易记录文件不存在")
                 return
         
             # 2. 创建文件锁，避免并发写入
@@ -1142,10 +1136,10 @@ def update_close_position(coin_name, side, close_time, close_price, pnl, close_r
             # 如果有备份，尝试恢复
             backup_path = TRADES_FILE.parent / f"{TRADES_FILE.name}.backup"
             if backup_path.exists() and attempt == max_retries - 1:
-                print(f"⚠️ 尝试从备份恢复...")
+                print("⚠️ 尝试从备份恢复...")
                 try:
                     shutil.copy2(backup_path, TRADES_FILE)
-                    print(f"✓ 已从备份恢复")
+                    print("✓ 已从备份恢复")
                 except:
                     pass
 
@@ -1246,7 +1240,7 @@ def clear_symbol_orders(symbol, verbose=True):
             
             # 🔧 修复：reduceOnly 可能是字符串 "true" 或布尔值 True
             reduce_only = order['info'].get('reduceOnly')
-            is_reduce_only = (reduce_only == True or reduce_only == 'true' or reduce_only == 'True')
+            is_reduce_only = (reduce_only or reduce_only == 'true' or reduce_only == 'True')
             
             # 识别止损止盈订单类型
             is_tp_sl_type = order_type in [
@@ -1321,7 +1315,7 @@ def clear_symbol_orders(symbol, verbose=True):
                     strategy_id = order.get('strategyId')
                     strategy_type = order.get('strategyType', 'N/A')
                     reduce_only = order.get('reduceOnly')
-                    order_status = order.get('strategyStatus', 'UNKNOWN')
+                    order.get('strategyStatus', 'UNKNOWN')
                     
                     # 尝试取消所有reduceOnly的条件单（已成交/已取消会返回400，已处理为不报错）
                     if reduce_only:
@@ -1390,7 +1384,7 @@ def clear_symbol_orders(symbol, verbose=True):
     if verbose and (success_count > 0 or fail_count > 0):
         print(f"  清理完成: 成功{success_count}个, 失败{fail_count}个")
     elif verbose and success_count == 0 and fail_count == 0:
-        print(f"  无需要清理的订单")
+        print("  无需要清理的订单")
     
     return success_count, fail_count
 
@@ -2117,7 +2111,6 @@ def should_trigger_cooldown_dynamic(recent_trades, total_assets, market_volatili
     
     返回: (should_trigger, cooldown_level, reason)
     """
-    from datetime import datetime
     
     if len(recent_trades) < 3:
         return False, 0, ""
@@ -2183,7 +2176,7 @@ def should_pause_trading_v7(config):
     - 动态冷却触发：考虑亏损幅度、时间密度、市场环境
     - 优化盈利退出：根据冷静等级要求不同盈利质量
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime
     
     # 获取当前市场环境（冷静期状态）
     market_regime = config.get("market_regime", {})
@@ -2256,7 +2249,7 @@ def should_pause_trading_v7(config):
             remaining_minutes = int(remaining.total_seconds() / 60)
             
             if pause_level == 3:
-                reason = f"今日交易已暂停（明日00:00恢复）"
+                reason = "今日交易已暂停（明日00:00恢复）"
             else:
                 hours = remaining_minutes // 60
                 mins = remaining_minutes % 60
@@ -2781,7 +2774,6 @@ def save_market_snapshot_v7(market_data_list):
             
             # 【V8.2】计算信号评分的各个维度（保存"原料"而非"成品"）
             # 初始化signal_type（防止未定义错误）
-            signal_type = 'swing'
             
             try:
                 # 【V8.3.10.3修复】确保data不为None
@@ -2810,24 +2802,20 @@ def save_market_snapshot_v7(market_data_list):
                 # 兼容性：signal_type和components使用较高分数的那个
                 # 但同时考虑阈值（合格性）
                 if scalping_qualified and (not swing_qualified or scalping_score >= swing_score):
-                    signal_type = 'scalping'
                     components = scalping_components
                     data['signal_score'] = scalping_score
                     data['recommended_strategy'] = 'scalping'
                 elif swing_qualified:
-                    signal_type = 'swing'
                     components = swing_components
                     data['signal_score'] = swing_score
                     data['recommended_strategy'] = 'swing'
                 else:
                     # 都不合格，选分数高的
                     if scalping_score >= swing_score:
-                        signal_type = 'scalping'
                         components = scalping_components
                         data['signal_score'] = scalping_score
                         data['recommended_strategy'] = 'scalping'
                     else:
-                        signal_type = 'swing'
                         components = swing_components
                         data['signal_score'] = swing_score
                         data['recommended_strategy'] = 'swing'
@@ -2841,7 +2829,6 @@ def save_market_snapshot_v7(market_data_list):
                 }
                 data['scalping_signal_score'] = 0
                 data['swing_signal_score'] = 0
-                signal_type = 'swing'
             
             # 【V8.4】更新consensus_score的形态评分部分（使用components中的数据）
             try:
@@ -2861,7 +2848,7 @@ def save_market_snapshot_v7(market_data_list):
                     pattern_score += min(5, breakout_score / 5)
                 
                 consensus_score = min(100, consensus_score + int(pattern_score))
-            except Exception as e:
+            except Exception:
                 pass  # 如果失败，使用之前计算的consensus_score
             
             # 【V8.3.21】数据增强：获取K线上下文、市场结构、S/R历史
@@ -3083,7 +3070,7 @@ def save_market_snapshot_v7(market_data_list):
         
         # 追加到文件（添加quoting参数避免字段解析错误）
         if not snapshot_data:
-            print(f"⚠️ 市场快照为空，无数据保存（所有币种获取失败）")
+            print("⚠️ 市场快照为空，无数据保存（所有币种获取失败）")
             return
         
         # 【V8.5.2新增】去重逻辑：检查当前时间点是否已有数据
@@ -3199,7 +3186,7 @@ def daily_review_with_kline_v7():
                                 review_lines.append("  ✅ 开仓位置佳（接近阻力）")
                             elif row['indicator_consensus'] < 3:
                                 review_lines.append("  ⚠️ 指标共振不足")
-                    except Exception as e:
+                    except Exception:
                         pass
                 
                 review_lines.append("")
@@ -3281,8 +3268,8 @@ def daily_review_with_kline_v7():
                                 swing_tp = entry_price * (1 - swing_tp_pct)
                             
                             # 获取后续价格数据（从市场快照）
-                            from datetime import datetime, timedelta
-                            signal_time = datetime.strptime(signal_time_str, '%H:%M')
+                            from datetime import datetime
+                            datetime.strptime(signal_time_str, '%H:%M')
                             
                             # 查找后续1小时和24小时内的价格走势
                             later_snapshots = market_snapshots[
@@ -3331,7 +3318,7 @@ def daily_review_with_kline_v7():
                             score = row.get('signal_score', 0)
                             return '🌊Swing' if score >= 80 else '⚡Scalping'
                             
-                        except Exception as e:
+                        except Exception:
                             # 出错时回退到信号分数
                             score = row.get('signal_score', 0)
                             return '⚡Scalping' if (score >= 70 and score < 80) else '🌊Swing'
@@ -3412,7 +3399,7 @@ def load_learning_config():
             return get_default_config()
 
     # 🔧 V7.9.1: 配置文件不存在时，自动创建并保存
-    print(f"⚠️ 配置文件不存在，创建V7.9.1默认配置...")
+    print("⚠️ 配置文件不存在，创建V7.9.1默认配置...")
     config = get_default_config()
     save_learning_config(config)
     print(f"✓ 已生成配置文件: {LEARNING_CONFIG_FILE}")
@@ -3975,7 +3962,7 @@ def update_position_after_adding(symbol, side, new_avg_price, new_total_amount,
                     pass
             
             if attempt == max_retries - 1:
-                print(f"  ❌ 加仓记录更新失败")
+                print("  ❌ 加仓记录更新失败")
             else:
                 import time
                 time.sleep(0.5)
@@ -4025,13 +4012,13 @@ def add_to_position(symbol, side, new_amount, new_price, leverage, existing_posi
         
         # 4. 执行市价单加仓
         order_side = 'buy' if side == 'long' else 'sell'
-        order = exchange.create_market_order(
+        exchange.create_market_order(
             symbol,
             order_side,
             new_amount,
             params={'tag': 'f1ee03b510d5SUDE'}
         )
-        print(f"  ✓ 加仓订单已执行")
+        print("  ✓ 加仓订单已执行")
         
         # 5. 更新CSV记录
         add_reason = ai_signal.get('reason', '金字塔加仓')[:20]  # 简短理由
@@ -4063,7 +4050,7 @@ def add_to_position(symbol, side, new_amount, new_price, leverage, existing_posi
                     verbose=True
                 )
                 if not (sl_ok or tp_ok):
-                    print(f"  ⚠️ 止盈止损设置失败")
+                    print("  ⚠️ 止盈止损设置失败")
         except Exception as e:
             print(f"  ⚠️ 重设止盈止损失败: {e}")
         
@@ -4186,7 +4173,7 @@ def check_add_position_conditions(symbol, existing_position, ai_signal, availabl
         # 4. 检查加仓后总保证金是否超过单币种开仓上限
         # 获取新仓位的保证金
         new_position_margin = ai_signal.get('position_size_usd', 0) if ai_signal else 0
-        new_leverage = ai_signal.get('leverage', 1) if ai_signal else 1
+        ai_signal.get('leverage', 1) if ai_signal else 1
         
         # 计算现有持仓的保证金（名义价值 / 杠杆）
         existing_leverage = existing_position.get('leverage', 1)
@@ -4258,7 +4245,7 @@ def check_single_direction_per_coin(symbol, operation, current_positions, ai_sig
         existing_positions = [p for p in current_positions if p.get("symbol") == symbol]
         
         if not existing_positions:
-            return True, f"该币种无持仓，可以开仓", False, 0
+            return True, "该币种无持仓，可以开仓", False, 0
         
         # 获取现有订单的方向
         existing_position = existing_positions[0]
@@ -4293,7 +4280,7 @@ def check_single_direction_per_coin(symbol, operation, current_positions, ai_sig
                         f"不满足加仓条件：{add_reason}"
                     ), False, 0
         
-        return True, f"检查通过", False, 0
+        return True, "检查通过", False, 0
     
     except Exception as e:
         print(f"⚠️ 单方向检查失败: {e}")
@@ -4362,7 +4349,7 @@ def ai_optimize_parameters(trading_data_summary, learning_mode="full_optimizatio
                 
                 if lesson['composite_improvement'] is not None:
                     experience_context += f"**Composite Profit Metric Change**: {lesson['composite_improvement']:+.1f}%\n"
-                    experience_context += f"  (= Weighted Win Rate × Weighted Profit Ratio × Capture Rate)\n\n"
+                    experience_context += "  (= Weighted Win Rate × Weighted Profit Ratio × Capture Rate)\n\n"
                 
                 experience_context += f"**Key Insight**: {lesson['key_insight'][:200]}...\n"
                 
@@ -4520,7 +4507,7 @@ You are a professional quantitative trading parameter optimization expert. Analy
         )
 
         ai_response = response.choices[0].message.content.strip()
-        print(f"\n【AI分析结果】")
+        print("\n【AI分析结果】")
         print(ai_response)
 
         # 解析JSON
@@ -4647,7 +4634,6 @@ def backtest_parameters(config_variant, days=7, verbose=False):
     """
     try:
         from datetime import datetime, timedelta
-        import glob
         
         print(f"\n{'='*60}")
         print(f"【📊 参数回测引擎】回测最近{days}天数据（近期权重递减）")
@@ -4684,7 +4670,7 @@ def backtest_parameters(config_variant, days=7, verbose=False):
         
         print(f"✓ 共加载 {total_records} 条历史记录（{len(daily_snapshots)}天）")
         print(f"  权重策略: 今天1.0 → {days-1}天前{1.0 - (days-1)*0.1:.1f}")
-        print(f"  💾 内存优化: 分批处理 + 及时释放")
+        print("  💾 内存优化: 分批处理 + 及时释放")
         
         # 【V7.8修复】确保 config_variant 包含 min_signal_score
         # 【V8.5.2.3升级】加载learning_config用于动态计算signal_score
@@ -4712,7 +4698,7 @@ def backtest_parameters(config_variant, days=7, verbose=False):
         min_consensus = config_variant.get('min_indicator_consensus', 3)
         atr_multiplier = config_variant.get('atr_stop_multiplier', 1.7)
         
-        print(f"\n回测参数配置:")
+        print("\n回测参数配置:")
         print(f"  min_risk_reward: {min_rr}")
         print(f"  min_indicator_consensus: {min_consensus}")
         print(f"  atr_stop_multiplier: {atr_multiplier}")
@@ -4808,7 +4794,6 @@ def backtest_parameters(config_variant, days=7, verbose=False):
                             # 【V7.9】推断信号类型（用于主动平仓模拟）
                             strong_trend = row.get('trend_4h') or row.get('trend_1h')
                             inferred_signal_type = 'swing' if (signal_score >= 75 or strong_trend) else 'scalping'
-                            expected_holding_bars = 2 if inferred_signal_type == 'scalping' else 8  # 15分钟K线数量
                             
                             # 模拟市场走势（【V7.9】增加主动平仓模拟）
                             future_data = coin_data[coin_data['time'] > row['time']].head(12)  # 多获取2根K线用于判断
@@ -5058,7 +5043,7 @@ def backtest_parameters(config_variant, days=7, verbose=False):
                 'avg_holding_swing_bars': avg_holding_swing,
             }
             
-            print(f"\n【📊 回测结果】")
+            print("\n【📊 回测结果】")
             print(f"  总交易: {len(simulated_trades)}笔")
             print(f"  胜率: {win_rate*100:.1f}% ({len(wins)}胜/{len(losses)}负)")
             print(f"  🆕 加权胜率: {weighted_win_rate*100:.1f}% (近期权重更高)")
@@ -5069,7 +5054,7 @@ def backtest_parameters(config_variant, days=7, verbose=False):
             print(f"  捕获率: {capture_rate*100:.1f}%")
             print(f"\n  🎯 【综合利润指标】: {composite_profit_metric:.4f}")
             print(f"     = 加权胜率({weighted_win_rate:.2f}) × 加权盈亏比({weighted_profit_ratio:.2f}) × 捕获率({capture_rate:.2f})")
-            print(f"     → 核心决策依据：在胜率、盈亏比、捕获率之间找到最佳平衡")
+            print("     → 核心决策依据：在胜率、盈亏比、捕获率之间找到最佳平衡")
             
             return result
         else:
@@ -5077,7 +5062,7 @@ def backtest_parameters(config_variant, days=7, verbose=False):
             print("⚠️ 未模拟到任何交易")
             print(f"   📊 总快照数: {total_records}")  # 🔧 修复：使用 total_records 而非 all_snapshots
             print(f"   🎯 潜在机会: {captured_opps + missed_opps}个")
-            print(f"   ❌ 全部被参数过滤（参数可能过于严格）")
+            print("   ❌ 全部被参数过滤（参数可能过于严格）")
             
             # 返回详细的失败原因，而不是None
             return {
@@ -5131,7 +5116,7 @@ def ai_review_backtest_result(original_stats, backtest_original, backtest_optimi
     """
     try:
         print(f"\n{'='*60}")
-        print(f"【🤖 AI复盘回测结果】")
+        print("【🤖 AI复盘回测结果】")
         print(f"{'='*60}")
         
         # 🆕 提取加权指标和综合利润指标（如果有）
@@ -5291,7 +5276,7 @@ This metric balances three dimensions:
         )
         
         ai_response = response.choices[0].message.content.strip()
-        print(f"\n【AI复盘分析】")
+        print("\n【AI复盘分析】")
         print(ai_response)
         
         # 解析JSON
@@ -5369,7 +5354,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
     print(f"\n{'='*70}")
     print(f"【阶段1：盈利探索】最多{max_rounds}轮，直到找到盈利组合")
     print(f"{'='*70}")
-    print(f"  策略：从默认范围开始，逐步扩大搜索，确保找到盈利")
+    print("  策略：从默认范围开始，逐步扩大搜索，确保找到盈利")
     print(f"  终止：找到盈利 OR 完成{max_rounds}轮")
     print()
     
@@ -5383,7 +5368,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
         # 根据轮次确定搜索策略
         if round_num == 1:
             # Round 1: 默认7点战略采样
-            print(f"     策略：默认7点战略采样")
+            print("     策略：默认7点战略采样")
             
             # 使用历史最优范围（如果有）
             if historical_range:
@@ -5395,7 +5380,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
                 rr_min, rr_max = 1.4, 2.5
                 consensus_min, consensus_max = 2, 3
                 atr_min, atr_max = 1.4, 1.9
-                print(f"     范围：默认范围（无历史数据）")
+                print("     范围：默认范围（无历史数据）")
             
             # 生成7个战略采样点
             test_points = [
@@ -5410,7 +5395,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
         
         elif round_num == 2:
             # Round 2: AI推荐新区域
-            print(f"     策略：AI分析Round 1结果，推荐新区域")
+            print("     策略：AI分析Round 1结果，推荐新区域")
             
             # 构建AI提示
             round1_summary = "\n".join([
@@ -5471,12 +5456,12 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
                 
                 # 🔧 V7.7.0.12: 检测是否被截断
                 if finish_reason == 'length':
-                    print(f"     ⚠️ AI回复被截断（超过max_tokens限制）")
+                    print("     ⚠️ AI回复被截断（超过max_tokens限制）")
                     print(f"     [调试] 截断的内容: {ai_content[-200:]}...")
                     raise ValueError("AI回复被截断，无法提取完整JSON")
                 
                 if not ai_content:
-                    print(f"     ⚠️ AI返回空内容")
+                    print("     ⚠️ AI返回空内容")
                     raise ValueError("AI返回空内容")
                 
                 ai_suggestion = extract_json_from_ai_response(ai_content)  # 🔧 V7.7.0.11: 使用鲁棒JSON提取
@@ -5486,7 +5471,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
             
             except Exception as e:
                 print(f"     ⚠️ AI调用失败: {e}")
-                print(f"     使用默认策略：测试中间区域")
+                print("     使用默认策略：测试中间区域")
                 test_points = [
                     {'min_risk_reward': 1.8, 'min_indicator_consensus': 2, 'atr_stop_multiplier': 1.6, 'name': '中间偏宽松'},
                     {'min_risk_reward': 2.2, 'min_indicator_consensus': 3, 'atr_stop_multiplier': 1.7, 'name': '中间标准'},
@@ -5496,7 +5481,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
         
         elif round_num == 3:
             # Round 3: 极宽松区域
-            print(f"     策略：测试极宽松区域（高频交易）")
+            print("     策略：测试极宽松区域（高频交易）")
             test_points = [
                 {'min_risk_reward': 0.8, 'min_indicator_consensus': 2, 'atr_stop_multiplier': 1.2, 'name': '超级宽松'},
                 {'min_risk_reward': 1.0, 'min_indicator_consensus': 2, 'atr_stop_multiplier': 1.4, 'name': '极度宽松'},
@@ -5506,7 +5491,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
         
         elif round_num == 4:
             # Round 4: 极严格区域
-            print(f"     策略：测试极严格区域（精选高质量）")
+            print("     策略：测试极严格区域（精选高质量）")
             test_points = [
                 {'min_risk_reward': 3.0, 'min_indicator_consensus': 3, 'atr_stop_multiplier': 1.3, 'name': '较严格'},
                 {'min_risk_reward': 3.5, 'min_indicator_consensus': 3, 'atr_stop_multiplier': 1.4, 'name': '很严格'},
@@ -5516,7 +5501,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
         
         elif round_num == 5:
             # Round 5: 中间区域（平衡型）
-            print(f"     策略：测试中间平衡区域")
+            print("     策略：测试中间平衡区域")
             test_points = [
                 {'min_risk_reward': 1.8, 'min_indicator_consensus': 2, 'atr_stop_multiplier': 1.5, 'name': '平衡偏宽松'},
                 {'min_risk_reward': 2.0, 'min_indicator_consensus': 2, 'atr_stop_multiplier': 1.6, 'name': '平衡标准1'},
@@ -5526,7 +5511,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
         
         elif round_num == 6:
             # Round 6: AI深度分析（使用所有历史数据）
-            print(f"     策略：AI深度分析所有历史，创新推荐")
+            print("     策略：AI深度分析所有历史，创新推荐")
             
             # 构建完整历史摘要
             all_summary = "\n".join([
@@ -5601,7 +5586,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
         
         elif round_num == 7:
             # Round 7: 极端ATR测试
-            print(f"     策略：测试极端ATR设置")
+            print("     策略：测试极端ATR设置")
             test_points = [
                 {'min_risk_reward': 2.0, 'min_indicator_consensus': 3, 'atr_stop_multiplier': 1.0, 'name': '超紧止损'},
                 {'min_risk_reward': 2.0, 'min_indicator_consensus': 3, 'atr_stop_multiplier': 1.2, 'name': '很紧止损'},
@@ -5611,7 +5596,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
         
         else:  # Round 8: 最后机会
             # Round 8: AI紧急推荐
-            print(f"     策略：⚠️ 最后机会 - AI紧急推荐")
+            print("     策略：⚠️ 最后机会 - AI紧急推荐")
             print(f"     状态：已探索{round_num-1}轮仍未找到盈利")
             
             emergency_prompt = f"""
@@ -5733,7 +5718,7 @@ def profit_discovery_phase_v770(data_summary, current_config, historical_range, 
     
     # 所有轮次完成仍未找到盈利
     print(f"\n  ❌ 盈利探索失败：经过{max_rounds}轮探索，测试{len(all_results)}个点，仍未找到盈利组合")
-    print(f"  → 将触发保守策略")
+    print("  → 将触发保守策略")
     
     return {
         'found_profitable': False,
@@ -5778,7 +5763,7 @@ def profit_expansion_phase_v770(profitable_center, all_results, days=7, max_iter
         }
     """
     print(f"\n{'='*70}")
-    print(f"【阶段2：盈利扩大】以盈利点为中心深挖")
+    print("【阶段2：盈利扩大】以盈利点为中心深挖")
     print(f"{'='*70}")
     
     current_center = profitable_center['config']
@@ -5900,9 +5885,9 @@ def profit_expansion_phase_v770(profitable_center, all_results, days=7, max_iter
                 # 继续下一轮扩展
                 continue
             else:
-                print(f"\n     ℹ️  未发现更优点（最优仍是中心点）")
+                print("\n     ℹ️  未发现更优点（最优仍是中心点）")
         else:
-            print(f"\n     ℹ️  周边全部亏损，无法扩展")
+            print("\n     ℹ️  周边全部亏损，无法扩展")
         
         # 记录路径
         expansion_path.append({
@@ -5912,10 +5897,10 @@ def profit_expansion_phase_v770(profitable_center, all_results, days=7, max_iter
         })
         
         # 终止扩展
-        print(f"     停止扩展")
+        print("     停止扩展")
         break
     
-    print(f"\n  ✅ 盈利扩大完成！")
+    print("\n  ✅ 盈利扩大完成！")
     print(f"     最优配置: R:R={best_config['min_risk_reward']:.2f}, "
           f"共识={best_config['min_indicator_consensus']}, "
           f"ATR={best_config['atr_stop_multiplier']:.2f}")
@@ -5974,7 +5959,7 @@ def fine_tuning_phase_v770(profitable_region, best_config, best_metric, days=7):
         }
     """
     print(f"\n{'='*70}")
-    print(f"【阶段3：参数优化】精细调整平衡点")
+    print("【阶段3：参数优化】精细调整平衡点")
     print(f"{'='*70}")
     
     print(f"  🔬 分析{len(profitable_region)}个盈利组合的特征...")
@@ -6037,11 +6022,11 @@ JSON (4 test points):
         
         # 🔧 V7.7.0.12: 检测是否被截断或为空
         if finish_reason == 'length':
-            print(f"     ⚠️ AI回复被截断")
+            print("     ⚠️ AI回复被截断")
             raise ValueError("AI回复被截断")
         
         if not ai_content:
-            print(f"     ⚠️ AI返回空内容")
+            print("     ⚠️ AI返回空内容")
             raise ValueError("AI返回空内容")
         
         # 🔧 V7.7.0.13: 直接提取数组（无需额外字段）
@@ -6054,7 +6039,7 @@ JSON (4 test points):
     
     except Exception as e:
         print(f"     ⚠️ AI精细调优失败: {e}")
-        print(f"     使用默认微调策略（放宽范围）")
+        print("     使用默认微调策略（放宽范围）")
         # 🔧 V7.7.0.14: 将微调步长从±0.1扩大到±0.2，放宽探索范围
         test_points = [
             {
@@ -6131,7 +6116,7 @@ JSON (4 test points):
         final_metric = best_tune.get('composite_profit_metric', 0)
         improvement = (final_metric - original_metric) / original_metric * 100 if original_metric > 0 else 0
         
-        print(f"\n  ✅ 参数优化完成！")
+        print("\n  ✅ 参数优化完成！")
         print(f"     最优配置: R:R={best_tune['config']['min_risk_reward']:.2f}, "
               f"共识={best_tune['config']['min_indicator_consensus']}, "
               f"ATR={best_tune['config']['atr_stop_multiplier']:.2f}")
@@ -6182,7 +6167,7 @@ def validation_phase_v770(best_config, days=7):
         }
     """
     print(f"\n{'='*70}")
-    print(f"【阶段4：最终验证】确认稳定性")
+    print("【阶段4：最终验证】确认稳定性")
     print(f"{'='*70}")
     
     print(f"  🔍 验证配置: R:R={best_config['min_risk_reward']:.2f}, "
@@ -6209,7 +6194,7 @@ def validation_phase_v770(best_config, days=7):
         },
     ]
     
-    print(f"     ━━━━━━━━━━━━━━━━━━━━ 回测3个验证点...")
+    print("     ━━━━━━━━━━━━━━━━━━━━ 回测3个验证点...")
     
     test_results = []
     
@@ -6238,7 +6223,7 @@ def validation_phase_v770(best_config, days=7):
         is_peak = (peak_index == 1)  # 中间点是峰值
         
         if is_peak:
-            print(f"\n     ✅ 确认：当前配置是局部峰值")
+            print("\n     ✅ 确认：当前配置是局部峰值")
             
             # 评估置信度
             left_diff = abs(metrics[1] - metrics[0]) / metrics[1] if metrics[1] > 0 else 0
@@ -6256,7 +6241,7 @@ def validation_phase_v770(best_config, days=7):
                 print(f"     置信度：低（峰值平缓，与邻近点差异较小 {avg_diff*100:.1f}%）")
         else:
             print(f"\n     ⚠️  发现更优点：{test_results[peak_index]['name']}")
-            print(f"     建议：使用新发现的更优配置")
+            print("     建议：使用新发现的更优配置")
             is_peak = False
             confidence = 'MEDIUM'
             
@@ -6264,13 +6249,13 @@ def validation_phase_v770(best_config, days=7):
             best_config = test_results[peak_index]['config']
     
     else:
-        print(f"\n     ⚠️  验证失败（回测结果不足）")
+        print("\n     ⚠️  验证失败（回测结果不足）")
         is_peak = False
         confidence = 'LOW'
     
     validated_metric = max([r.get('composite_profit_metric', 0) for r in test_results]) if test_results else 0
     
-    print(f"\n  ✅ 最终验证完成！")
+    print("\n  ✅ 最终验证完成！")
     print(f"     验证配置: R:R={best_config['min_risk_reward']:.2f}, "
           f"共识={best_config['min_indicator_consensus']}, "
           f"ATR={best_config['atr_stop_multiplier']:.2f}")
@@ -6336,11 +6321,11 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     from datetime import datetime
     
     print(f"\n{'='*70}")
-    print(f"【V8.3.16 快速全局探索】")
+    print("【V8.3.16 快速全局探索】")
     print(f"{'='*70}")
-    print(f"  🎯 目标：快速找到盈利参数范围")
-    print(f"  📊 流程：7组战略采样 → 为V8.3.12提供初始值")
-    print(f"  ⏱️  预计：约3分钟")
+    print("  🎯 目标：快速找到盈利参数范围")
+    print("  📊 流程：7组战略采样 → 为V8.3.12提供初始值")
+    print("  ⏱️  预计：约3分钟")
     print(f"{'='*70}")
     
     # 【V8.5.2.4.9】显示Phase 1 baseline
@@ -6349,7 +6334,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         swing_baseline = phase1_baseline.get('swing', {})
         total_count = scalping_baseline.get('count', 0) + swing_baseline.get('count', 0)
         
-        print(f"\n  📊 Phase 1基准（客观机会）:")
+        print("\n  📊 Phase 1基准（客观机会）:")
         print(f"     ⚡ 超短线: {scalping_baseline.get('count', 0)}个机会，平均最大利润{scalping_baseline.get('avg_objective_profit', 0):.2f}%")
         print(f"     🌊 波段: {swing_baseline.get('count', 0)}个机会，平均最大利润{swing_baseline.get('avg_objective_profit', 0):.2f}%")
         print(f"     🎯 Phase 2目标: 用参数尽可能捕获这{total_count}个机会")
@@ -6367,7 +6352,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 saved_config = json.load(f)
                 historical_sampling_range = saved_config.get('optimal_sampling_range')
                 if historical_sampling_range:
-                    print(f"  ℹ️  使用历史最优范围:")
+                    print("  ℹ️  使用历史最优范围:")
                     print(f"     R:R [{historical_sampling_range['min_risk_reward'][0]:.2f}, {historical_sampling_range['min_risk_reward'][1]:.2f}]")
                     print(f"     共识 [{historical_sampling_range['min_indicator_consensus'][0]}, {historical_sampling_range['min_indicator_consensus'][1]}]")
                     print(f"     ATR [{historical_sampling_range['atr_stop_multiplier'][0]:.2f}, {historical_sampling_range['atr_stop_multiplier'][1]:.2f}]")
@@ -6402,7 +6387,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     
     if not use_cache and confirmed_opportunities and use_confirmed_opps:
         try:
-            print(f"\n  📊 【V8.3.31 全面预分析】统计真实盈利机会的参数分布...")
+            print("\n  📊 【V8.3.31 全面预分析】统计真实盈利机会的参数分布...")
             all_opps = (
                 confirmed_opportunities['scalping']['opportunities'] + 
                 confirmed_opportunities['swing']['opportunities']
@@ -6460,7 +6445,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 precision_data['by_rr'][rr_threshold] = len(matching) / len(all_opps) if all_opps else 0
             
             optimization_cache['precision_formula'] = precision_data
-            print(f"  2️⃣ 精准率公式:")
+            print("  2️⃣ 精准率公式:")
             # 🔧 V8.3.32.12: 修复 KeyError - 支持整数和字符串键（JSON序列化会转换类型）
             def safe_get(d, key):
                 """安全获取字典值，同时尝试整数和字符串键"""
@@ -6507,7 +6492,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     'tp_p95': float(tp_p95),
                     'sl_range': [1.2, 2.5]  # SL保守，暂用固定值
                 }
-                print(f"  3️⃣ ATR倍数分布:")
+                print("  3️⃣ ATR倍数分布:")
                 print(f"     → TP倍数: 25%={tp_p25:.2f}, 中位={tp_median:.2f}, 75%={tp_p75:.2f}, 95%={tp_p95:.2f}")
                 print(f"     → 动态TP范围: [{max(1.5, tp_p25):.2f}, {min(6.0, tp_p95):.2f}]")
             
@@ -6543,7 +6528,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             
             optimization_cache['holding_times'] = holding_times
             if holding_times['scalping'] or holding_times['swing']:
-                print(f"  4️⃣ 持仓时间（中位数）:")
+                print("  4️⃣ 持仓时间（中位数）:")
                 for coin, times in list(holding_times['scalping'].items())[:3]:
                     print(f"     → {coin}超短线: {times['median']:.1f}小时")
             
@@ -6559,7 +6544,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 os.makedirs(os.path.dirname(cache_file), exist_ok=True)
                 with open(cache_file, 'w') as f:
                     json.dump(optimization_cache, f, indent=2)
-                print(f"  💾 预分析结果已保存到缓存")
+                print("  💾 预分析结果已保存到缓存")
             except Exception as e:
                 print(f"  ⚠️  缓存保存失败: {e}")
                 
@@ -6620,14 +6605,14 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         scalping_real_holding = phase1_baseline.get('scalping', {}).get('avg_holding_hours', 1.5)
         swing_real_holding = phase1_baseline.get('swing', {}).get('avg_holding_hours', 6.0)
         
-        print(f"\n  📊 【Phase 1真实持仓时长】")
+        print("\n  📊 【Phase 1真实持仓时长】")
         print(f"     ⚡ 超短线: {scalping_real_holding:.1f}小时")
         print(f"     🌊 波段: {swing_real_holding:.1f}小时")
     else:
         # 降级：使用保守估计
         scalping_real_holding = 1.5
         swing_real_holding = 6.0
-        print(f"\n  ⚠️  Phase 1数据不可用，使用保守估计")
+        print("\n  ⚠️  Phase 1数据不可用，使用保守估计")
     
     # 【V8.5.2.4.49】动态参数范围计算（基于Phase 1统计）
     # 核心理念：参数范围应该能捕获Phase 1识别的利润
@@ -6679,7 +6664,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     scalping_required_tp = scalping_avg_profit / scalping_median_atr if scalping_median_atr > 0 else 10.0
     swing_required_tp = swing_avg_profit / swing_median_atr if swing_median_atr > 0 else 12.0
     
-    print(f"\n  📊 【V8.5.2.4.49】动态参数范围计算:")
+    print("\n  📊 【V8.5.2.4.49】动态参数范围计算:")
     print(f"     ⚡ 超短线: 平均利润{scalping_avg_profit:.1f}%, ATR{scalping_median_atr:.2f}%, 密度{scalping_avg_density:.1f}")
     print(f"        → 需要TP倍数: {scalping_required_tp:.1f} (={scalping_avg_profit:.1f}%/{scalping_median_atr:.2f}%)")
     print(f"     🌊 波段: 平均利润{swing_avg_profit:.1f}%, ATR{swing_median_atr:.2f}%, 密度{swing_avg_density:.1f}")
@@ -6732,19 +6717,19 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         ]
     }
     
-    print(f"  📐 【参数搜索范围】（基于Phase 1统计动态调整）")
-    print(f"     ⚡ 超短线:")
+    print("  📐 【参数搜索范围】（基于Phase 1统计动态调整）")
+    print("     ⚡ 超短线:")
     print(f"        TP: {scalping_params_range['atr_tp']} (围绕{scalping_required_tp:.1f})")
     print(f"        SL: {scalping_params_range['atr_sl']} (高密度策略)")
     print(f"        持仓: {[round(h, 1) for h in scalping_params_range['max_holding']]}h")
-    print(f"     🌊 波段:")
+    print("     🌊 波段:")
     print(f"        TP: {swing_params_range['atr_tp']} (围绕{swing_required_tp:.1f})")
     print(f"        SL: {swing_params_range['atr_sl']} (低密度策略)")
     print(f"        持仓: {[round(h, 1) for h in swing_params_range['max_holding']]}h")
     
     # 【V8.5.2.4.37】Phase 2核心任务2：优化信号分权重
     # 为超短线和波段分别找到最优权重组合
-    print(f"\n  🎯 【信号分权重优化】")
+    print("\n  🎯 【信号分权重优化】")
     
     # 定义权重候选组合（围绕默认值微调）
     scalping_weight_candidates = [
@@ -6783,7 +6768,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     }
     
     # 【V8.5.2.4.39】Phase 2核心任务3：测试权重候选，找到最优权重
-    print(f"\n  🔬 【测试权重候选】寻找最贴近Phase 1的信号分计算方式...")
+    print("\n  🔬 【测试权重候选】寻找最贴近Phase 1的信号分计算方式...")
     
     # 【V8.5.2.4.44】recalculate_signal_score_from_snapshot函数已在主文件中定义，无需导入
     # 分别测试超短线和波段的权重
@@ -6798,7 +6783,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         phase1_scalping_count = phase1_baseline.get('scalping', {}).get('count', len(scalping_opps))
         
         # 【V8.5.2.4.47 DEBUG】检查数据结构
-        print(f"\n  🔍 【DEBUG】超短线机会数据检查:")
+        print("\n  🔍 【DEBUG】超短线机会数据检查:")
         print(f"     总数: {len(scalping_opps)}")
         if scalping_opps:
             first_opp = scalping_opps[0]
@@ -6919,7 +6904,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     
     # 【V8.5.2.4.47】Phase 2核心任务3.5：使用最优权重重新计算signal_score
     # 这样后续的min_signal_score阈值测试才有意义
-    print(f"\n  🔄 【应用最优权重】使用最优权重重新计算所有机会的signal_score...")
+    print("\n  🔄 【应用最优权重】使用最优权重重新计算所有机会的signal_score...")
     
     if confirmed_opportunities and (best_scalping_weights or best_swing_weights):
         # 合并超短线和波段机会
@@ -6964,12 +6949,12 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         print(f"        ⚡ 超短线使用: {best_scalping_weights.get('name', 'N/A')}权重")
         print(f"        🌊 波段使用: {best_swing_weights.get('name', 'N/A')}权重")
     else:
-        print(f"     ⚠️  跳过重新计算（无最优权重或无机会数据）")
+        print("     ⚠️  跳过重新计算（无最优权重或无机会数据）")
     
     # 【V8.5.2.4.50】Phase 2核心任务4：测试TP/SL组合（找到最优TP/SL）
     # 内存优化：采样 + 减少测试组合数
-    print(f"\n  🎯 【TP/SL组合测试】寻找最优止盈止损参数...")
-    print(f"     💡 目标：测试不同TP/SL组合的实际捕获利润")
+    print("\n  🎯 【TP/SL组合测试】寻找最优止盈止损参数...")
+    print("     💡 目标：测试不同TP/SL组合的实际捕获利润")
     
     best_scalping_tp_sl = None
     best_swing_tp_sl = None
@@ -7023,7 +7008,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         
         # 步骤2：测试超短线TP/SL组合
         if scalping_sample:
-            print(f"\n     ⚡ 测试超短线TP/SL组合...")
+            print("\n     ⚡ 测试超短线TP/SL组合...")
             scalping_tp_sl_results = []
             
             for tp in scalping_tp_candidates:
@@ -7098,7 +7083,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             best_scalping_tp_sl = scalping_tp_sl_results[0] if scalping_tp_sl_results else None
             
             # 显示Top 3
-            print(f"        Top 3 超短线TP/SL组合:")
+            print("        Top 3 超短线TP/SL组合:")
             for i, result in enumerate(scalping_tp_sl_results[:3], 1):
                 print(f"        #{i} TP={result['tp']:.1f}, SL={result['sl']:.1f} | "
                       f"捕获{result['captured']}/{len(scalping_sample)}({result['capture_rate']:.1f}%) | "
@@ -7111,7 +7096,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         
         # 步骤3：测试波段TP/SL组合
         if swing_sample:
-            print(f"\n     🌊 测试波段TP/SL组合...")
+            print("\n     🌊 测试波段TP/SL组合...")
             swing_tp_sl_results = []
             
             for tp in swing_tp_candidates:
@@ -7186,7 +7171,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             best_swing_tp_sl = swing_tp_sl_results[0] if swing_tp_sl_results else None
             
             # 显示Top 3
-            print(f"        Top 3 波段TP/SL组合:")
+            print("        Top 3 波段TP/SL组合:")
             for i, result in enumerate(swing_tp_sl_results[:3], 1):
                 print(f"        #{i} TP={result['tp']:.1f}, SL={result['sl']:.1f} | "
                       f"捕获{result['captured']}/{len(swing_sample)}({result['capture_rate']:.1f}%) | "
@@ -7201,20 +7186,20 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         
         # 【V8.5.2.4.53】显示最优TP/SL将被应用
         if best_scalping_tp_sl or best_swing_tp_sl:
-            print(f"\n     ✅ 【最优TP/SL将应用到后续流程】")
+            print("\n     ✅ 【最优TP/SL将应用到后续流程】")
             if best_scalping_tp_sl:
                 print(f"        ⚡ 超短线: TP={best_scalping_tp_sl['tp']:.1f}, SL={best_scalping_tp_sl['sl']:.1f} → 利润{best_scalping_tp_sl['avg_profit']:.2f}%")
             if best_swing_tp_sl:
                 print(f"        🌊 波段: TP={best_swing_tp_sl['tp']:.1f}, SL={best_swing_tp_sl['sl']:.1f} → 利润{best_swing_tp_sl['avg_profit']:.2f}%")
-            print(f"        💡 后续参数组合测试和Phase 3将使用这些最优值")
+            print("        💡 后续参数组合测试和Phase 3将使用这些最优值")
     else:
-        print(f"     ⚠️  跳过TP/SL测试（无机会数据）")
+        print("     ⚠️  跳过TP/SL测试（无机会数据）")
     
     # 【V8.5.2.4.89.23】Phase 2核心任务5：分离参数组合测试
-    print(f"\n  🎯 【参数组合测试】分别为超短线和波段寻找最优参数...")
-    print(f"     💡 注意：此时使用的是优化权重计算的signal_score")
+    print("\n  🎯 【参数组合测试】分别为超短线和波段寻找最优参数...")
+    print("     💡 注意：此时使用的是优化权重计算的signal_score")
     if best_scalping_tp_sl or best_swing_tp_sl:
-        print(f"     💡 使用TP/SL测试找到的最优值进行计算")
+        print("     💡 使用TP/SL测试找到的最优值进行计算")
     
     # 【V8.5.2.4.89.23】为超短线和波段分别定义测试参数
     # 超短线：更注重信号质量（高信号分），快速进出
@@ -7303,13 +7288,13 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         raise ValueError("【V8.5.2.3】quick_global_search_v8316必须提供confirmed_opportunities，不再支持降级使用market_snapshots")
     
     # 【V8.5.2.4.89.23】修复：分别处理超短线和波段机会
-    print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
+    print("  ✅ 使用confirmed_opportunities（真实盈利机会）")
     scalping_opportunities = confirmed_opportunities['scalping']['opportunities']
     swing_opportunities = confirmed_opportunities['swing']['opportunities']
     print(f"     ✓ 真实盈利机会: 超短线{len(scalping_opportunities)}个 + 波段{len(swing_opportunities)}个 = {len(scalping_opportunities) + len(swing_opportunities)}个")
     
     # 【V8.5.2.4.89.23】前向验证：超短线和波段分别分割
-    print(f"\n  📊 【前向验证】超短线和波段分别数据分割（70%训练/30%验证）...")
+    print("\n  📊 【前向验证】超短线和波段分别数据分割（70%训练/30%验证）...")
     
     # 超短线分割
     scalping_sorted = sorted(scalping_opportunities, key=lambda x: x.get('timestamp', '2000-01-01 00:00:00'))
@@ -7347,7 +7332,6 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         from calculate_actual_profit import calculate_single_actual_profit
         
         test_results = []
-        strategy_label = '⚡超短线' if strategy_type == 'scalping' else '🌊波段'
         
         for i, test_params in enumerate(test_points):
             config_variant = {
@@ -7411,7 +7395,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         return test_results
     
     # 【V8.5.2.4.89.23】分别测试超短线和波段
-    print(f"\n  🔍 【分离测试】分别为超短线和波段寻找最优参数...")
+    print("\n  🔍 【分离测试】分别为超短线和波段寻找最优参数...")
     
     # 测试超短线
     print(f"\n  ⚡ 【超短线参数测试】测试{len(scalping_test_points)}组参数...")
@@ -7445,7 +7429,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         print(f"     综合得分: {best_scalping_result['composite_score']:.0f}")
     else:
         best_scalping_result = None
-        print(f"\n  ⚠️  【超短线】未找到有效参数组合")
+        print("\n  ⚠️  【超短线】未找到有效参数组合")
     
     if swing_results:
         best_swing_result = max(swing_results, key=lambda x: x['composite_score'])
@@ -7455,7 +7439,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         print(f"     综合得分: {best_swing_result['composite_score']:.0f}")
     else:
         best_swing_result = None
-        print(f"\n  ⚠️  【波段】未找到有效参数组合")
+        print("\n  ⚠️  【波段】未找到有效参数组合")
     
     # 【V8.5.2.4.89.28】废弃代码块已被pass占位符替代
     if False:
@@ -7755,7 +7739,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     best_params['found_profitable'] = found_profitable
     
     # 【V8.5.2.4.38】选择并显示top5参数组合
-    print(f"\n  📊 【参数测试结果汇总】")
+    print("\n  📊 【参数测试结果汇总】")
     print(f"     共测试{len(all_test_results)}组参数组合")
     
     if all_test_results:
@@ -7769,7 +7753,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         # 保存top5
         top5_results = sorted_results[:5]
         
-        print(f"\n  🏆 【Top 5参数组合】（最贴近Phase 1）")
+        print("\n  🏆 【Top 5参数组合】（最贴近Phase 1）")
         for idx, res in enumerate(top5_results, 1):
             print(f"     #{idx} {res['name']}")
             print(f"        捕获率: {res['capture_rate']*100:.1f}% ({res['captured_count']}个)")
@@ -7777,10 +7761,10 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             print(f"        综合得分: {res['composite_score']:.0f}")
             print(f"        参数: R:R={res['params']['min_risk_reward']:.1f}, 共振={res['params']['min_indicator_consensus']}, 分数≥{res['params'].get('min_signal_score', 50)}")
     else:
-        print(f"     ⚠️ 无有效测试结果")
+        print("     ⚠️ 无有效测试结果")
         top5_results = []
     
-    print(f"\n  ✅ 快速探索完成（分离优化）:")
+    print("\n  ✅ 快速探索完成（分离优化）:")
     if best_scalping_result:
         print(f"     ⚡ 超短线最优: 信号分≥{best_scalping_result['params']['min_signal_score']}, 捕获{best_scalping_result['captured_count']}个")
     if best_swing_result:
@@ -7802,7 +7786,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     # 【V8.5.2.4.89.23】计算Phase 2 baseline（分离结构，供Phase 3使用）
     phase2_baseline = None
     
-    print(f"\n  🔍 【Phase 2 Baseline生成】分离计算超短线和波段...")
+    print("\n  🔍 【Phase 2 Baseline生成】分离计算超短线和波段...")
     
     if phase1_baseline and use_confirmed_opps and (best_scalping_result or best_swing_result):
         # 【V8.5.2.4.89.23】分别计算超短线和波段的baseline
@@ -7917,16 +7901,16 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 }
             }
             
-            print(f"\n  📊 Phase 2 baseline（分离结构，供Phase 3使用）:")
+            print("\n  📊 Phase 2 baseline（分离结构，供Phase 3使用）:")
             if scalping_baseline_data:
                 print(f"     ⚡ 超短线: 捕获{scalping_baseline_data['captured_count']}个 ({scalping_baseline_data['capture_rate']*100:.1f}%), 利润{scalping_baseline_data['avg_profit']:.2f}%")
             if swing_baseline_data:
                 print(f"     🌊 波段: 捕获{swing_baseline_data['captured_count']}个 ({swing_baseline_data['capture_rate']*100:.1f}%), 利润{swing_baseline_data['avg_profit']:.2f}%")
-            print(f"\n  💾 【Phase 2学习成果】")
+            print("\n  💾 【Phase 2学习成果】")
             print(f"     ⚡ 超短线: 持仓{scalping_real_holding:.1f}h | 密度{scalping_avg_density:.1f} | 利润{scalping_avg_profit:.1f}%")
             print(f"     🌊 波段: 持仓{swing_real_holding:.1f}h | 密度{swing_avg_density:.1f} | 利润{swing_avg_profit:.1f}%")
             print(f"     🎯 高密度阈值: {phase1_baseline.get('high_density_threshold', 7.1) if phase1_baseline else 7.1:.1f}")
-            print(f"     🏆 测试组合已保存（供Phase 3使用）")
+            print("     🏆 测试组合已保存（供Phase 3使用）")
             
             # 【V8.5.2.4.89.23】旧代码已被上述新代码替代，下面是原来的混合逻辑
         elif False:  # 禁用旧的混合逻辑
@@ -8021,14 +8005,14 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 }
             }
             
-            print(f"\n  📊 Phase 2 baseline（供Phase 3使用）:")
+            print("\n  📊 Phase 2 baseline（供Phase 3使用）:")
             print(f"     捕获: {len(best_captured_opps)}个 ({phase2_capture_rate*100:.1f}%)")
             print(f"     平均利润: {phase2_avg_profit:.2f}%")
-            print(f"\n  💾 【Phase 2学习成果】")
+            print("\n  💾 【Phase 2学习成果】")
             print(f"     ⚡ 超短线: 持仓{scalping_real_holding:.1f}h | 密度{scalping_avg_density:.1f} | 利润{scalping_avg_profit:.1f}%")
             print(f"     🌊 波段: 持仓{swing_real_holding:.1f}h | 密度{swing_avg_density:.1f} | 利润{swing_avg_profit:.1f}%")
             print(f"     🎯 高密度阈值: {phase1_baseline.get('high_density_threshold', 7.1) if phase1_baseline else 7.1:.1f}")
-            print(f"     🏆 Top5参数组合已保存（供Phase 3使用）")
+            print("     🏆 Top5参数组合已保存（供Phase 3使用）")
             
             # 【V8.5.2.4.80】保存Phase 2学习成果到config
             # 目的：保留learned_features供下次回测参考，但不保存完整参数
@@ -8072,7 +8056,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 # 立即保存learned_features（独立于Phase 3-4流程）
                 save_learning_config(current_config)
                 
-                print(f"\n  💾 【Phase 2学习成果已保存到配置文件】")
+                print("\n  💾 【Phase 2学习成果已保存到配置文件】")
                 print(f"     ✅ 信号分权重: 超短线={best_scalping_weights['name']}, 波段={best_swing_weights['name']}")
                 print(f"     ✅ Top5参数组合: {len(top5_results)}组")
                 if phase2_baseline['learned_features'].get('optimal_tp_sl'):
@@ -8084,7 +8068,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 print(f"     ⚠️  保存Phase 2学习成果失败: {e}")
         else:
             # 【V8.5.2.4.22】即使无捕获机会，也生成baseline（避免Phase 3被跳过）
-            print(f"  ⚠️  当前参数未捕获到任何机会，生成空baseline")
+            print("  ⚠️  当前参数未捕获到任何机会，生成空baseline")
             phase2_baseline = {
                 'captured_count': 0,
                 'capture_rate': 0.0,
@@ -8113,7 +8097,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             }
     else:
         # 【V8.5.2.4.22】无条件满足时，生成最小baseline
-        print(f"  ⚠️  Phase 1数据不完整，生成最小baseline")
+        print("  ⚠️  Phase 1数据不完整，生成最小baseline")
         # 【V8.5.2.4.38】使用降级值
         phase2_baseline = {
             'captured_count': 0,
@@ -8142,7 +8126,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         }
     
     # 【V8.5.2.4.18】前向验证：在验证集上测试参数（分离版本）
-    print(f"\n  🔍 【前向验证】分别测试超短线和波段参数...")
+    print("\n  🔍 【前向验证】分别测试超短线和波段参数...")
     
     validation_passed = True
     validation_warning = ""
@@ -8154,26 +8138,29 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         print(f"     🌊 波段验证集: {len(validation_swing)}个机会")
     
     if not validation_scalping and not validation_swing:
-        print(f"     ℹ️  跳过验证（无验证数据）")
+        print("     ℹ️  跳过验证（无验证数据）")
     else:
-        print(f"     ✅ 验证数据已准备，将由Phase 3进一步优化和验证")
+        print("     ✅ 验证数据已准备，将由Phase 3进一步优化和验证")
     
     # 【V8.5.2.4.42】Phase 3：分离优化（超短线+波段）
     phase3_result = None
     phase4_result = None
     
-    if phase2_baseline and all_opportunities_sorted:
+    # 【V8.5.2.4.89.38】合并scalping和swing opportunities供Phase 3使用
+    all_opportunities_for_phase3 = scalping_opportunities + swing_opportunities
+    
+    if phase2_baseline and all_opportunities_for_phase3:
         try:
             from phase3_enhanced_optimizer import phase3_enhanced_optimization
             
             print(f"\n{'='*70}")
-            print(f"【🚀 Phase 3启动】")
+            print("【🚀 Phase 3启动】")
             print(f"{'='*70}")
             
             model_name = os.getenv("MODEL_NAME", "qwen")
             # 【V8.5.2.4.46】kline_snapshots参数可选，传None即可（所有数据已在opportunities中）
             phase3_result = phase3_enhanced_optimization(
-                all_opportunities=all_opportunities_sorted,
+                all_opportunities=all_opportunities_for_phase3,
                 phase1_baseline=phase1_baseline,
                 phase2_baseline=phase2_baseline,
                 kline_snapshots=None,
@@ -8191,9 +8178,10 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         try:
             from phase4_validator import phase4_validation_and_overfitting_detection
             
+            # 【V8.5.2.4.89.38】使用合并后的opportunities
             phase4_result = phase4_validation_and_overfitting_detection(
                 phase3_result=phase3_result,
-                all_opportunities=all_opportunities_sorted,
+                all_opportunities=all_opportunities_for_phase3,
                 phase1_baseline=phase1_baseline
             )
             
@@ -8205,10 +8193,10 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 # 防止Phase 3参数在Phase 4被覆盖
                 if '_iterative_history' in current_config and 'baseline_config' not in current_config['_iterative_history']:
                     current_config['_iterative_history']['baseline_config'] = baseline_config_snapshot
-                    print(f"  💾 【补充】baseline_config已添加（从phase2前快照）")
+                    print("  💾 【补充】baseline_config已添加（从phase2前快照）")
                 
                 # 验证通过，应用Phase 3的分离参数到current_config
-                print(f"\n  ✅ Phase 4验证通过，应用Phase 3优化参数")
+                print("\n  ✅ Phase 4验证通过，应用Phase 3优化参数")
                 
                 # 应用scalping参数
                 scalping_params = phase3_result.get('scalping', {}).get('params', {})
@@ -8217,7 +8205,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     if 'scalping_params' not in current_config:
                         current_config['scalping_params'] = {}
                     current_config['scalping_params'].update(scalping_params)
-                    print(f"     🎯 超短线参数已更新:")
+                    print("     🎯 超短线参数已更新:")
                     print(f"        TP倍数: {scalping_params.get('atr_tp_multiplier', 'N/A')}")
                     print(f"        SL倍数: {scalping_params.get('atr_stop_multiplier', 'N/A')}")
                     print(f"        持仓时长: {scalping_params.get('max_holding_hours', 'N/A')}h")
@@ -8232,7 +8220,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     if 'swing_params' not in current_config:
                         current_config['swing_params'] = {}
                     current_config['swing_params'].update(swing_params)
-                    print(f"     🌊 波段参数已更新:")
+                    print("     🌊 波段参数已更新:")
                     print(f"        TP倍数: {swing_params.get('atr_tp_multiplier', 'N/A')}")
                     print(f"        SL倍数: {swing_params.get('atr_stop_multiplier', 'N/A')}")
                     print(f"        持仓时长: {swing_params.get('max_holding_hours', 'N/A')}h")
@@ -8244,7 +8232,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 # 【V8.5.2.4.79】说明：这里必须保存，因为邮件生成时会重新load_learning_config()
                 # 如果不保存，邮件会读到Phase 2的旧参数
                 save_learning_config(current_config)
-                print(f"     💾 Phase 3参数已保存到配置文件（供邮件使用）")
+                print("     💾 Phase 3参数已保存到配置文件（供邮件使用）")
                 
                 # 保存Phase 4验证状态到current_config
                 current_config['_phase4_status'] = overall_status
@@ -8292,12 +8280,12 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                         'found_profitable': phase2_params.get('found_profitable', True)
                     }
                     
-                    print(f"\n  📊 【Phase 4回退】已应用Phase 2参数:")
+                    print("\n  📊 【Phase 4回退】已应用Phase 2参数:")
                     print(f"     ⚡ 超短线: TP={current_config['scalping_params']['atr_tp_multiplier']:.1f}, SL={current_config['scalping_params']['atr_stop_multiplier']:.1f}, 持仓{current_config['scalping_params']['max_holding_hours']}h")
                     print(f"     🌊 波段: TP={current_config['swing_params']['atr_tp_multiplier']:.1f}, SL={current_config['swing_params']['atr_stop_multiplier']:.1f}, 持仓{current_config['swing_params']['max_holding_hours']}h")
                 else:
                     # 如果没有Phase 2 baseline，使用保守默认值
-                    print(f"\n  ⚠️  无Phase 2 baseline，使用保守默认参数")
+                    print("\n  ⚠️  无Phase 2 baseline，使用保守默认参数")
                     current_config['scalping_params'] = {
                         'atr_tp_multiplier': 12.0,
                         'atr_stop_multiplier': 2.0,
@@ -8322,10 +8310,10 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             # 【V8.5.2.4.79】Phase 4完成，统一保存最终参数
             # 无论PASSED还是FAILED，都需要保存最终决定的参数
             save_learning_config(current_config)
-            print(f"\n  💾 【Phase 4完成】最终参数已保存到配置文件")
+            print("\n  💾 【Phase 4完成】最终参数已保存到配置文件")
             
             # 打印最终参数摘要
-            print(f"\n  📊 【最终参数摘要】")
+            print("\n  📊 【最终参数摘要】")
             print(f"     Phase 4状态: {current_config.get('_phase4_status', 'N/A')}")
             print(f"     Phase 3应用: {current_config.get('_phase3_applied', False)}")
             if current_config.get('scalping_params'):
@@ -8357,7 +8345,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         'phase2_baseline': phase2_baseline,  # 🆕 V8.5.2.4.10
         'phase3_result': phase3_result,  # 🆕 V8.5.2.4.41
         'phase4_result': phase4_result,  # 🆕 V8.5.2.4.42
-        'all_opportunities_sorted': all_opportunities_sorted if 'all_opportunities_sorted' in locals() else []  # 🆕 V8.5.2.4.47: 供邮件使用
+        'all_opportunities_sorted': all_opportunities_for_phase3 if 'all_opportunities_for_phase3' in locals() else []  # 🆕 V8.5.2.4.47: 供邮件使用
     }
 
 
@@ -8388,11 +8376,11 @@ def iterative_parameter_optimization_v770(data_summary, current_config, original
     注意：此函数保留用于兼容性，但推荐使用新的Phase 3系统
     """
     print(f"\n{'='*70}")
-    print(f"【V7.7.0 多阶段盈利优先优化】")
+    print("【V7.7.0 多阶段盈利优先优化】")
     print(f"{'='*70}")
-    print(f"  🎯 目标：优先找到盈利，然后深度优化")
-    print(f"  📊 流程：盈利探索 → 盈利扩大 → 参数优化 → 最终验证")
-    print(f"  ⏱️  预计：2-5分钟（视探索难度）")
+    print("  🎯 目标：优先找到盈利，然后深度优化")
+    print("  📊 流程：盈利探索 → 盈利扩大 → 参数优化 → 最终验证")
+    print("  ⏱️  预计：2-5分钟（视探索难度）")
     print(f"{'='*70}")
     
     # 定义回测天数
@@ -8409,7 +8397,7 @@ def iterative_parameter_optimization_v770(data_summary, current_config, original
                 learning_config = json.load(f)
                 historical_sampling_range = learning_config.get('optimal_sampling_range')
                 if historical_sampling_range:
-                    print(f"\n📚 发现历史最优采样范围")
+                    print("\n📚 发现历史最优采样范围")
                     print(f"   R:R {historical_sampling_range['rr_range']}, "
                           f"共识 {historical_sampling_range['consensus_range']}")
         except:
@@ -8427,7 +8415,7 @@ def iterative_parameter_optimization_v770(data_summary, current_config, original
     if not phase1_result['found_profitable']:
         # 未找到盈利 → 触发保守策略
         print(f"\n{'='*70}")
-        print(f"【触发保守策略】")
+        print("【触发保守策略】")
         print(f"{'='*70}")
         
         # 选择亏损最小的配置
@@ -8445,10 +8433,10 @@ def iterative_parameter_optimization_v770(data_summary, current_config, original
             
             safe_rr = max(2.5, min(5.0, safe_rr))  # 限制在2.5-5.0之间
             
-            print(f"  ⚠️  选择亏损最小配置并应用保守策略")
+            print("  ⚠️  选择亏损最小配置并应用保守策略")
             print(f"  📊 当前胜率: {win_rate*100:.1f}%")
             print(f"  🛡️  安全盈亏比: {safe_rr:.2f}:1")
-            print(f"  📉 降低仓位至: 8%")
+            print("  📉 降低仓位至: 8%")
             
             conservative_config = best_unprofitable['config'].copy()
             conservative_config['min_risk_reward'] = safe_rr
@@ -8504,7 +8492,7 @@ def iterative_parameter_optimization_v770(data_summary, current_config, original
                    len(phase4_result['test_results']))
     
     print(f"\n{'='*70}")
-    print(f"【V7.7.0 优化完成】🎉")
+    print("【V7.7.0 优化完成】🎉")
     print(f"{'='*70}")
     print(f"  总轮次: {total_rounds}轮")
     print(f"  最优配置: R:R={final_config['min_risk_reward']:.2f}, "
@@ -8512,7 +8500,7 @@ def iterative_parameter_optimization_v770(data_summary, current_config, original
           f"ATR={final_config['atr_stop_multiplier']:.2f}")
     print(f"  综合指标: {final_metric:.4f}")
     print(f"  置信度: {phase4_result['confidence']}")
-    print(f"  状态: ✅ 盈利")
+    print("  状态: ✅ 盈利")
     print(f"{'='*70}")
     
     # 保存最优采样范围（经验复用！）
@@ -8534,7 +8522,7 @@ def iterative_parameter_optimization_v770(data_summary, current_config, original
         'performance_metric': final_metric
     }
     
-    print(f"\n📚 保存最优采样范围（下次优化将使用）")
+    print("\n📚 保存最优采样范围（下次优化将使用）")
     print(f"   R:R {new_sampling_range['rr_range']}")
     print(f"   共识 {new_sampling_range['consensus_range']}")
     print(f"   ATR {new_sampling_range['atr_range']}")
@@ -8600,11 +8588,11 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
         }
     """
     print(f"\n{'='*70}")
-    print(f"【🔄 自适应分层搜索】4轮固定流程")
+    print("【🔄 自适应分层搜索】4轮固定流程")
     # 🆕 V7.6.6: 盈利优先搜索策略
-    print(f"第1轮: 7点战略采样(R:R 1.0-4.0) → 盈利性筛选 → 第2轮: 精搜 → 第3轮: 验证")
-    print(f"预计耗时: ~70秒 | 总回测: 14-17组（视情况而定）")
-    print(f"策略: 优先从盈利组合中选最优，减少保守策略触发率")
+    print("第1轮: 7点战略采样(R:R 1.0-4.0) → 盈利性筛选 → 第2轮: 精搜 → 第3轮: 验证")
+    print("预计耗时: ~70秒 | 总回测: 14-17组（视情况而定）")
+    print("策略: 优先从盈利组合中选最优，减少保守策略触发率")
     print(f"{'='*70}")
     
     # 🔧 V7.6.7.1: 在函数开头导入必要模块，避免作用域问题
@@ -8631,7 +8619,7 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
                 learning_config = json.load(f)
                 historical_sampling_range = learning_config.get('optimal_sampling_range')
                 if historical_sampling_range:
-                    print(f"\n📚 发现历史最优采样范围（上次优化结果）")
+                    print("\n📚 发现历史最优采样范围（上次优化结果）")
                     print(f"   范围：R:R {historical_sampling_range['rr_range']}, 共识 {historical_sampling_range['consensus_range']}")
         except:
             pass
@@ -8640,10 +8628,10 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
     # 第1轮：7点战略采样（V7.6.6扩大范围）
     # ============================================================
     print(f"\n{'='*60}")
-    print(f"【第1轮：7点战略采样】覆盖广域寻找盈利组合")
+    print("【第1轮：7点战略采样】覆盖广域寻找盈利组合")
     print(f"{'='*60}")
-    print(f"  🎯 目标：扩大搜索范围，优先发现盈利参数组合")
-    print(f"  📊 回测：7组战略选点（R:R覆盖1.0-4.0）")
+    print("  🎯 目标：扩大搜索范围，优先发现盈利参数组合")
+    print("  📊 回测：7组战略选点（R:R覆盖1.0-4.0）")
     
     # 🆕 V7.6.3.13: 如果有历史范围，使用历史范围；否则使用默认范围
     if historical_sampling_range:
@@ -8659,7 +8647,7 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
             {'min_risk_reward': (rr_range[0] + rr_range[1]) * 0.625 + rr_range[1] * 0.375, 'min_indicator_consensus': cons_range[1] if cons_range[0] == cons_range[1] else cons_range[1] - 1, 'atr_stop_multiplier': (atr_range[0] + atr_range[1]) / 2, 'name': '#4 偏严格'},
                 {'min_risk_reward': rr_range[1], 'min_indicator_consensus': cons_range[1], 'atr_stop_multiplier': atr_range[1], 'name': '#5 严格'},
         ]
-        print(f"  ℹ️ 使用历史最优范围")
+        print("  ℹ️ 使用历史最优范围")
     else:
         # 使用默认范围
         # 🆕 V7.6.6: 扩大采样范围，确保覆盖盈利区域
@@ -8672,9 +8660,9 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
             {'min_risk_reward': 3.5, 'min_indicator_consensus': 3, 'atr_stop_multiplier': 2.0, 'name': '#6 超严格'},  # 🆕 V7.6.6
             {'min_risk_reward': 4.0, 'min_indicator_consensus': 3, 'atr_stop_multiplier': 2.0, 'name': '#7 极严格'},  # 🆕 V7.6.6
         ]
-        print(f"  ℹ️ 使用V7.6.6扩展范围（覆盖R:R 1.0-4.0，提高盈利组合发现率）")
+        print("  ℹ️ 使用V7.6.6扩展范围（覆盖R:R 1.0-4.0，提高盈利组合发现率）")
     
-    print(f"\n  🔍 开始回测7个战略点...")
+    print("\n  🔍 开始回测7个战略点...")
     round1_results = []
     for i, point in enumerate(strategic_points, 1):
         config = {k: v for k, v in point.items() if k != 'name'}
@@ -8695,7 +8683,7 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
             print(f"    {point['name']}: ❌ 回测失败")
     
     if not round1_results:
-        print(f"\n  ❌ 所有战略点回测失败，终止优化")
+        print("\n  ❌ 所有战略点回测失败，终止优化")
         return None
     
     # 找到第1轮最优点
@@ -8703,18 +8691,18 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
     round1_best_metric = round1_best.get('composite_profit_metric', 0)
     round1_best_config = round1_best['point_config']
     
-    print(f"\n  ✅ 第1轮完成")
+    print("\n  ✅ 第1轮完成")
     print(f"     最优点: {round1_best['point_name']}")
     print(f"     最优指标: {round1_best_metric:.4f}")
     print(f"     最优配置: R:R={round1_best_config['min_risk_reward']}, 共识={round1_best_config['min_indicator_consensus']}, ATR={round1_best_config['atr_stop_multiplier']}")
     
     # 🆕 V7.6.6/V7.6.7: 盈利性筛选与盈利发现循环
     profitable_round1 = [r for r in round1_results if r.get('is_profitable', False)]
-    print(f"\n  📊 盈利性分析:")
+    print("\n  📊 盈利性分析:")
     print(f"     盈利组合: {len(profitable_round1)}/{len(round1_results)}")
     
     if profitable_round1:
-        print(f"     ✅ 发现盈利组合，后续将优先从盈利区域搜索")
+        print("     ✅ 发现盈利组合，后续将优先从盈利区域搜索")
         # 如果有盈利组合，选盈利组合中综合指标最高的作为起点
         best_profitable = max(profitable_round1, key=lambda x: x.get('composite_profit_metric', 0))
         if best_profitable.get('composite_profit_metric', 0) >= round1_best_metric * 0.95:  # 如果盈利组合指标不低于最优点95%
@@ -8723,16 +8711,16 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
             round1_best_config = round1_best['point_config']
             print(f"     → 切换到盈利最优点: {round1_best['point_name']} (期望收益>0)")
     else:
-        print(f"     ⚠️ 未发现盈利组合，启动【盈利发现循环】")
+        print("     ⚠️ 未发现盈利组合，启动【盈利发现循环】")
         
         # ============================================================
         # 🆕 V7.6.7: 盈利发现循环（最多3次迭代）
         # ============================================================
         print(f"\n{'='*60}")
-        print(f"【🔍 V7.6.7 盈利发现循环】最多3次迭代")
+        print("【🔍 V7.6.7 盈利发现循环】最多3次迭代")
         print(f"{'='*60}")
-        print(f"  目标：寻找可能盈利的参数区域")
-        print(f"  策略：AI分析当前亏损模式，推荐新的测试区域")
+        print("  目标：寻找可能盈利的参数区域")
+        print("  策略：AI分析当前亏损模式，推荐新的测试区域")
         
         profit_discovery_results = []
         max_discovery_rounds = 3
@@ -8829,14 +8817,14 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
                 if json_match:
                     ai_analysis = json.loads(json_match.group())
                     
-                    print(f"  ✅ AI分析完成")
+                    print("  ✅ AI分析完成")
                     print(f"     诊断: {ai_analysis.get('diagnosis', 'N/A')}")
                     print(f"     假设: {ai_analysis.get('hypothesis', 'N/A')}")
                     print(f"     策略: {ai_analysis.get('strategy', 'N/A')}")
                     print(f"     置信度: {ai_analysis.get('confidence', 'N/A')}")
                     
                     # 回测AI推荐的4个点
-                    print(f"\n  🔍 回测AI推荐的4个可能盈利的点...")
+                    print("\n  🔍 回测AI推荐的4个可能盈利的点...")
                     discovery_tests = []
                     
                     for i, test in enumerate(ai_analysis.get('recommended_tests', []), 1):
@@ -8874,7 +8862,7 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
                     
                     if profitable_discoveries:
                         print(f"\n  🎉 成功！在第{discovery_round}轮发现{len(profitable_discoveries)}个盈利组合！")
-                        print(f"  → 退出盈利发现循环，进入正常优化流程")
+                        print("  → 退出盈利发现循环，进入正常优化流程")
                         
                         # 更新round1结果，加入盈利组合
                         round1_results.extend(discovery_tests)
@@ -8891,9 +8879,9 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
                     else:
                         print(f"  ⚠️ 第{discovery_round}轮未找到盈利组合")
                         if discovery_round < max_discovery_rounds:
-                            print(f"  → 继续下一轮盈利发现...")
+                            print("  → 继续下一轮盈利发现...")
                 else:
-                    print(f"  ⚠️ AI响应格式错误，使用默认策略")
+                    print("  ⚠️ AI响应格式错误，使用默认策略")
                     break
                     
             except Exception as e:
@@ -8903,7 +8891,7 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
         # 盈利发现循环结束
         if not profitable_round1:
             print(f"\n  ❌ 盈利发现失败：经过{max_discovery_rounds}轮尝试，仍未找到盈利组合")
-            print(f"  → 将使用保守策略确保数学期望为正")
+            print("  → 将使用保守策略确保数学期望为正")
         
         print(f"\n{'='*60}")
     
@@ -8944,7 +8932,7 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
     # 🆕 V7.6.3.13: 第1.5轮：采样质量评估与自适应重采样
     # ============================================================
     print(f"\n{'='*60}")
-    print(f"【第1.5轮：采样质量评估】")
+    print("【第1.5轮：采样质量评估】")
     print(f"{'='*60}")
     
     # 评估采样质量
@@ -8972,7 +8960,7 @@ def iterative_parameter_optimization_v76x_backup(data_summary, current_config, o
     
     if need_resample:
         print(f"  ⚠️ 采样质量需要改进：{resample_reason}")
-        print(f"  🔄 触发AI重采样机制...")
+        print("  🔄 触发AI重采样机制...")
         
         # 构建重采样Prompt（专业英文，要求中文输出）
         resample_prompt = f"""
@@ -9036,13 +9024,13 @@ Based on the results above, design a BETTER 5-point sampling strategy.
             
             resample_suggestion = json.loads(json_str)
             
-            print(f"\n  ✅ AI重采样建议")
+            print("\n  ✅ AI重采样建议")
             print(f"     诊断：{resample_suggestion['diagnosis']}")
             print(f"     方向：{resample_suggestion['direction']}")
             print(f"     新范围：R:R {resample_suggestion['new_range_description']['rr_range']}, 共识 {resample_suggestion['new_range_description']['consensus_range']}")
             
             # 执行重采样
-            print(f"\n  🔍 执行重采样...")
+            print("\n  🔍 执行重采样...")
             new_strategic_points = resample_suggestion['new_sampling']
             round1_v2_results = []
             
@@ -9070,7 +9058,7 @@ Based on the results above, design a BETTER 5-point sampling strategy.
                 
                 if new_best_metric > old_best_metric * 1.05:  # 至少提升5%
                     print(f"\n  ✅ 重采样成功！指标提升：{old_best_metric:.4f} → {new_best_metric:.4f} ({improvement:+.1f}%)")
-                    print(f"     采用新采样结果")
+                    print("     采用新采样结果")
                     
                     # 使用新结果
                     round1_results = round1_v2_results
@@ -9101,20 +9089,20 @@ Based on the results above, design a BETTER 5-point sampling strategy.
             
         except Exception as e:
             print(f"  ⚠️ AI重采样失败: {e}")
-            print(f"  ℹ️ 继续使用原采样结果")
+            print("  ℹ️ 继续使用原采样结果")
     else:
-        print(f"  ✅ 采样质量良好")
+        print("  ✅ 采样质量良好")
         print(f"     最优指标: {round1_best_metric:.4f}")
         print(f"     平均指标: {avg_metric:.4f}")
-        print(f"     继续后续流程")
+        print("     继续后续流程")
     
     # ============================================================
     # 第2轮：AI智能分析
     # ============================================================
     print(f"\n{'='*60}")
-    print(f"【第2轮：AI智能分析】定位最优区域")
+    print("【第2轮：AI智能分析】定位最优区域")
     print(f"{'='*60}")
-    print(f"  🤖 AI分析5个战略点的回测结果...")
+    print("  🤖 AI分析5个战略点的回测结果...")
     
     # round1_summary已在第1.5轮之前定义，此处直接使用
     
@@ -9181,7 +9169,7 @@ Based on the 5 strategic sampling points above:
         
         ai_analysis = json.loads(json_str)
         
-        print(f"\n  ✅ AI分析完成")
+        print("\n  ✅ AI分析完成")
         print(f"     最优区域: R:R{ai_analysis['optimal_region']['min_risk_reward_range']}, 共识{ai_analysis['optimal_region']['consensus_range']}")
         print(f"     推荐测试: {len(ai_analysis['round3_tests'])}个点")
         
@@ -9205,7 +9193,7 @@ Based on the 5 strategic sampling points above:
                 {'min_risk_reward': best_rr, 'min_indicator_consensus': best_cons, 'atr_stop_multiplier': best_atr+0.2, 'reason': '放宽ATR'}
             ]
         }
-        print(f"  ℹ️ 使用备用测试点生成策略")
+        print("  ℹ️ 使用备用测试点生成策略")
     
     rounds_history.append({
         'round_num': 2,
@@ -9220,9 +9208,9 @@ Based on the 5 strategic sampling points above:
     # 第3轮：局部精确搜索
     # ============================================================
     print(f"\n{'='*60}")
-    print(f"【第3轮：局部精确搜索】AI推荐的4个测试点")
+    print("【第3轮：局部精确搜索】AI推荐的4个测试点")
     print(f"{'='*60}")
-    print(f"  🔍 回测AI推荐的4个局部测试点...")
+    print("  🔍 回测AI推荐的4个局部测试点...")
     
     round3_results = []
     for i, test_config in enumerate(ai_analysis['round3_tests'], 1):
@@ -9251,7 +9239,7 @@ Based on the 5 strategic sampling points above:
         round3_best_metric = round3_best.get('composite_profit_metric', 0)
         round3_best_config = round3_best['test_config']
         
-        print(f"\n  ✅ 第3轮完成")
+        print("\n  ✅ 第3轮完成")
         print(f"     最优点: 测试#{round3_results.index(round3_best)+6}")
         print(f"     最优指标: {round3_best_metric:.4f}")
         print(f"     vs第1轮: {((round3_best_metric - round1_best_metric) / round1_best_metric * 100) if round1_best_metric > 0 else 0:+.1f}%")
@@ -9284,7 +9272,7 @@ Based on the 5 strategic sampling points above:
                 'reason': '未发现更优点'
             })
     else:
-        print(f"\n  ⚠️ 第3轮所有测试失败")
+        print("\n  ⚠️ 第3轮所有测试失败")
         rounds_history.append({
             'round_num': 3,
             'improved': False,
@@ -9298,9 +9286,9 @@ Based on the 5 strategic sampling points above:
     # 第4轮：最终验证
     # ============================================================
     print(f"\n{'='*60}")
-    print(f"【第4轮：最终验证】确认全局最优")
+    print("【第4轮：最终验证】确认全局最优")
     print(f"{'='*60}")
-    print(f"  🔍 验证当前最优点及其相邻点...")
+    print("  🔍 验证当前最优点及其相邻点...")
     
     # 生成验证点：当前最优 + 左侧 + 右侧
     current_rr = best_config['min_risk_reward']
@@ -9364,7 +9352,7 @@ Based on the 5 strategic sampling points above:
             'reason': f'确认全局最优，置信度{confidence}'
         })
     else:
-        print(f"\n  ⚠️ 验证测试不足")
+        print("\n  ⚠️ 验证测试不足")
         rounds_history.append({
             'round_num': 4,
             'improved': False,
@@ -9376,9 +9364,9 @@ Based on the 5 strategic sampling points above:
     
     # 输出最终结果
     print(f"\n{'='*70}")
-    print(f"【🏆 优化完成】")
+    print("【🏆 优化完成】")
     print(f"{'='*70}")
-    print(f"  总轮次: 4轮")
+    print("  总轮次: 4轮")
     print(f"  总回测: {len(all_backtest_results)}组")
     print(f"  最优轮次: 第{best_round_num}轮")
     print(f"  最优指标: {best_metric:.4f}")
@@ -9431,7 +9419,7 @@ Based on the 5 strategic sampling points above:
         with open(config_file, 'w', encoding='utf-8') as f:
             json.dump(learning_config, f, indent=2, ensure_ascii=False)
         
-        print(f"\n  💾 已保存最优采样范围（用于下次优化）")
+        print("\n  💾 已保存最优采样范围（用于下次优化）")
         print(f"     R:R范围: {optimal_sampling_range['rr_range']}")
         print(f"     共识范围: {optimal_sampling_range['consensus_range']}")
         print(f"     ATR范围: {optimal_sampling_range['atr_range']}")
@@ -9441,7 +9429,7 @@ Based on the 5 strategic sampling points above:
     # ============================================================
     # 🆕 V7.6.6: 盈利优先选择 - 优先从盈利组合中选最优
     # ============================================================
-    print(f"\n")
+    print("\n")
     print("=" * 60)
     print("【🎯 V7.6.6 盈利优先选择】")
     print("=" * 60)
@@ -9465,7 +9453,7 @@ Based on the 5 strategic sampling points above:
     profitable_configs = [r for r in all_backtest_results if r.get('is_profitable', False)]
     unprofitable_configs = [r for r in all_backtest_results if not r.get('is_profitable', False)]
     
-    print(f"\n【所有回测结果】")
+    print("\n【所有回测结果】")
     print(f"  总回测组数: {len(all_backtest_results)}")
     print(f"  ✅ 盈利组合: {len(profitable_configs)}")
     print(f"  ❌ 亏损组合: {len(unprofitable_configs)}")
@@ -9491,7 +9479,7 @@ Based on the 5 strategic sampling points above:
         expected_return_value = best_from_profitable.get('expected_return', 0)
         
         # 不需要保守策略
-        print(f"\n🎉 成功找到盈利最优组合，无需保守策略！")
+        print("\n🎉 成功找到盈利最优组合，无需保守策略！")
         
     else:
         # 没有盈利组合，选综合指标最高的（亏损最小）
@@ -9500,7 +9488,7 @@ Based on the 5 strategic sampling points above:
         best_config = best_from_unprofitable.get('point_config') or best_from_unprofitable.get('test_config')
         best_metric = best_from_unprofitable.get('composite_profit_metric', 0)
         
-        print(f"\n⚠️ 未找到盈利组合，选择亏损最小的")
+        print("\n⚠️ 未找到盈利组合，选择亏损最小的")
         print(f"  → 最优（亏损最小）来自: {best_from_unprofitable.get('source_round', 'Unknown')}")
         print(f"  → R:R={best_config['min_risk_reward']}, 共识={best_config['min_indicator_consensus']}, ATR={best_config['atr_stop_multiplier']}")
         print(f"  → 综合指标: {best_metric:.4f}")
@@ -9515,14 +9503,14 @@ Based on the 5 strategic sampling points above:
     # 🆕 V7.6.6: 盈利优先选择 - 优先从盈利组合中选最优
     # ============================================================
     print(f"\n{'='*70}")
-    print(f"【🎯 V7.6.6 盈利优先选择】")
+    print("【🎯 V7.6.6 盈利优先选择】")
     print(f"{'='*70}")
     
     # 盈利性分析
     profitable_configs = [r for r in all_backtest_results if r.get('is_profitable', False)]
     unprofitable_configs = [r for r in all_backtest_results if not r.get('is_profitable', False)]
     
-    print(f"\n【所有回测结果】")
+    print("\n【所有回测结果】")
     print(f"  总回测组数: {len(all_backtest_results)}")
     print(f"  ✅ 盈利组合: {len(profitable_configs)}")
     print(f"  ❌ 亏损组合: {len(unprofitable_configs)}")
@@ -9548,7 +9536,7 @@ Based on the 5 strategic sampling points above:
         expected_return_value = best_from_profitable.get('expected_return', 0)
         
         # 不需要保守策略
-        print(f"\n🎉 成功找到盈利最优组合，无需保守策略！")
+        print("\n🎉 成功找到盈利最优组合，无需保守策略！")
         
     else:
         # 没有盈利组合，选综合指标最高的（亏损最小）
@@ -9557,7 +9545,7 @@ Based on the 5 strategic sampling points above:
         best_config = best_from_unprofitable.get('point_config') or best_from_unprofitable.get('test_config')
         best_metric = best_from_unprofitable.get('composite_profit_metric', 0)
         
-        print(f"\n⚠️ 未找到盈利组合，选择亏损最小的")
+        print("\n⚠️ 未找到盈利组合，选择亏损最小的")
         print(f"  → 最优（亏损最小）来自: {best_from_unprofitable.get('source_round', 'Unknown')}")
         print(f"  → R:R={best_config['min_risk_reward']}, 共识={best_config['min_indicator_consensus']}, ATR={best_config['atr_stop_multiplier']}")
         print(f"  → 综合指标: {best_metric:.4f}")
@@ -9574,7 +9562,7 @@ Based on the 5 strategic sampling points above:
     # 保守策略仅在无盈利组合时触发
     if not is_profitable_param:
         print(f"\n{'='*70}")
-        print(f"【🛡️ 触发保守策略】")
+        print("【🛡️ 触发保守策略】")
         print(f"{'='*70}")
         
         # 获取最优参数的详细回测结果
@@ -9585,7 +9573,7 @@ Based on the 5 strategic sampling points above:
             actual_rr = best_result.get('weighted_profit_ratio', 0)
             win_rate = best_result.get('weighted_win_rate', 0)
             
-            print(f"\n💰 当前最优参数（亏损最小）分析:")
+            print("\n💰 当前最优参数（亏损最小）分析:")
             print(f"   总盈利: {total_profit_value:.2f}%")
             print(f"   期望收益: {expected_return_value:+.2f}% per trade")
             print(f"   胜率: {win_rate*100:.1f}%")
@@ -9593,8 +9581,8 @@ Based on the 5 strategic sampling points above:
             print(f"   盈亏平衡点: {breakeven_rr:.2f}:1")
             
             # 应用保守策略
-            print(f"\n⚠️ 【警告】最优参数历史回测仍然亏损！")
-            print(f"\n   📊 亏损原因分析：")
+            print("\n⚠️ 【警告】最优参数历史回测仍然亏损！")
+            print("\n   📊 亏损原因分析：")
             if actual_rr < breakeven_rr:
                 print(f"   • 盈亏比不足：需要{breakeven_rr:.2f}:1，实际{actual_rr:.2f}:1")
             if total_profit_value < 0:
@@ -9607,17 +9595,17 @@ Based on the 5 strategic sampling points above:
             safe_rr = max(breakeven_rr * 1.3, 2.5)  # 至少2.5
             safe_rr = min(safe_rr, 4.0)  # 最多4.0（避免过严）
             
-            print(f"\n   💡 保守策略计算：")
+            print("\n   💡 保守策略计算：")
             print(f"   • 当前胜率：{win_rate*100:.1f}%")
             print(f"   • 盈亏平衡点：{breakeven_rr:.2f}:1")
             print(f"   • 安全盈亏比：{safe_rr:.2f}:1（盈亏平衡点 × 1.3，留30%安全边际）")
             print(f"   • 理论期望（使用安全盈亏比）：{(win_rate * safe_rr - (1 - win_rate)):+.2f}:1 > 0 ✓")
             
-            print(f"\n   🛡️ 应用保守策略：")
+            print("\n   🛡️ 应用保守策略：")
             print(f"   1. ⚠️ 提高盈亏比要求：{best_config['min_risk_reward']:.2f} → {safe_rr:.2f}")
-            print(f"   2. ⚠️ 保持其他参数不变（共识、ATR）")
-            print(f"   3. ⚠️ 降低仓位至8%（额外保护）")
-            print(f"   4. ⚠️ 数学期望已为正，可安全交易")
+            print("   2. ⚠️ 保持其他参数不变（共识、ATR）")
+            print("   3. ⚠️ 降低仓位至8%（额外保护）")
+            print("   4. ⚠️ 数学期望已为正，可安全交易")
             
             # 应用保守策略
             best_config['min_risk_reward'] = safe_rr  # 🔑 核心：提高盈亏比
@@ -9627,14 +9615,14 @@ Based on the 5 strategic sampling points above:
             best_config['_original_rr'] = actual_rr  # 保存原始盈亏比
             best_config['_breakeven_rr'] = breakeven_rr  # 保存盈亏平衡点
             
-            print(f"\n   ✅ 已自动应用保守策略（数学期望为正）")
+            print("\n   ✅ 已自动应用保守策略（数学期望为正）")
         else:
-            print(f"\n✅ 最优参数预期盈利！")
+            print("\n✅ 最优参数预期盈利！")
             print(f"   理论每笔收益: {expected_return_value:+.2f}%")
-            print(f"   数学期望正向，可以安全应用")
+            print("   数学期望正向，可以安全应用")
     else:
-        print(f"\n⚠️ 无法完成盈利判断（回测失败）")
-        print(f"   将应用参数，但建议人工审核")
+        print("\n⚠️ 无法完成盈利判断（回测失败）")
+        print("   将应用参数，但建议人工审核")
     
     return {
         'rounds': rounds_history,
@@ -9672,7 +9660,7 @@ def analyze_and_adjust_params():
     print("\n【🔬 深度复盘分析】")
     
     # 🔧 V8.3.25: 导入必要的库
-    from datetime import datetime, timedelta
+    from datetime import datetime
     
     # 🔧 V7.9.1: 定义yesterday变量（后续代码需要使用）
     yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
@@ -9816,14 +9804,14 @@ def analyze_and_adjust_params():
                 if confirmed_opps_full:
                     scalping_count = len(confirmed_opps_full.get('scalping', {}).get('opportunities', []))
                     swing_count = len(confirmed_opps_full.get('swing', {}).get('opportunities', []))
-                    print(f"  ✅ 客观机会识别完成:")
+                    print("  ✅ 客观机会识别完成:")
                     print(f"     ⚡ 超短线: {scalping_count}个机会")
                     print(f"     🌊 波段: {swing_count}个机会")
-                    print(f"  💡 后续将基于这些客观机会评估AI捕获率")
+                    print("  💡 后续将基于这些客观机会评估AI捕获率")
             except Exception as e:
                 print(f"  ⚠️  客观机会识别失败: {e}")
         else:
-            print(f"  ⚠️  无市场快照数据，跳过客观机会识别")
+            print("  ⚠️  无市场快照数据，跳过客观机会识别")
 
         # ========== 第1步：收集交易数据统计 ==========
         print("\n【第1步：数据收集与分析】")
@@ -9941,7 +9929,7 @@ def analyze_and_adjust_params():
         # 🆕 V3.0: 错过机会分析
         # 【V8.5.2.4.89】禁用旧版错过机会分析（已由开仓时机分析V2模块完全替代，且会导致OOM）
         print("\n【错过机会分析】")
-        print(f"ℹ️  跳过旧版错过机会分析（已由开仓时机分析V2模块完全替代）")
+        print("ℹ️  跳过旧版错过机会分析（已由开仓时机分析V2模块完全替代）")
         
         # 【V8.5.2.4.89】延迟加载old_config - 在Phase 2之后再加载（节省Phase 1阶段的内存）
         # old_config只在Phase 2之后计算参数变化时使用（第10840行附近）
@@ -9970,7 +9958,7 @@ def analyze_and_adjust_params():
                 traceback.print_exc()
                 exit_analysis = None
         else:
-            print(f"⚠️ 昨日无平仓交易，跳过平仓时机分析")
+            print("⚠️ 昨日无平仓交易，跳过平仓时机分析")
 
         # 🆕 V8.3.22: 开仓时机分析
         # 🔧 V8.3.25.8: 使用新的V2分析（对比市场机会vs AI决策）
@@ -10038,7 +10026,7 @@ def analyze_and_adjust_params():
                     traceback.print_exc()
                     confirmed_opportunities = None
             else:
-                print(f"  ⚠️  Phase 1未生成客观机会池，跳过开仓时机分析")
+                print("  ⚠️  Phase 1未生成客观机会池，跳过开仓时机分析")
             
             # V2需要：昨日开仓交易、市场快照、AI决策记录、昨日日期
             entry_analysis = analyze_entry_timing_v2(
@@ -10078,7 +10066,7 @@ def analyze_and_adjust_params():
                             rr = cached_data['rr_distribution']
                             print(f"  1️⃣ R:R范围: [{rr['range'][0]:.2f}, {rr['range'][1]:.2f}] (中位{rr['median']:.2f})")
                         if cached_data.get('precision_formula'):
-                            print(f"  2️⃣ 精准率公式: 已加载（基于真实数据）")
+                            print("  2️⃣ 精准率公式: 已加载（基于真实数据）")
                         if cached_data.get('atr_multipliers'):
                             atr = cached_data['atr_multipliers']
                             print(f"  3️⃣ ATR倍数: TP范围 [{atr['tp_range'][0]:.2f}, {atr['tp_range'][1]:.2f}]")
@@ -10088,12 +10076,12 @@ def analyze_and_adjust_params():
         # 如果没有缓存且有confirmed_opportunities，执行预分析
         if not use_cache and 'confirmed_opportunities' in locals() and confirmed_opportunities:
             try:
-                print(f"  📊 【V8.3.31 全面预分析】统计真实盈利机会的参数分布...")
-                print(f"     （预计30秒，之后会缓存，下次<1秒）")
+                print("  📊 【V8.3.31 全面预分析】统计真实盈利机会的参数分布...")
+                print("     （预计30秒，之后会缓存，下次<1秒）")
                 # 预分析逻辑直接内联（避免依赖外部函数）
                 # 这里调用quick_global_search_v8316内部的预分析逻辑
                 # 为了不重复代码，我们在第2步时让它共享这个变量
-                print(f"  ⚠️  缓存未找到，将在【第2步】执行完整预分析并生成缓存")
+                print("  ⚠️  缓存未找到，将在【第2步】执行完整预分析并生成缓存")
             except Exception as e:
                 print(f"  ⚠️  预分析失败: {e}，将在第2步使用默认参数")
         
@@ -10108,7 +10096,7 @@ def analyze_and_adjust_params():
         
         # 如果没有数据，跳过
         if not should_run_ai:
-            print(f"  ℹ️  跳过AI分析（无开仓或平仓数据）")
+            print("  ℹ️  跳过AI分析（无开仓或平仓数据）")
         
         if should_run_ai:
             try:
@@ -10161,7 +10149,7 @@ def analyze_and_adjust_params():
                         }
                     
                     save_learning_config(config)
-                    print(f"  ✓ AI自我反思已保存到learning_config.json")
+                    print("  ✓ AI自我反思已保存到learning_config.json")
                     
             except Exception as e:
                 print(f"  ⚠️ AI自我反思失败: {e}")
@@ -10183,7 +10171,7 @@ def analyze_and_adjust_params():
             'timestamp': datetime.now().isoformat(),
             'stage': 'before_phase2'
         }
-        print(f"  💾 【备份】保存优化前参数快照（baseline_config）")
+        print("  💾 【备份】保存优化前参数快照（baseline_config）")
         
         # 准备原始统计数据
         original_stats = {
@@ -10198,7 +10186,7 @@ def analyze_and_adjust_params():
         
         if ENABLE_V770_QUICK_SEARCH:
             # 快速探索模式（1-2分钟）- 为V8.3.12提供初始参数
-            print(f"  ℹ️  使用快速探索模式（V8.3.16）")
+            print("  ℹ️  使用快速探索模式（V8.3.16）")
             
             # 🔧 V8.3.25.23→V8.4.5: 先生成confirmed_opportunities用于快速探索（使用带验证的函数）
             # 【V8.5.2.4.86】添加Phase 1缓存逻辑
@@ -10208,14 +10196,14 @@ def analyze_and_adjust_params():
             
             # 检查是否有今日缓存
             if '_phase1_cache' in config and config['_phase1_cache'].get('date') == datetime.now().strftime('%Y-%m-%d'):
-                print(f"  💾 【使用Phase 1缓存】避免重复计算（节省约2分钟）")
+                print("  💾 【使用Phase 1缓存】避免重复计算（节省约2分钟）")
                 quick_search_opportunities = config['_phase1_cache']['opportunities']
                 quick_search_baseline = config['_phase1_cache']['baseline']
                 print(f"     ✓ 超短线机会: {len(quick_search_opportunities['scalping']['opportunities'])}个")
                 print(f"     ✓ 波段机会: {len(quick_search_opportunities['swing']['opportunities'])}个")
             elif kline_snapshots is not None and not kline_snapshots.empty:
                 try:
-                    print(f"  📊 准备confirmed_opportunities用于快速探索...")
+                    print("  📊 准备confirmed_opportunities用于快速探索...")
                     # 【V8.4.5】快速探索也使用带验证的函数，但禁用验证以节省时间
                     quick_search_result = analyze_separated_opportunities_with_validation(
                         market_snapshots=kline_snapshots,
@@ -10234,7 +10222,7 @@ def analyze_and_adjust_params():
                         'date': datetime.now().strftime('%Y-%m-%d'),
                         'timestamp': datetime.now().isoformat()
                     }
-                    print(f"     ✅ Phase 1结果已缓存（供第4.5步使用）")
+                    print("     ✅ Phase 1结果已缓存（供第4.5步使用）")
                     
                     # 【V8.5.2.4.21】Phase 1阶段总结输出
                     try:
@@ -10296,7 +10284,7 @@ def analyze_and_adjust_params():
             
         elif ENABLE_V770_FULL_OPTIMIZATION:
             # 完整V7.7.0优化（7-10分钟）
-            print(f"  ℹ️  使用完整V7.7.0优化模式")
+            print("  ℹ️  使用完整V7.7.0优化模式")
             iterative_result = iterative_parameter_optimization(
                 data_summary=data_summary,
                 current_config=config,
@@ -10307,7 +10295,7 @@ def analyze_and_adjust_params():
             
         else:
             # 跳过V7.7.0，使用当前配置
-            print(f"  ℹ️  跳过V7.7.0优化，使用当前配置")
+            print("  ℹ️  跳过V7.7.0优化，使用当前配置")
             global_initial_params = {
                 'min_risk_reward': config['global'].get('min_risk_reward', 1.5),
                 'min_indicator_consensus': config['global'].get('min_indicator_consensus', 2),
@@ -10357,7 +10345,7 @@ def analyze_and_adjust_params():
             # 【V8.5.2.4.89.9】保存迭代历史+baseline_config供邮件和机会对比使用
             config['_iterative_history'] = iterative_result
             config['_iterative_history']['baseline_config'] = baseline_config_snapshot  # 添加baseline快照
-            print(f"  💾 【记录】baseline_config已添加到迭代历史")
+            print("  💾 【记录】baseline_config已添加到迭代历史")
             
             # 构建adjustments格式（兼容后续代码）
             # 比较最优配置与当前配置，找出变化
@@ -10620,7 +10608,7 @@ def analyze_and_adjust_params():
         
         if all_opportunities_sorted:
             try:
-                print(f"\n  📊 【V8.5.2.4.89.7】生成机会对比分析（使用历史参数）...")
+                print("\n  📊 【V8.5.2.4.89.7】生成机会对比分析（使用历史参数）...")
                 
                 # 获取Phase 4的测试结果（如果可用）
                 full_test = phase4_result_extracted.get('full_test', {}) if phase4_result_extracted else {}
@@ -10634,7 +10622,7 @@ def analyze_and_adjust_params():
                 old_scalping_params = {}
                 old_swing_params = {}
                 
-                print(f"\n  📊 【DEBUG】参数提取调试:")
+                print("\n  📊 【DEBUG】参数提取调试:")
                 print(f"     - iterative_result存在: {iterative_result is not None}")
                 print(f"     - _iterative_history存在: {'_iterative_history' in config}")
                 
@@ -10648,25 +10636,25 @@ def analyze_and_adjust_params():
                         baseline = history['baseline_config']
                         old_scalping_params = baseline.get('scalping_params', {})
                         old_swing_params = baseline.get('swing_params', {})
-                        print(f"     ✓ 使用基准参数（优化前配置）")
+                        print("     ✓ 使用基准参数（优化前配置）")
                         print(f"     - old_scalping_params: {old_scalping_params}")
                         print(f"     - old_swing_params: {old_swing_params}")
                     elif isinstance(history, dict):
                         # 如果没有baseline_config，尝试从best_config回推（降级）
-                        print(f"     ⚠️ 无baseline_config，使用global参数")
+                        print("     ⚠️ 无baseline_config，使用global参数")
                 
                 # 如果没有历史记录，使用当前global参数作为基准（降级方案）
                 if not old_scalping_params:
                     old_scalping_params = config.get('global', {})
                     old_swing_params = config.get('global', {})
-                    print(f"     ⚠️ 无历史参数，使用global参数作为基准")
+                    print("     ⚠️ 无历史参数，使用global参数作为基准")
                     print(f"     - global参数: {config.get('global', {})}")
                 
                 # 计算每个机会是否会被新/旧参数捕获
                 scalping_params = config.get('scalping_params', config.get('global', {}))
                 swing_params = config.get('swing_params', config.get('global', {}))
                 
-                print(f"\n  📊 【DEBUG】新参数:")
+                print("\n  📊 【DEBUG】新参数:")
                 print(f"     - scalping_params: {scalping_params}")
                 print(f"     - swing_params: {swing_params}")
                 
@@ -10766,7 +10754,7 @@ def analyze_and_adjust_params():
                 traceback.print_exc()
                 opportunity_analysis = None
         else:
-            print(f"  ⚠️  跳过机会对比分析（无机会数据）")
+            print("  ⚠️  跳过机会对比分析（无机会数据）")
         
         phase4_result = None
 
@@ -10826,7 +10814,7 @@ def analyze_and_adjust_params():
                 if ai_suggested_params:
                     print(f"  ✅ 提取了{len(ai_suggested_params)}个AI建议参数")
                 else:
-                    print(f"  ℹ️  未从AI洞察中提取到可解析的参数")
+                    print("  ℹ️  未从AI洞察中提取到可解析的参数")
         except Exception as e:
             print(f"  ⚠️  提取AI参数建议失败: {e}")
             ai_suggested_params = None
@@ -10983,8 +10971,8 @@ def analyze_and_adjust_params():
         
         # 【V8.3.16】立即优化：配置开关跳过Per-Symbol
         if not ENABLE_PER_SYMBOL_OPTIMIZATION:
-            print(f"  ⏭️  跳过Per-Symbol优化（配置已禁用，节省56-91分钟）")
-            print(f"     理由：大部分币种可共享全局/策略参数，独立优化增益有限")
+            print("  ⏭️  跳过Per-Symbol优化（配置已禁用，节省56-91分钟）")
+            print("     理由：大部分币种可共享全局/策略参数，独立优化增益有限")
         elif kline_snapshots is not None and not kline_snapshots.empty:
             try:
                 # 分析每个币种的机会
@@ -11050,7 +11038,7 @@ def analyze_and_adjust_params():
                 config['_iterative_history'] = iterative_result
                 if 'baseline_config' not in config['_iterative_history']:
                     config['_iterative_history']['baseline_config'] = baseline_config_snapshot
-                    print(f"  💾 【修复】重新添加baseline_config到_iterative_history")
+                    print("  💾 【修复】重新添加baseline_config到_iterative_history")
             
             # 【V8.5.2.4.89.1】轻量级old_config - 只复制参数部分，不复制整个config
             # 之前deepcopy整个config会导致内存翻倍（10-20MB → 20-40MB）
@@ -11161,11 +11149,11 @@ def analyze_and_adjust_params():
                         elif profit_pct < 0:
                             backtest_info += f"亏损{profit_pct:.1f}%"
                         else:
-                            backtest_info += f"持平"
+                            backtest_info += "持平"
                         backtest_info += f" 捕获率{capture_rate*100:.0f}%"
             
             # 【V8.5.2.4.81】收集Phase 1-4数据用于邮件和Bark
-            print(f"\n[V8.5.2.4.81] 收集Phase数据...")
+            print("\n[V8.5.2.4.81] 收集Phase数据...")
             
             # 【V8.5.2.4.83】获取phase1_baseline（从快速探索结果中）
             phase1_baseline = quick_search_baseline if 'quick_search_baseline' in locals() else None
@@ -11280,7 +11268,7 @@ def analyze_and_adjust_params():
                 'phase4': phase4_data
             }
             
-            print(f"[V8.5.2.4.81] Phase数据收集完成")
+            print("[V8.5.2.4.81] Phase数据收集完成")
             print(f"  Phase 1: 超短线{phase1_data.get('scalping_count', 0)}个, 波段{phase1_data.get('swing_count', 0)}个")
             print(f"  Phase 2: 捕获率{phase2_data.get('scalping_capture', 0):.1f}%")
             print(f"  Phase 3: 超短线{phase3_data.get('scalping_capture', 0):.1f}%, 波段{phase3_data.get('swing_capture', 0):.1f}%")
@@ -11290,7 +11278,7 @@ def analyze_and_adjust_params():
             bark_content_lines = []
             
             # 🔍 V8.3.32.10: 调试v8321_insights结构
-            print(f"\n[Bark调试] ========== 开始调试 ==========")
+            print("\n[Bark调试] ========== 开始调试 ==========")
             print(f"[Bark调试] compressed_insights存在: {bool(config.get('compressed_insights'))}")
             if config.get('compressed_insights'):
                 print(f"[Bark调试] compressed_insights的键: {list(config['compressed_insights'].keys())}")
@@ -11305,7 +11293,7 @@ def analyze_and_adjust_params():
                     swing_perf_debug = v8321_insights['swing'].get('performance', {})
                     print(f"[Bark调试] swing.performance: {swing_perf_debug}")
                     print(f"[Bark调试] swing.performance是否为空: {not swing_perf_debug}")
-            print(f"[Bark调试] ========== 调试结束 ==========\n")
+            print("[Bark调试] ========== 调试结束 ==========\n")
             
             # 【V8.5.1】优先使用scalping_optimization和swing_optimization的数据
             scalp_opt = scalping_optimization if scalping_optimization else {}
@@ -11340,7 +11328,7 @@ def analyze_and_adjust_params():
                     "[通义千问]🤖AI参数优化完成",
                     bark_content
                 )
-                print(f"[V8.5.2.4.81] Bark推送已发送（新格式）")
+                print("[V8.5.2.4.81] Bark推送已发送（新格式）")
                 
             except Exception as e:
                 print(f"[V8.5.2.4.81] 新Bark格式失败，使用旧格式: {e}")
@@ -11692,7 +11680,7 @@ def analyze_and_adjust_params():
                         total_data = profit_comparison.get('total', {})
                         
                         # 构建分类利润对比HTML
-                        opportunity_stats_html += f"""
+                        opportunity_stats_html += """
         <div style="margin: 15px 0; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; color: white;">
             <h3 style="margin: 0 0 10px 0; color: white; border-bottom: 2px solid rgba(255,255,255,0.3); padding-bottom: 8px;">
                 💰 分类利润对比分析 <span style="font-size: 0.7em; opacity: 0.8;">(V8.5.4)</span>
@@ -12477,7 +12465,7 @@ def analyze_and_adjust_params():
                     # 生成总利润对比表
                     profit_comparison_html = generate_profit_comparison_table(all_phase_data)
                     
-                    print(f"[V8.5.2.4.81] 邮件新表格生成成功")
+                    print("[V8.5.2.4.81] 邮件新表格生成成功")
                     
                 except Exception as e:
                     print(f"[V8.5.2.4.81] 邮件新表格生成失败: {e}")
@@ -13568,7 +13556,7 @@ def setup_exchange(is_manual_backtest=False):
         if is_manual_backtest:
             # 手动回测模式：发送回测开始通知
             send_bark_notification(
-                f"[通义千问]🔬回测开始",
+                "[通义千问]🔬回测开始",
                 f"余额{usdt_balance:.0f}U{stage_detail}",
             )
         else:
@@ -13713,7 +13701,7 @@ def get_pattern_based_tp_sl(entry_price, direction, pattern_type, pattern_data, 
         else:
             return None
             
-    except Exception as e:
+    except Exception:
         return None
 
 
@@ -13837,7 +13825,7 @@ def identify_pullback_type(df_15m):
             return None
 
         recent = df_15m.tail(8)
-        closes = recent["close"].values
+        recent["close"].values
         highs = recent["high"].values
         lows = recent["low"].values
 
@@ -14044,8 +14032,8 @@ def detect_trend_exhaustion(df_15m):
         prev = df_15m.iloc[-2]
 
         closes = recent["close"].values
-        highs = recent["high"].values
-        lows = recent["low"].values
+        recent["high"].values
+        recent["low"].values
 
         # 判断趋势方向
         is_uptrend = closes[-1] > closes[0]
@@ -14214,7 +14202,7 @@ def detect_breakout_sr(current_price, sr_levels):
             }
         
         return None
-    except Exception as e:
+    except Exception:
         return None
 
 
@@ -14279,7 +14267,7 @@ def detect_trend_initiation_v2(df_15m, long_term_trend, current_trend_15m):
                     }
         
         return None
-    except Exception as e:
+    except Exception:
         return None
 
 
@@ -14845,7 +14833,7 @@ def evaluate_sr_quality(sr_level: dict, df: pd.DataFrame) -> dict:
         sr_level['test_count'] = test_count
         
         return sr_level
-    except Exception as e:
+    except Exception:
         sr_level['strength'] = 1
         sr_level['is_switched_polarity'] = False
         sr_level['is_fast_rejection'] = False
@@ -15141,7 +15129,7 @@ def calculate_unified_risk_reward_v2(entry_price, side, market_data, signal_clas
             swing_config = config.get('swing_params', {})
             atr_multiplier = swing_config.get('atr_stop_multiplier', 2.0)
             tp_multiplier = swing_config.get('atr_tp_multiplier', 6.0)
-            use_htf_levels = swing_config.get('use_htf_levels', True)  # 是否使用高时间框架
+            swing_config.get('use_htf_levels', True)  # 是否使用高时间框架
             
             print(f"  🌊 波段TP/SL: 止损{atr_multiplier}×ATR, 止盈{tp_multiplier}×ATR (优先支撑阻力位)")
             
@@ -16088,7 +16076,7 @@ def get_all_positions():
         return active_positions, total_position_value
 
     except TimeoutError:
-        print(f"⚠️  获取持仓超时（>10秒），跳过本轮")
+        print("⚠️  获取持仓超时（>10秒），跳过本轮")
         signal.alarm(0)  # 确保取消定时器
         return [], 0
     except Exception as e:
@@ -16195,7 +16183,7 @@ Output JSON only:
 """
     
     try:
-        print(f"正在请求AI评估仓位调整...")
+        print("正在请求AI评估仓位调整...")
         response = qwen_client.chat.completions.create(
             model="qwen3-max",
             messages=[{"role": "user", "content": prompt}],
@@ -16295,7 +16283,7 @@ def ai_portfolio_decision(
         rsi = data["rsi"]
         ma = data["moving_averages"]
         vol = data["volume_analysis"]
-        atr = data["atr"]
+        data["atr"]
         lt = data["long_term"]
         pa = data["price_action"]
         sr = data["support_resistance"]
@@ -16340,31 +16328,25 @@ def ai_portfolio_decision(
                 ratio = pa["breakout"]["volume_ratio"]
                 breakout_desc = f"🚀 Breakout Candle (Vol {ratio:.1f}x) ✓✓✓"
 
-        consecutive_desc = "None"
         if pa["consecutive"]:
             gain = pa["consecutive"]["gain_pct"]
-            consecutive_desc = (
+            (
                 f"📈 {pa['consecutive']['candles']} Consecutive Bullish (+{gain:.1f}%) ✓✓"
             )
 
-        volume_surge_desc = "None"
         if pa["volume_surge"]:
             ratio = pa["volume_surge"]["ratio"]
             weight = pa["volume_surge"]["weight"]
-            weight_marks = "✓" * weight
+            "✓" * weight
             if pa["volume_surge"]["type"] == "extreme_surge":
-                volume_surge_desc = (
-                    f"💥 Extreme Volume Surge ({ratio:.1f}x) {weight_marks} ⚠️CRITICAL"
-                )
+                pass
             elif pa["volume_surge"]["type"] == "strong_surge":
-                volume_surge_desc = f"⚡ Strong Volume Surge ({ratio:.1f}x) {weight_marks}"
+                pass
             else:
-                volume_surge_desc = f"📊 Moderate Volume Surge ({ratio:.1f}x) {weight_marks}"
+                pass
 
-        pin_recovery_desc = "None"
         if pa["pin_recovery"]:
             recovery = pa["pin_recovery"]["recovery_pct"]
-            pin_recovery_desc = f"🔄 Pin Bar Fast Recovery (+{recovery:.1f}%) ✓✓"
 
         # Advanced PA: Pullback & Trend Signals
         pullback_desc = "None"
@@ -16542,12 +16524,12 @@ Price: ${price:,.2f} ({data['price_change']:+.2f}%)
 """
     
     # 🔧 V7.7.0.14: 持仓信息英文化
-    position_info = f"\n【ACCOUNT STATUS】\n"
+    position_info = "\n【ACCOUNT STATUS】\n"
     position_info += f"Total Assets: {total_assets:.2f}U (Balance {current_balance:.2f}U + UnrealizedPnL {total_unrealized_pnl:+.2f}U)\n"
     position_info += f"Available: {available_balance:.2f}U (after margin)\n"
     position_info += f"Max New Position: {max_total_position:.2f}U\n\n"
     
-    position_info += f"【CURRENT POSITIONS】\n"
+    position_info += "【CURRENT POSITIONS】\n"
     if current_positions:
         for pos in current_positions:
             coin_name = pos["symbol"].split("/")[0]
@@ -17001,10 +16983,10 @@ While code executes as single position, AI should plan multi-part management:
     print(f"[调试] Prompt 总长度: {len(prompt)} 字符")
     print(f"[调试] 估算 tokens: {len(prompt)/2.5:.0f}")
     print(f"{'='*70}")
-    print(f"[调试] Prompt 开头 500 字符:")
+    print("[调试] Prompt 开头 500 字符:")
     print(prompt[:500])
     print(f"\n{'='*70}")
-    print(f"[调试] Prompt 结尾 500 字符:")
+    print("[调试] Prompt 结尾 500 字符:")
     print(prompt[-500:])
     print(f"{'='*70}\n")
     
@@ -17060,10 +17042,10 @@ Your core principles:
         print(f"[调试] finish_reason: {finish_reason}")
         if finish_reason == 'length':
             print("⚠️ 警告：AI响应被截断（超过max_tokens限制）")
-        print(f"[调试] AI 响应前 1000 字符:")
+        print("[调试] AI 响应前 1000 字符:")
         print(result[:1000])
         print(f"\n{'='*70}")
-        print(f"[调试] AI 响应后 1000 字符:")
+        print("[调试] AI 响应后 1000 字符:")
         print(result[-1000:])
         print(f"{'='*70}\n")
         
@@ -17549,7 +17531,7 @@ def calculate_scalping_score(market_data):
         score = 50  # 基础分
         # 【V8.3.14.1】安全获取字段，避免KeyError
         pa = market_data.get("price_action", {})
-        lt = market_data.get("long_term", {})
+        market_data.get("long_term", {})
         
         # === 超短线核心因素（高权重）===
         
@@ -18679,8 +18661,7 @@ def ai_adjust_tp_sl_if_needed(symbol, position, market_data, entry_context, conf
         unrealized_pnl = position.get('unrealized_pnl', 0)
         
         # 检查上次调整时间（冷却期）
-        last_adjustment_key = f"{coin_name}_last_tp_sl_adjustment"
-        cooldown_minutes = tp_sl_strategy.get('adjustment_cooldown_minutes', 60)
+        tp_sl_strategy.get('adjustment_cooldown_minutes', 60)
         
         # 这里简化处理，实际应该存储在全局变量或文件中
         # 暂时每次都允许调整，实际部署时需要加上冷却机制
@@ -18694,7 +18675,7 @@ def ai_adjust_tp_sl_if_needed(symbol, position, market_data, entry_context, conf
             for order in open_orders:
                 # 修复：reduceOnly 可能是字符串 "true" 或布尔值 True
                 reduce_only = order['info'].get('reduceOnly')
-                is_reduce_only = (reduce_only == True or reduce_only == 'true' or reduce_only == 'True')
+                is_reduce_only = (reduce_only or reduce_only == 'true' or reduce_only == 'True')
                 
                 if is_reduce_only:
                     if order['type'] == 'take_profit_market':
@@ -18783,7 +18764,7 @@ Return JSON:
                     'reason': f'Adjustment too small (TP: {tp_change_pct:.1f}%, SL: {sl_change_pct:.1f}% < {min_threshold_pct}%)'
                 }
             
-            print(f"   ✓ AI建议调整止盈止损:")
+            print("   ✓ AI建议调整止盈止损:")
             if new_tp:
                 print(f"     TP: ${current_tp:,.2f} → ${new_tp:,.2f} ({(new_tp-current_tp)/current_tp*100:+.1f}%)")
             if new_sl:
@@ -18831,14 +18812,14 @@ def execute_tp_sl_adjustment(symbol, position, adjustment_result):
         new_sl = adjustment_result.get('new_sl')
         
         if not new_tp and not new_sl:
-            print(f"   ⚠️ 无需调整")
+            print("   ⚠️ 无需调整")
             return False
         
         print(f"   正在调整{coin_name}止盈止损...")
         
         # Step 1: 取消现有的止盈止损订单（包括普通订单和条件单）
         try:
-            print(f"   取消旧的止盈止损订单...")
+            print("   取消旧的止盈止损订单...")
             success_count, fail_count = clear_symbol_orders(symbol, verbose=False)
             
             if success_count > 0:
@@ -18846,7 +18827,7 @@ def execute_tp_sl_adjustment(symbol, position, adjustment_result):
             elif fail_count > 0:
                 print(f"   ⚠️ 取消订单失败 {fail_count} 个")
             else:
-                print(f"   ℹ️  未找到需要取消的订单")
+                print("   ℹ️  未找到需要取消的订单")
                 # 继续尝试设置新订单
                 
         except Exception as e:
@@ -18861,7 +18842,7 @@ def execute_tp_sl_adjustment(symbol, position, adjustment_result):
         # 2.1 设置新止盈
         if new_tp:
             try:
-                tp_order = exchange.create_order(
+                exchange.create_order(
                     symbol,
                     'take_profit_market',
                     close_side,
@@ -18881,7 +18862,7 @@ def execute_tp_sl_adjustment(symbol, position, adjustment_result):
         # 2.2 设置新止损
         if new_sl:
             try:
-                sl_order = exchange.create_order(
+                exchange.create_order(
                     symbol,
                     'stop_market',
                     close_side,
@@ -18952,9 +18933,9 @@ def detect_market_regime(market_data_list):
         elif avg_vol > 0.025:
             return 'volatile', avg_vol, f"高波动市场(均{avg_vol*100:.1f}%) 适合Scalping"
         elif avg_trend < 0.3 and avg_vol < 0.015:
-            return 'consolidating', 1 - avg_trend, f"盘整市场 回避交易"
+            return 'consolidating', 1 - avg_trend, "盘整市场 回避交易"
         else:
-            return 'ranging', 0.5, f"震荡市场 Scalping优先"
+            return 'ranging', 0.5, "震荡市场 Scalping优先"
     
     except Exception as e:
         print(f"⚠️ 市场环境检测失败: {e}")
@@ -19401,7 +19382,7 @@ def monitor_positions_for_invalidation(market_data_list: list, current_positions
                         max_hours = new_strategy.get('max_additional_holding', 30) / 60
                     elif signal_type == 'swing' and new_strategy.get('expand_tp_target'):
                         # 切换为Swing后，扩大止盈目标
-                        print(f"   ✓ 应用Swing策略：启用追踪止损，扩大止盈")
+                        print("   ✓ 应用Swing策略：启用追踪止损，扩大止盈")
             except Exception as e:
                 print(f"   ⚠️ 信号类型切换检查失败: {e}")
             
@@ -19420,7 +19401,7 @@ def monitor_positions_for_invalidation(market_data_list: list, current_positions
                             size = position.get('size', 0)
                             
                             # 取消旧止损（包括普通订单和条件单）
-                            print(f"   取消旧止损订单...")
+                            print("   取消旧止损订单...")
                             success_count, fail_count = clear_symbol_orders(symbol, verbose=False)
                             if success_count > 0:
                                 print(f"   ✓ 已取消 {success_count} 个旧止损订单")
@@ -19597,12 +19578,12 @@ def monitor_positions_for_invalidation(market_data_list: list, current_positions
                 
                 # 【V7.9】硬失效跳过AI确认，直接平仓
                 if hard_invalidation:
-                    print(f"   ✓ 【硬失效 - 无需确认】立即平仓")
+                    print("   ✓ 【硬失效 - 无需确认】立即平仓")
                     reason_str = f"硬失效(关键位破位): {reason_str}"
                 
                 # 软失效需要AI确认
                 elif allow_ai_confirmation:
-                    print(f"   正在请求AI确认...")
+                    print("   正在请求AI确认...")
                     should_close, ai_reason = request_ai_close_confirmation(
                         symbol=symbol,
                         position=position,
@@ -19730,7 +19711,7 @@ def _execute_single_close_action(action, current_positions):
                 # 如果分批后的任一数量低于最小精度，则全部平仓
                 if min_amount and (partial_amount < min_amount or remaining_amount < min_amount):
                     print(f"  ⚠️ 分批平仓数量({partial_amount:.6f}或剩余{remaining_amount:.6f})低于最小精度({min_amount:.6f})")
-                    print(f"  → 改为全部平仓")
+                    print("  → 改为全部平仓")
                     close_pct = 100
                     close_amount = real_pos["size"]
                 else:
@@ -19787,9 +19768,9 @@ def _execute_single_close_action(action, current_positions):
                         verbose=True
                     )
                     if not (sl_ok or tp_ok):
-                        print(f"  ⚠️ 剩余仓位保护设置失败，请手动检查")
+                        print("  ⚠️ 剩余仓位保护设置失败，请手动检查")
                 else:
-                    print(f"  ⚠️ 未找到原始止盈止损，剩余仓位无保护！")
+                    print("  ⚠️ 未找到原始止盈止损，剩余仓位无保护！")
             except Exception as e:
                 print(f"  ⚠️ 剩余仓位保护设置异常: {e}")
 
@@ -19839,7 +19820,7 @@ def _execute_single_close_action(action, current_positions):
         if expected_holding > 0 and actual_holding > 0:
             diff_pct = (actual_holding / expected_holding - 1) * 100
             if abs(diff_pct) < 20:
-                timing = f"符合预期"
+                timing = "符合预期"
             elif diff_pct < 0:
                 timing = f"早平{abs(diff_pct):.0f}%"
             else:
@@ -19943,7 +19924,7 @@ def _execute_single_open_action_v55(
     if should_pause:
         print(f"🚫 交易已暂停: {pause_reason}")
         send_bark_notification(
-            f"[通义千问]交易暂停🚫",
+            "[通义千问]交易暂停🚫",
             f"{pause_reason}\n币种:{coin_name}\n建议:等待市场环境改善",
         )
         return
@@ -20129,7 +20110,7 @@ def _execute_single_open_action_v55(
         # 获取现有持仓
         existing_positions = [p for p in current_positions if p.get("symbol") == symbol]
         if not existing_positions:
-            print(f"❌ 检测到加仓标记，但未找到现有持仓")
+            print("❌ 检测到加仓标记，但未找到现有持仓")
             return
         
         existing_position = existing_positions[0]
@@ -20165,9 +20146,9 @@ def _execute_single_open_action_v55(
         )
         
         if add_success:
-            print(f"✅ 加仓完成")
+            print("✅ 加仓完成")
         else:
-            print(f"❌ 加仓失败")
+            print("❌ 加仓失败")
         
         return  # 加仓流程结束，不执行后续的新开仓逻辑
     
@@ -20192,7 +20173,7 @@ def _execute_single_open_action_v55(
                 # 比较：较高的价格应该是止损，较低的应该是止盈
                 if stop_loss > take_profit:
                     # 止损比止盈高，但都低于入场价 → 交换
-                    print(f"⚠️ 检测到止损止盈位置错误（做空时止损应高于入场价），自动修正")
+                    print("⚠️ 检测到止损止盈位置错误（做空时止损应高于入场价），自动修正")
                     print(f"   修正前: 止损=${stop_loss:.2f}, 止盈=${take_profit:.2f}")
                     stop_loss, take_profit = take_profit, stop_loss
                     print(f"   修正后: 止损=${stop_loss:.2f}, 止盈=${take_profit:.2f}")
@@ -20202,7 +20183,7 @@ def _execute_single_open_action_v55(
                 # 如果止损也在入场价上方，说明位置可能搞反了
                 if stop_loss < take_profit:
                     # 止损比止盈低，但都高于入场价 → 交换
-                    print(f"⚠️ 检测到止损止盈位置错误（做多时止损应低于入场价），自动修正")
+                    print("⚠️ 检测到止损止盈位置错误（做多时止损应低于入场价），自动修正")
                     print(f"   修正前: 止损=${stop_loss:.2f}, 止盈=${take_profit:.2f}")
                     stop_loss, take_profit = take_profit, stop_loss
                     print(f"   修正后: 止损=${stop_loss:.2f}, 止盈=${take_profit:.2f}")
@@ -20341,7 +20322,7 @@ def _execute_single_open_action_v55(
                     print(f"   💡 仓位自动调整: ${planned_position:.2f} → ${min_position_required:.2f} (考虑精度后名义价值≥${MIN_NOTIONAL})")
                     planned_position = min_position_required
                 else:
-                    print(f"❌ 余额不足以满足最小名义价值要求")
+                    print("❌ 余额不足以满足最小名义价值要求")
                     print(f"   需要保证金: ${min_position_required:.2f}U")
                     print(f"   可用余额: ${available_balance:.2f}U")
                     print(f"   名义价值要求: {MIN_NOTIONAL}U × 1.2 = {target_notional:.0f}U")
@@ -20385,11 +20366,11 @@ def _execute_single_open_action_v55(
 
     # === V7.6: LWP参考价验证与止损优化 ===
     lwp_reference = action.get('lwp_reference', 0)
-    price_vs_lwp = action.get('price_vs_lwp', 'UNKNOWN')
+    action.get('price_vs_lwp', 'UNKNOWN')
     
     # 如果AI提供了LWP参考价，进行验证和止损优化
     if lwp_reference and lwp_reference > 0:
-        print(f"\n【V7.6 LWP参考价验证与止损优化】")
+        print("\n【V7.6 LWP参考价验证与止损优化】")
         print(f"LWP参考价: ${lwp_reference:,.2f}")
         print(f"当前价格: ${entry_price:,.2f}")
         print(f"原始止损: ${stop_loss:,.2f}")
@@ -20520,7 +20501,7 @@ def _execute_single_open_action_v55(
             print(f"   💡 LWP降低后重新调整: ${planned_position:.2f} → ${min_position_required:.2f} (确保名义价值≥{MIN_NOTIONAL}U)")
             planned_position = min_position_required
         else:
-            print(f"❌ LWP降低后余额不足以满足最小名义价值要求")
+            print("❌ LWP降低后余额不足以满足最小名义价值要求")
             print(f"   需要保证金: ${min_position_required:.2f}U")
             print(f"   可用余额: ${available_balance:.2f}U")
             send_bark_notification(
@@ -20537,7 +20518,7 @@ def _execute_single_open_action_v55(
 
     # === 执行开仓 ===
     if TRADE_CONFIG["test_mode"]:
-        print(f"\n✓ 测试模式 - 仅模拟")
+        print("\n✓ 测试模式 - 仅模拟")
         print(f"  拟开仓: ${planned_position:.2f} {leverage}x杠杆")
         print(f"  止损: ${stop_loss:,.2f}")
         print(f"  止盈: ${take_profit:,.2f}")
@@ -20571,7 +20552,7 @@ def _execute_single_open_action_v55(
             for order in open_orders:
                 # 修复：reduceOnly 可能是字符串 "true" 或布尔值 True
                 reduce_only = order['info'].get('reduceOnly')
-                is_reduce_only = (reduce_only == True or reduce_only == 'true' or reduce_only == 'True')
+                is_reduce_only = (reduce_only or reduce_only == 'true' or reduce_only == 'True')
                 
                 if is_reduce_only:
                     try:
@@ -20658,7 +20639,7 @@ def _execute_single_open_action_v55(
                 # 根据建议的amount计算仓位
                 suggested_position = (suggested_amount * entry_price) / leverage
                 
-                print(f"\n⚠️ 名义价值不足（考虑精度舍入）")
+                print("\n⚠️ 名义价值不足（考虑精度舍入）")
                 print(f"计算数量: {calculated_amount:.6f} → 舍入后: {rounded_amount:.6f}")
                 print(f"舍入后名义价值: ${actual_notional:.2f}")
                 print(f"最小要求: >${min_notional_required:.2f}")
@@ -20672,7 +20653,7 @@ def _execute_single_open_action_v55(
                 
                 adjustment_pct = (suggested_position - planned_position) / planned_position * 100
                 
-                print(f"\n⚠️ 交易数量不足")
+                print("\n⚠️ 交易数量不足")
                 print(f"计划开仓: {amount:.6f} {coin_name} (${planned_position:.0f}U)")
                 print(f"最小数量: {min_amount:.6f} {coin_name} (${suggested_position:.0f}U)")
                 print(f"需要调整: +{adjustment_pct:.0f}% (+${suggested_position - planned_position:.0f}U)")
@@ -20718,7 +20699,7 @@ def _execute_single_open_action_v55(
                         f"理由: {ai_reason_short}"
                     )
                 else:
-                    print(f"✗ AI拒绝调整")
+                    print("✗ AI拒绝调整")
                     print(f"置信度: {ai_decision['confidence']}")
                     print(f"理由: {ai_decision['reason']}")
                     
@@ -20755,7 +20736,7 @@ def _execute_single_open_action_v55(
                 ytc_detected = action.get('ytc_signal_detected', False)
                 sl_tag = 'YTC_SL_HARD' if ytc_detected else 'f1ee03b510d5SUDE'
                 
-                stop_order = exchange.create_order(
+                exchange.create_order(
                     symbol,
                     'stop_market',
                     close_side,
@@ -20775,7 +20756,7 @@ def _execute_single_open_action_v55(
                 ytc_detected = action.get('ytc_signal_detected', False)
                 tp_tag = 'YTC_TP_HARD' if ytc_detected else 'f1ee03b510d5SUDE'
                 
-                tp_order = exchange.create_order(
+                exchange.create_order(
                     symbol,
                     'take_profit_market',
                     close_side,
@@ -20828,7 +20809,7 @@ def _execute_single_open_action_v55(
         indicator_consensus = 0
         if market_data:
             # 【V8.5.2.4.47 DEBUG】诊断market_data结构
-            print(f"  🔍 【DEBUG】market_data结构检查:")
+            print("  🔍 【DEBUG】market_data结构检查:")
             print(f"     - 是否有indicators: {'indicators' in market_data}")
             if 'indicators' in market_data:
                 print(f"       indicators类型: {type(market_data['indicators'])}")
@@ -21109,7 +21090,7 @@ def execute_portfolio_actions(
             )
 
             # 【V8.5.2.4.69 DEBUG】单个开仓信号分支验证market_data
-            print(f"  📊 【DEBUG】单个开仓信号分支获取market_data:")
+            print("  📊 【DEBUG】单个开仓信号分支获取market_data:")
             print(f"     - symbol: {symbol}")
             print(f"     - market_data_list长度: {len(market_data_list) if market_data_list else 0}")
             print(f"     - market_data存在: {market_data is not None}")
@@ -21205,7 +21186,7 @@ def execute_portfolio_actions(
                 )
                 continue
             else:
-                print(f"✓ 盈亏比符合智能参数要求")
+                print("✓ 盈亏比符合智能参数要求")
         
         if TRADE_CONFIG["test_mode"]:
             print("✓ 测试模式 - 仅模拟")
@@ -21243,7 +21224,7 @@ def execute_portfolio_actions(
                         for ord in open_orders:
                             # 修复：reduceOnly 可能是字符串 "true" 或布尔值 True
                             reduce_only = ord['info'].get('reduceOnly')
-                            is_reduce_only = (reduce_only == True or reduce_only == 'true' or reduce_only == 'True')
+                            is_reduce_only = (reduce_only or reduce_only == 'true' or reduce_only == 'True')
                             
                             if is_reduce_only:
                                 try:
@@ -21348,7 +21329,7 @@ def execute_portfolio_actions(
                     market_data = next((m for m in market_data_list if m["symbol"] == symbol), None) if market_data_list else None
                     
                     # 【V8.5.2.4.69 DEBUG】老逻辑OPEN_LONG分支添加DEBUG
-                    print(f"  📊 【DEBUG】老逻辑OPEN_LONG获取market_data:")
+                    print("  📊 【DEBUG】老逻辑OPEN_LONG获取market_data:")
                     print(f"     - market_data_list存在: {market_data_list is not None}")
                     print(f"     - market_data存在: {market_data is not None}")
                     if market_data:
@@ -21369,9 +21350,9 @@ def execute_portfolio_actions(
                             indicator_consensus = market_data.get('consensus', 0)
                             print(f"     ✓ 从consensus获取: {indicator_consensus}")
                         else:
-                            print(f"     ❌ 所有共振字段都不存在！")
+                            print("     ❌ 所有共振字段都不存在！")
                     else:
-                        print(f"     ❌ market_data为None！")
+                        print("     ❌ market_data为None！")
                         score = 0
                         indicator_consensus = 0
                     
@@ -21464,7 +21445,7 @@ def execute_portfolio_actions(
                     market_data = next((m for m in market_data_list if m["symbol"] == symbol), None) if market_data_list else None
                     
                     # 【V8.5.2.4.69 DEBUG】老逻辑OPEN_SHORT分支添加DEBUG
-                    print(f"  📊 【DEBUG】老逻辑OPEN_SHORT获取market_data:")
+                    print("  📊 【DEBUG】老逻辑OPEN_SHORT获取market_data:")
                     print(f"     - market_data_list存在: {market_data_list is not None}")
                     print(f"     - market_data存在: {market_data is not None}")
                     if market_data:
@@ -21485,9 +21466,9 @@ def execute_portfolio_actions(
                             indicator_consensus = market_data.get('consensus', 0)
                             print(f"     ✓ 从consensus获取: {indicator_consensus}")
                         else:
-                            print(f"     ❌ 所有共振字段都不存在！")
+                            print("     ❌ 所有共振字段都不存在！")
                     else:
-                        print(f"     ❌ market_data为None！")
+                        print("     ❌ market_data为None！")
                         score = 0
                         indicator_consensus = 0
                     
@@ -21551,7 +21532,7 @@ def trading_bot():
         if current_minute not in valid_minutes:
             print(f"⏭️  当前时间 {datetime.now().strftime('%H:%M')} 不是最佳执行时机")
             print(f"   最佳执行时间: 每小时的 {valid_minutes} 分")
-            print(f"   跳过本次执行，不阻碍其他任务")
+            print("   跳过本次执行，不阻碍其他任务")
             return  # 直接返回，不阻塞
 
     try:
@@ -21616,7 +21597,7 @@ def trading_bot():
         print(f"✓ 成功获取 {valid_data_count}/{len(market_data_list)} 个币种数据")
         
         # 【V8.5.2.4.69 DEBUG】market_data_list构建完成后立即验证共振字段
-        print(f"\n  📊 【DEBUG】market_data_list构建完成后验证:")
+        print("\n  📊 【DEBUG】market_data_list构建完成后验证:")
         for data in market_data_list:
             if data:
                 symbol = data.get('symbol', 'UNKNOWN')
@@ -21745,7 +21726,7 @@ def trading_bot():
         current_positions_updated, total_position_value_updated = get_all_positions()
         
         # 计算未实现盈亏（用于显示）
-        total_unrealized_pnl_updated = sum(
+        sum(
             pos["unrealized_pnl"] for pos in current_positions_updated
         )
         # 总资产直接使用total余额（已包含未实现盈亏）
@@ -21793,7 +21774,7 @@ def trading_bot():
         current_hour = datetime.now().hour
         if current_hour % 4 == 0 and datetime.now().minute < 20:  # 每4小时的前20分钟输出一次
             stats = ai_optimizer.get_stats()
-            print(f"\n📊 AI调用优化统计（今日累计）:")
+            print("\n📊 AI调用优化统计（今日累计）:")
             print(f"  • 总决策次数: {stats['total_decisions']}")
             print(f"  • 实际API调用: {stats['api_calls']}")
             print(f"  • 智能跳过: {stats['calls_saved']} 次")
@@ -21810,9 +21791,9 @@ def trading_bot():
         if "-1021" in error_str or "Timestamp for this request is outside of the recvWindow" in error_str:
             print(f"\n⚠️  时间戳错误 (耗时: {elapsed:.1f}秒)")
             print(f"   错误: {error_str}")
-            print(f"   原因: 系统卡顿导致请求时间超出recvWindow")
-            print(f"   已优化: recvWindow=60秒，应该能解决")
-            print(f"   建议: 检查系统负载 (free -h, top)")
+            print("   原因: 系统卡顿导致请求时间超出recvWindow")
+            print("   已优化: recvWindow=60秒，应该能解决")
+            print("   建议: 检查系统负载 (free -h, top)")
             # 时间戳错误不发送通知（太频繁）
         else:
             print(f"\n❌ 交易循环异常 (耗时: {elapsed:.1f}秒): {e}")
@@ -21903,7 +21884,7 @@ def main():
     # 【V8.5.2.4.88修复】移除立即执行，避免与schedule任务冲突导致OOM
     # 让schedule自然触发，最多等待15分钟
     print("\n等待schedule任务触发...")
-    print(f"下次执行时间: 每小时的 [1, 16, 31, 46] 分")
+    print("下次执行时间: 每小时的 [1, 16, 31, 46] 分")
     
     # 循环执行（增强版：防止 schedule 僵死）
     # 心跳文件（用于外部监控）
@@ -21977,7 +21958,7 @@ def main():
                 )
 
                 # 等待较长时间后重试
-                print(f"等待 60 秒后重置计数器并继续...")
+                print("等待 60 秒后重置计数器并继续...")
                 time.sleep(60)
                 consecutive_errors = 0  # 重置计数器
 
@@ -21989,12 +21970,12 @@ def main():
                 )
 
                 # 短暂等待
-                print(f"等待 10 秒后继续...")
+                print("等待 10 秒后继续...")
                 time.sleep(10)
 
             else:
                 # 轻微异常，短暂等待后继续
-                print(f"等待 5 秒后继续...")
+                print("等待 5 秒后继续...")
                 time.sleep(5)
 
     print("\n" + "=" * 70)
@@ -22017,8 +21998,6 @@ def detect_major_trends(kline_snapshots, coin=None):
     返回:
         list of dict, 识别到的重要趋势
     """
-    import pandas as pd
-    import numpy as np
     
     trends = []
     
@@ -22028,7 +22007,7 @@ def detect_major_trends(kline_snapshots, coin=None):
     # 检查必要的列是否存在（兼容旧格式）
     required_cols = ['coin', 'time', 'close']
     if not all(col in kline_snapshots.columns for col in required_cols):
-        print(f"⚠️ 市场快照缺少必要列，跳过趋势识别")
+        print("⚠️ 市场快照缺少必要列，跳过趋势识别")
         return trends
     
     # 按币种分组分析
@@ -22102,7 +22081,6 @@ def analyze_trade_performance(trade, kline_snapshots):
         dict, 详细的分析结果
     """
     import pandas as pd
-    from datetime import datetime
     
     try:
         coin = trade.get('币种')
@@ -22112,8 +22090,8 @@ def analyze_trade_performance(trade, kline_snapshots):
         if not entry_time_str or not exit_time_str:
             return {"error": "交易时间缺失"}
         
-        entry_time = pd.to_datetime(entry_time_str)
-        exit_time = pd.to_datetime(exit_time_str)
+        pd.to_datetime(entry_time_str)
+        pd.to_datetime(exit_time_str)
         entry_price = float(trade.get('开仓价格', 0))
         exit_price = float(trade.get('平仓价格', 0))
         side = trade.get('方向')
@@ -22282,7 +22260,7 @@ def recalculate_consensus_from_snapshot(snapshot_row):
         
         return indicator_consensus
     
-    except Exception as e:
+    except Exception:
         # 出错时返回0（保守策略）
             return 0
     
@@ -22358,7 +22336,7 @@ def recalculate_signal_score_from_snapshot(snapshot_row, signal_type, learning_c
         open_price = safe_float(snapshot_row.get('open', 0))
         high = safe_float(snapshot_row.get('high', 0))
         low = safe_float(snapshot_row.get('low', 0))
-        volume = safe_float(snapshot_row.get('volume', 0))
+        safe_float(snapshot_row.get('volume', 0))
         
         trend_4h = safe_str(snapshot_row.get('trend_4h', ''))
         trend_1h = safe_str(snapshot_row.get('trend_1h', ''))
@@ -22396,7 +22374,7 @@ def recalculate_signal_score_from_snapshot(snapshot_row, signal_type, learning_c
         # 【4. Pin Bar / 吞没形态评分】（用权重，仅scalping）
         if signal_type == 'scalping' and high > low and open_price > 0:
             body = abs(close - open_price)
-            total_range = high - low
+            high - low
             upper_wick = high - max(close, open_price)
             lower_wick = min(close, open_price) - low
             
@@ -22489,7 +22467,6 @@ def analyze_opportunities_with_new_params(market_snapshots, actual_trades, new_c
         }
     """
     import pandas as pd
-    import numpy as np
     
     if market_snapshots is None or market_snapshots.empty:
         return {'all_opportunities': [], 'old_captured': [], 'new_captured': [], 'missed': [], 'stats': {}}
@@ -23211,16 +23188,16 @@ def analyze_separated_opportunities_with_validation(market_snapshots, old_config
     train_snapshots = market_snapshots.iloc[:train_size]
     val_snapshots = market_snapshots.iloc[train_size:]
     
-    print(f"\n  【V8.4.5→V8.4.10前向验证】")
+    print("\n  【V8.4.5→V8.4.10前向验证】")
     print(f"  📊 训练期: {len(train_snapshots)}条记录（前10天）")
     print(f"  🔍 验证期: {len(val_snapshots)}条记录（后4天）")
     
     # 在训练期识别机会
-    print(f"  ⚙️  分析训练期机会...")
+    print("  ⚙️  分析训练期机会...")
     train_result = analyze_separated_opportunities(train_snapshots, old_config)
     
     # 在验证期识别机会
-    print(f"  ⚙️  分析验证期机会...")
+    print("  ⚙️  分析验证期机会...")
     val_result = analyze_separated_opportunities(val_snapshots, old_config)
     
     print(f"  ✅ 训练期: 超短线{len(train_result['scalping']['opportunities'])}个, 波段{len(train_result['swing']['opportunities'])}个")
@@ -23264,12 +23241,10 @@ def analyze_separated_opportunities(market_snapshots, old_config):
     }
     """
     try:
-        import pandas as pd
         import gc
         
         # 【V8.5.2.4.48】内存优化配置
         MAX_OPPORTUNITIES_PER_TYPE = 2000  # 每类最多2000个
-        MAX_OPPORTUNITIES_PER_COIN = 250   # 每币种最多250个
         MIN_PROFIT_THRESHOLD = 5.0  # 最低盈利门槛（统一）
         
         # 【V8.5.2.4.48】分阶段处理
@@ -23289,12 +23264,12 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             'max_holding_hours': 72
         }
         
-        print(f"\n  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        print(f"  🎯 【Phase 1.1】收集盈利机会（不分类）")
-        print(f"  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("\n  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("  🎯 【Phase 1.1】收集盈利机会（不分类）")
+        print("  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         print(f"  📊 数据范围: {len(market_snapshots)}条快照")
         print(f"  🎚️  最低门槛: {MIN_PROFIT_THRESHOLD}%")
-        print(f"  💾 内存策略: 按币种处理+及时释放")
+        print("  💾 内存策略: 按币种处理+及时释放")
         
         # 按币种分组
         coins_list = list(market_snapshots['coin'].unique())
@@ -23484,7 +23459,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     
                     all_profit_opportunities.append(opp_data)
                 
-                except (ValueError, TypeError, KeyError) as e:
+                except (ValueError, TypeError, KeyError):
                     continue
             
             # 每个币种完成后输出统计
@@ -23503,7 +23478,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             phase1_densities = [o['profit_density'] for o in all_profit_opportunities]
             phase1_holdings = [o['holding_hours'] for o in all_profit_opportunities]
             phase1_profits = [o['objective_profit'] for o in all_profit_opportunities]
-            print(f"\n  🔍 【Phase 1.1密度分布】")
+            print("\n  🔍 【Phase 1.1密度分布】")
             print(f"     密度范围: {np.min(phase1_densities):.2f} ~ {np.max(phase1_densities):.2f}")
             print(f"     密度分位: q25={np.percentile(phase1_densities, 25):.2f}, q50={np.percentile(phase1_densities, 50):.2f}, q75={np.percentile(phase1_densities, 75):.2f}, q85={np.percentile(phase1_densities, 85):.2f}")
             print(f"     持仓范围: {np.min(phase1_holdings):.2f}h ~ {np.max(phase1_holdings):.2f}h (中位数={np.median(phase1_holdings):.2f}h)")
@@ -23520,9 +23495,9 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         # ========================================
         # 【Phase 1.2】统计分析与动态阈值
         # ========================================
-        print(f"\n  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        print(f"  📊 【Phase 1.2】统计分析与动态阈值")
-        print(f"  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("\n  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("  📊 【Phase 1.2】统计分析与动态阈值")
+        print("  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
         if len(all_profit_opportunities) < 50:
             print(f"  ⚠️  样本不足({len(all_profit_opportunities)}个)，无法进行可靠分类")
@@ -23600,7 +23575,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     'high_density_threshold': stats['profit_density']['q85']
                 }
             
-            print(f"  🎯 动态阈值:")
+            print("  🎯 动态阈值:")
             print(f"     波段最低利润: {thresholds['swing_min_profit']:.1f}%")
             print(f"     波段最短持仓: {thresholds['swing_min_holding']:.2f}h")
             print(f"     高密度阈值: {thresholds['high_density_threshold']:.1f}")
@@ -23608,9 +23583,9 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             # ========================================
             # 【Phase 1.3】自适应分类
             # ========================================
-            print(f"\n  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            print(f"  🔄 【Phase 1.3】自适应分类")
-            print(f"  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("\n  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  🔄 【Phase 1.3】自适应分类")
+            print("  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             
             scalping_opps = []
             swing_opps = []
@@ -23667,7 +23642,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                 scalping_densities = [o['profit_density'] for o in scalping_opps]
                 scalping_holdings = [o['holding_hours'] for o in scalping_opps]
                 scalping_profits = [o['objective_profit'] for o in scalping_opps]
-                print(f"\n  🔍 【超短线密度详情】")
+                print("\n  🔍 【超短线密度详情】")
                 print(f"     密度: min={np.min(scalping_densities):.2f}, q25={np.percentile(scalping_densities, 25):.2f}, median={np.median(scalping_densities):.2f}, q75={np.percentile(scalping_densities, 75):.2f}, max={np.max(scalping_densities):.2f}")
                 print(f"     平均密度: {np.mean(scalping_densities):.2f} (期望 >> {thresholds['high_density_threshold']:.1f})")
                 print(f"     持仓时间: min={np.min(scalping_holdings):.2f}h, median={np.median(scalping_holdings):.2f}h, max={np.max(scalping_holdings):.2f}h")
@@ -23682,7 +23657,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                 swing_densities = [o['profit_density'] for o in swing_opps]
                 swing_holdings = [o['holding_hours'] for o in swing_opps]
                 swing_profits = [o['objective_profit'] for o in swing_opps]
-                print(f"\n  🔍 【波段密度详情】")
+                print("\n  🔍 【波段密度详情】")
                 print(f"     密度: min={np.min(swing_densities):.2f}, q25={np.percentile(swing_densities, 25):.2f}, median={np.median(swing_densities):.2f}, q75={np.percentile(swing_densities, 75):.2f}, max={np.max(swing_densities):.2f}")
                 print(f"     平均密度: {np.mean(swing_densities):.2f} (期望 << {thresholds['high_density_threshold']:.1f})")
                 print(f"     持仓时间: min={np.min(swing_holdings):.2f}h, median={np.median(swing_holdings):.2f}h, max={np.max(swing_holdings):.2f}h")
@@ -23696,9 +23671,9 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             # ========================================
             # 【Phase 1.4】验证分类质量
             # ========================================
-            print(f"\n  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            print(f"  ✅ 【Phase 1.4】分类质量验证")
-            print(f"  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("\n  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  ✅ 【Phase 1.4】分类质量验证")
+            print("  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             
             if len(scalping_opps) >= 10 and len(swing_opps) >= 10:
                 scalping_avg_profit = np.mean([o['objective_profit'] for o in scalping_opps])
@@ -23724,7 +23699,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     print(f"  {status} {check_name}")
                 
                 # 【调试】密度合理性检查
-                print(f"\n  🔍 【密度合理性检查】")
+                print("\n  🔍 【密度合理性检查】")
                 threshold_val = thresholds['high_density_threshold']
                 print(f"     分类阈值: {threshold_val:.2f}")
                 print(f"     超短线平均密度: {scalping_avg_density:.2f} (期望 >> {threshold_val:.2f})")
@@ -23733,7 +23708,7 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                 # 检查超短线密度是否合理
                 if scalping_avg_density < threshold_val:
                     print(f"  ⚠️  【异常】超短线平均密度({scalping_avg_density:.2f}) < 阈值({threshold_val:.2f})")
-                    print(f"      可能原因: 规则3(距离判断)把大量低密度机会错误分给超短线")
+                    print("      可能原因: 规则3(距离判断)把大量低密度机会错误分给超短线")
                     
                     # 统计真正高密度的超短线数量
                     high_density_scalping = sum(1 for o in scalping_opps if o['profit_density'] > threshold_val)
@@ -23742,13 +23717,13 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                 # 检查波段密度是否合理
                 if swing_avg_density > threshold_val * 0.5:
                     print(f"  ⚠️  【异常】波段平均密度({swing_avg_density:.2f}) 过高 (期望 < {threshold_val*0.5:.2f})")
-                    print(f"      可能原因: 高密度机会被错误分到波段")
+                    print("      可能原因: 高密度机会被错误分到波段")
                 
                 passed_checks = sum(checks.values())
                 if passed_checks < 2:
                     print(f"\n  ⚠️  分类质量不佳({passed_checks}/3通过)，但继续使用")
             else:
-                print(f"  ⚠️  样本数不足以验证质量")
+                print("  ⚠️  样本数不足以验证质量")
         
         # 【V8.5.2.4.48】全局机会数量限制
         if len(scalping_opps) > MAX_OPPORTUNITIES_PER_TYPE:
@@ -24268,7 +24243,7 @@ def call_ai_for_exit_analysis(exit_analysis, current_params, signal_type, model_
         
         try:
             ai_suggestions = json.loads(json_str)
-            print(f"  ✅ AI分析完成")
+            print("  ✅ AI分析完成")
             print(f"     诊断: {ai_suggestions.get('diagnosis', 'N/A')[:80]}...")
             return ai_suggestions
         except json.JSONDecodeError as e:
@@ -24441,7 +24416,7 @@ def generate_round2_combinations_from_ai(ai_suggestions):
     if 'max_holding_hours' in param_ranges:
         valid_hours = [h for h in param_ranges['max_holding_hours'] if h <= 8.0]
         if not valid_hours:
-            print(f"     ⚠️  AI建议的max_holding_hours全部>8h（不符合超短线定义），自动修正为[5.0, 6.0, 8.0]")
+            print("     ⚠️  AI建议的max_holding_hours全部>8h（不符合超短线定义），自动修正为[5.0, 6.0, 8.0]")
             param_ranges['max_holding_hours'] = [5.0, 6.0, 8.0]
         elif len(valid_hours) < len(param_ranges['max_holding_hours']):
             print(f"     ⚠️  AI建议的部分max_holding_hours>8h，过滤为{valid_hours}")
@@ -24451,7 +24426,7 @@ def generate_round2_combinations_from_ai(ai_suggestions):
     if 'min_signal_score' in param_ranges:
         valid_scores = [s for s in param_ranges['min_signal_score'] if s <= 95]
         if not valid_scores:
-            print(f"     ⚠️  AI建议的min_signal_score全部>95（太高），自动修正为[70, 80, 90]")
+            print("     ⚠️  AI建议的min_signal_score全部>95（太高），自动修正为[70, 80, 90]")
             param_ranges['min_signal_score'] = [70, 80, 90]
         elif len(valid_scores) < len(param_ranges['min_signal_score']):
             print(f"     ⚠️  AI建议的部分min_signal_score>95，过滤为{valid_scores}")
@@ -24864,10 +24839,9 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
     注意：此函数保留用于兼容性，但推荐使用新的Phase 4系统
     """
     from calculate_actual_profit import calculate_single_actual_profit
-    import numpy as np
     
     print(f"\n{'='*60}")
-    print(f"【V8.5.2.4.11 Phase 4】参数验证与过拟合检测")
+    print("【V8.5.2.4.11 Phase 4】参数验证与过拟合检测")
     print(f"{'='*60}")
     
     # 分离超短线和波段数据
@@ -24875,7 +24849,7 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
     swing_opps = [o for o in full_data if not o.get('is_scalping', False)]
     
     total_days = 14
-    split_point = total_days // 2  # 7天
+    total_days // 2  # 7天
     
     # 【V8.5.2.4.21】修复：按样本数量分割，而不是按timestamp数量
     # 按时间排序
@@ -24950,7 +24924,7 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
     full_total = len(scalping_opps) + len(swing_opps)
     
     if full_captured_count == 0:
-        print(f"     ❌ 没有捕获任何机会")
+        print("     ❌ 没有捕获任何机会")
         return {
             'status': 'FAILED',
             'full_test': {},
@@ -24995,7 +24969,7 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
     # 合并前期统计
     early_captured = (early_scalp_result['captured_count'] if early_scalp_result else 0) + \
                      (early_swing_result['captured_count'] if early_swing_result else 0)
-    early_total = len(early_scalping) + len(early_swing)
+    len(early_scalping) + len(early_swing)
     
     early_avg_profit = 0
     early_win_rate = 0
@@ -25012,7 +24986,7 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
     # 合并后期统计
     late_captured = (late_scalp_result['captured_count'] if late_scalp_result else 0) + \
                     (late_swing_result['captured_count'] if late_swing_result else 0)
-    late_total = len(late_scalping) + len(late_swing)
+    len(late_scalping) + len(late_swing)
     
     late_avg_profit = 0
     late_win_rate = 0
@@ -25030,7 +25004,7 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
     print(f"     后期: {late_captured}个，利润{late_avg_profit:.2f}%，胜率{late_win_rate*100:.1f}%")
     
     # 3️⃣ 过拟合检测
-    print(f"\n  🔍 3️⃣ 过拟合检测...")
+    print("\n  🔍 3️⃣ 过拟合检测...")
     
     overfitting_score = 0
     issues = []
@@ -25068,7 +25042,7 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
         print(f"     后期利润: {late_avg_profit:.2f}% ❌ 亏损")
     
     # 4️⃣ 稳定性评分
-    print(f"\n  📈 4️⃣ 稳定性评分...")
+    print("\n  📈 4️⃣ 稳定性评分...")
     
     stability_score = 100.0
     if profit_diff > 0.1:
@@ -25081,13 +25055,13 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
         print(f"     胜率下降扣分: -{penalty:.1f}")
     if late_avg_profit < 0:
         stability_score = 0  # 直接不合格
-        print(f"     后期亏损: 稳定性归零")
+        print("     后期亏损: 稳定性归零")
     
     stability_score = max(0, stability_score)
     print(f"     最终稳定性得分: {stability_score:.1f}/100")
     
     # 5️⃣ 最终判定（初步）
-    print(f"\n  🎯 5️⃣ 最终判定...")
+    print("\n  🎯 5️⃣ 最终判定...")
     
     if full_avg_profit <= 0:
         status = "FAILED"
@@ -25113,12 +25087,12 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
     print(f"     建议: {recommendation}")
     
     if issues:
-        print(f"\n  ⚠️  发现的问题:")
+        print("\n  ⚠️  发现的问题:")
         for issue in issues:
             print(f"     • {issue}")
     
     # 【V8.5.2.4.13】6️⃣ 异常检测（集成detect_anomalies_local）
-    print(f"\n  🔍 6️⃣ 异常检测（detect_anomalies_local）...")
+    print("\n  🔍 6️⃣ 异常检测（detect_anomalies_local）...")
     
     try:
         from backtest_optimizer_v8321 import detect_anomalies_local
@@ -25206,7 +25180,7 @@ def validate_params_with_overfitting_check(full_data, scalping_params, swing_par
                 status = "OVERFITTED"
                 recommendation = "检测到严重过拟合（含异常检测），回退到Phase 2参数"
         else:
-            print(f"     ✅ 未发现异常")
+            print("     ✅ 未发现异常")
             
     except Exception as e:
         print(f"     ⚠️  异常检测失败: {e}")
@@ -25298,19 +25272,19 @@ def optimize_strategy_with_risk_control(strategy_data, strategy_type, phase1_bas
         phase2_params = phase2_baseline.get('params', {})
         min_capture_rate = phase2_capture * 0.9  # 约束：≥90%
         
-        print(f"\n  📊 Phase 2 baseline:")
+        print("\n  📊 Phase 2 baseline:")
         print(f"     捕获率: {phase2_capture*100:.1f}%")
         print(f"     平均利润: {phase2_profit:.2f}%")
         print(f"     约束条件: 捕获率≥{min_capture_rate*100:.1f}%")
     else:
-        print(f"  ⚠️  无Phase 2 baseline，将使用宽松约束")
+        print("  ⚠️  无Phase 2 baseline，将使用宽松约束")
         min_capture_rate = 0.3  # 默认最低30%
         phase2_capture = 0.4
         phase2_profit = 1.0
         phase2_params = {}
     
     # 【V8.5.2.4.14】使用precision_formula动态调整参数基准
-    print(f"\n  📊 读取历史数据的precision_formula...")
+    print("\n  📊 读取历史数据的precision_formula...")
     
     import os
     import json
@@ -25354,13 +25328,13 @@ def optimize_strategy_with_risk_control(strategy_data, strategy_type, phase1_bas
                             break
                     
                     if not dynamic_min_score:
-                        print(f"     ⚠️  无法从历史数据找到合适的min_signal_score，使用默认值")
+                        print("     ⚠️  无法从历史数据找到合适的min_signal_score，使用默认值")
                     if not dynamic_min_consensus:
-                        print(f"     ⚠️  无法从历史数据找到合适的min_consensus，使用默认值")
+                        print("     ⚠️  无法从历史数据找到合适的min_consensus，使用默认值")
         except Exception as e:
             print(f"     ⚠️  读取precision_formula失败: {e}")
     else:
-        print(f"     ⚠️  optimization_cache不存在，使用默认参数")
+        print("     ⚠️  optimization_cache不存在，使用默认参数")
     
     # 应用动态阈值到phase2_params
     if phase2_params:
@@ -25372,11 +25346,11 @@ def optimize_strategy_with_risk_control(strategy_data, strategy_type, phase1_bas
             print(f"     📝 更新phase2_params['min_indicator_consensus'] = {dynamic_min_consensus}")
     
     # 【V8.5.2.4.39】调用optimize_params_v8321_lightweight（增加测试组合数）
-    print(f"\n  🚀 使用optimize_params_v8321_lightweight进行11维度搜索...")
-    print(f"     • 测试组数: 200组（V8.5.2.4.39扩大，原100组）")
-    print(f"     • 搜索空间: 扩大（TP 0.8-7.0, SL 0.8-3.0, Holding 2-120h）")
-    print(f"     • 评分方式: 多目标评分（期望收益+盈亏比+胜率+回撤）")
-    print(f"     • 异常检测: 自动检测过拟合风险")
+    print("\n  🚀 使用optimize_params_v8321_lightweight进行11维度搜索...")
+    print("     • 测试组数: 200组（V8.5.2.4.39扩大，原100组）")
+    print("     • 搜索空间: 扩大（TP 0.8-7.0, SL 0.8-3.0, Holding 2-120h）")
+    print("     • 评分方式: 多目标评分（期望收益+盈亏比+胜率+回撤）")
+    print("     • 异常检测: 自动检测过拟合风险")
     if dynamic_min_score or dynamic_min_consensus:
         print(f"     • 动态阈值: score={dynamic_min_score or '默认'}, consensus={dynamic_min_consensus or '默认'}")
     
@@ -25398,11 +25372,11 @@ def optimize_strategy_with_risk_control(strategy_data, strategy_type, phase1_bas
         
         # 提取top配置
         top_configs = optimization_result.get('top_10_configs', [])
-        optimized_params = optimization_result.get('optimized_params', {})
+        optimization_result.get('optimized_params', {})
         statistics = optimization_result.get('statistics', {})
         
         if not top_configs:
-            print(f"  ⚠️  优化失败，无有效配置")
+            print("  ⚠️  优化失败，无有效配置")
             return None
         
         print(f"\n  📊 优化完成，发现{len(top_configs)}个候选配置")
@@ -25419,7 +25393,7 @@ def optimize_strategy_with_risk_control(strategy_data, strategy_type, phase1_bas
         print(f"     ✅ 满足约束条件: {len(valid_configs)}/{len(top_configs)}个配置")
         
         if not valid_configs:
-            print(f"  ⚠️  无配置满足约束条件，使用Phase 2参数")
+            print("  ⚠️  无配置满足约束条件，使用Phase 2参数")
             
             # 回退到Phase 2参数
             best_result = {
@@ -25461,7 +25435,7 @@ def optimize_strategy_with_risk_control(strategy_data, strategy_type, phase1_bas
                 captured_opps.append(opp)
         
         if not captured_opps:
-            print(f"  ⚠️  最优配置未捕获任何机会，使用Phase 2参数")
+            print("  ⚠️  最优配置未捕获任何机会，使用Phase 2参数")
             return None
         
         # 统计
@@ -25512,7 +25486,7 @@ def optimize_strategy_with_risk_control(strategy_data, strategy_type, phase1_bas
                 'profit_change': profit_diff
             }
             
-            print(f"\n     📊 vs Phase 2:")
+            print("\n     📊 vs Phase 2:")
             print(f"        捕获率: {capture_diff:+.1f}%")
             print(f"        利润: {profit_diff:+.2f}%")
         
@@ -25524,7 +25498,7 @@ def optimize_strategy_with_risk_control(strategy_data, strategy_type, phase1_bas
         traceback.print_exc()
         
         # 回退到Phase 2参数
-        print(f"  🔄 回退到Phase 2参数")
+        print("  🔄 回退到Phase 2参数")
         
         if phase2_baseline and phase2_baseline.get('params'):
             fallback_result = {
@@ -25588,9 +25562,9 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
             from backtest_optimizer_v8321 import optimize_params_v8321_lightweight
             
             print(f"\n  🚀 【V8.3.21】使用增强优化器（{len(opportunities)}个机会）")
-            print(f"     • 11维度参数搜索")
-            print(f"     • 4层上下文过滤")
-            print(f"     • 成本优化（节省89%）")
+            print("     • 11维度参数搜索")
+            print("     • 4层上下文过滤")
+            print("     • 成本优化（节省89%）")
             
             v8321_result = optimize_params_v8321_lightweight(
                 opportunities=opportunities,
@@ -25600,7 +25574,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
                 ai_suggested_params=ai_suggested_params  # 【V8.3.25.10新增】
             )
             
-            print(f"\n  ✅ V8.3.21优化完成")
+            print("\n  ✅ V8.3.21优化完成")
             print(f"     最优分数: {v8321_result['top_10_configs'][0]['score']:.3f}")
             print(f"     捕获率: {v8321_result['top_10_configs'][0]['metrics']['capture_rate']*100:.0f}%")
             print(f"     平均利润: {v8321_result['top_10_configs'][0]['metrics']['avg_profit']:.1f}%")
@@ -25609,13 +25583,13 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
             
             # 打印关键洞察
             if v8321_result['context_analysis'].get('key_insights'):
-                print(f"\n  💡 关键发现:")
+                print("\n  💡 关键发现:")
                 for insight in v8321_result['context_analysis']['key_insights'][:3]:
                     print(f"     {insight}")
             
             # 打印参数敏感度（Top 3）
             if v8321_result['statistics'].get('param_sensitivity'):
-                print(f"\n  📊 参数敏感度（影响最大的3个）:")
+                print("\n  📊 参数敏感度（影响最大的3个）:")
                 sorted_params = sorted(
                     v8321_result['statistics']['param_sensitivity'].items(),
                     key=lambda x: abs(x[1]['avg_impact']),
@@ -25626,13 +25600,13 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
                           f"(影响={sensitivity['avg_impact']:+.3f})")
             
             # 【V8.4.2修复】重新计算actual_profit以确保与参数一致
-            print(f"\n  📊 计算前后对比（使用实际利润）...")
+            print("\n  📊 计算前后对比（使用实际利润）...")
             
             # 导入实际利润计算模块
             from calculate_actual_profit import calculate_actual_profit_batch
             
             # 为baseline重新计算actual_profit
-            print(f"     计算baseline（当前参数）...")
+            print("     计算baseline（当前参数）...")
             baseline_opps_copy = [opp.copy() for opp in opportunities]
             baseline_opps_updated = calculate_actual_profit_batch(
                 opportunities=baseline_opps_copy,
@@ -25640,10 +25614,10 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
                 batch_size=100,
                 use_dynamic_atr=True
             )
-            print(f"")  # 换行
+            print("")  # 换行
             
             # 为optimized重新计算actual_profit
-            print(f"     计算optimized（新参数）...")
+            print("     计算optimized（新参数）...")
             optimized_opps_copy = [opp.copy() for opp in opportunities]
             optimized_opps_updated = calculate_actual_profit_batch(
                 opportunities=optimized_opps_copy,
@@ -25651,7 +25625,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
                 batch_size=100,
                 use_dynamic_atr=True
             )
-            print(f"")  # 换行
+            print("")  # 换行
             
             # 【V8.4.5修复】统计所有交易（包括time_exit），与阶段3评分函数一致
             baseline_all_trades = baseline_opps_updated
@@ -25684,7 +25658,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
             
             if ai_decision:
                 # AI参与了迭代决策
-                print(f"  🤖 AI迭代决策:")
+                print("  🤖 AI迭代决策:")
                 print(f"     选择: Rank {ai_decision.get('selected_rank', 1)}")
                 print(f"     调整: {'是' if ai_decision.get('needs_adjustment') else '否'}")
                 
@@ -25733,7 +25707,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
                     'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
                 save_learning_config(config)
-                print(f"  ✅ V8.3.21超短线洞察已保存到 compressed_insights")
+                print("  ✅ V8.3.21超短线洞察已保存到 compressed_insights")
             except Exception as e:
                 print(f"  ⚠️  保存V8.3.21洞察失败: {e}")
             
@@ -25781,7 +25755,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
     signal_performance = analyze_signal_type_performance(opportunities)
     
     # 打印关键发现
-    print(f"  📈 信号类型分布:")
+    print("  📈 信号类型分布:")
     for sig_type, perf in sorted(signal_performance.items(), key=lambda x: x[1]['count'], reverse=True)[:5]:
         print(f"     • {sig_type}: {perf['count']}个({perf['ratio']*100:.0f}%) | "
               f"平均{perf['avg_profit']:.1f}%利润 | "
@@ -25801,7 +25775,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
     
     # 【V8.3.16】使用initial_params作为Grid Search的起点
     if initial_params:
-        print(f"\n     ℹ️  应用V7.7.0初始参数到Grid Search")
+        print("\n     ℹ️  应用V7.7.0初始参数到Grid Search")
         # 将initial_params合并到current_params
     
     # ========== 存储所有轮次的结果 ==========
@@ -25809,7 +25783,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
     final_ai_decision = None
     
     # ========== 第1轮 Grid Search ==========
-    print(f"\n  🔍 第1轮 Grid Search")
+    print("\n  🔍 第1轮 Grid Search")
     round1_combinations = generate_round1_combinations()
     print(f"     测试组合: {len(round1_combinations)}组")
     
@@ -25851,7 +25825,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
     print(f"     ✅ 第1轮完成: 最佳分数={best_round1['score']:.4f}, time_exit={best_round1_te_rate:.0f}%, 利润={best_round1['result']['avg_profit']:.1f}%")
     
     # ========== 调用AI决策：是否需要第2轮 ==========
-    print(f"\n  🤖 调用AI分析第1轮结果...")
+    print("\n  🤖 调用AI分析第1轮结果...")
     ai_decision_round1 = call_ai_for_round_decision(
         round_num=1,
         round_results=round1_results,
@@ -25867,7 +25841,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
     # ========== 如果需要第2轮 ==========
     round2_results = []
     if ai_decision_round1.get('needs_round2', False):
-        print(f"\n  🔍 第2轮 Grid Search（AI建议）")
+        print("\n  🔍 第2轮 Grid Search（AI建议）")
         round2_suggestions = ai_decision_round1.get('round2_suggestions', {})
         print(f"     策略: {round2_suggestions.get('strategy', 'N/A')}")
         
@@ -25908,7 +25882,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
         print(f"     ✅ 第2轮完成: 最佳分数={best_round2['score']:.4f}, time_exit={best_round2_te_rate:.0f}%, 利润={best_round2['result']['avg_profit']:.1f}%")
         
         # ========== 调用AI给出最终决策 ==========
-        print(f"\n  🤖 调用AI综合第1/第2轮，给出最终决策...")
+        print("\n  🤖 调用AI综合第1/第2轮，给出最终决策...")
         # 合并两轮的Top结果
         combined_top_results = sorted(
             round1_results[:5] + round2_results[:5],
@@ -25926,7 +25900,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
         )
     else:
         # ========== 不需要第2轮，使用第1轮的AI决策 ==========
-        print(f"     ✅ AI判断：第1轮结果已足够，跳过第2轮")
+        print("     ✅ AI判断：第1轮结果已足够，跳过第2轮")
         final_ai_decision = ai_decision_round1
     
     # ========== 应用最终决策 ==========
@@ -25935,7 +25909,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
     # 从AI给出的selected_params中找到对应的完整参数
     selected_params_partial = final_decision.get('selected_params')
     if not selected_params_partial or not isinstance(selected_params_partial, dict):
-        print(f"     ⚠️  AI未返回有效参数，使用第1轮最佳结果")
+        print("     ⚠️  AI未返回有效参数，使用第1轮最佳结果")
         selected_params_partial = best_round1['params']
     
     # 尝试从round1或round2结果中找到匹配的完整参数
@@ -25954,11 +25928,11 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
     
     # 如果没找到匹配，使用第1轮最佳
     if not final_params:
-        print(f"     ⚠️  未找到AI选择的参数，使用第1轮最佳结果")
+        print("     ⚠️  未找到AI选择的参数，使用第1轮最佳结果")
         final_params = best_round1['full_params']
         final_result = best_round1['result']
     
-    print(f"\n  ✅ AI最终决策:")
+    print("\n  ✅ AI最终决策:")
     accept_result = final_decision.get('accept_result', True)
     print(f"     接受结果: {accept_result}")
     print(f"     执行策略: {final_decision.get('execution_strategy', 'apply_immediately')}")
@@ -25973,12 +25947,12 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
         # 检查AI是否提供了Round 3建议
         round3_suggestion = final_ai_decision.get('round3_suggestion')
         if round3_suggestion and isinstance(round3_suggestion, dict) and round3_suggestion.get('param_ranges'):
-            print(f"\n  ⚠️  AI拒绝当前结果，但提供了Round 3改进建议")
+            print("\n  ⚠️  AI拒绝当前结果，但提供了Round 3改进建议")
             print(f"     策略: {round3_suggestion.get('strategy', 'N/A')[:100]}...")
             print(f"     推理: {round3_suggestion.get('rationale', 'N/A')[:150]}...")
             
             # 【V8.3.18.6】执行Round 3
-            print(f"\n  🔍 第3轮 Grid Search（AI改进建议）")
+            print("\n  🔍 第3轮 Grid Search（AI改进建议）")
             round3_combinations = generate_round2_combinations_from_ai(round3_suggestion['param_ranges'])
             print(f"     测试组合: {len(round3_combinations)}组")
             
@@ -26013,7 +25987,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
             
             # 如果Round 3成功（time_exit < 90%），使用Round 3结果
             if best_round3_te_rate < 90:
-                print(f"\n  ✅ Round 3成功降低time_exit，接受此结果")
+                print("\n  ✅ Round 3成功降低time_exit，接受此结果")
                 final_params = best_round3['full_params']
                 final_result = best_round3['result']
             else:
@@ -26032,7 +26006,7 @@ def optimize_scalping_params(scalping_data, current_params, initial_params=None,
                 }
         else:
             # AI拒绝但没给建议（不应该发生）
-            print(f"\n  ❌ AI拒绝优化结果，且未提供Round 3建议")
+            print("\n  ❌ AI拒绝优化结果，且未提供Round 3建议")
             print(f"     原因: {final_decision.get('reasoning', 'N/A')[:100]}...")
             baseline_result = simulate_params_on_opportunities(opportunities, current_params)
             return {
@@ -26112,9 +26086,9 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
             from backtest_optimizer_v8321 import optimize_params_v8321_lightweight
             
             print(f"\n  🚀 【V8.3.21】使用增强优化器（{len(opportunities)}个机会）")
-            print(f"     • 11维度参数搜索")
-            print(f"     • 4层上下文过滤")
-            print(f"     • 成本优化（节省89%）")
+            print("     • 11维度参数搜索")
+            print("     • 4层上下文过滤")
+            print("     • 成本优化（节省89%）")
             
             v8321_result = optimize_params_v8321_lightweight(
                 opportunities=opportunities,
@@ -26124,7 +26098,7 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
                 ai_suggested_params=ai_suggested_params  # 【V8.3.25.10新增】
             )
             
-            print(f"\n  ✅ V8.3.21优化完成")
+            print("\n  ✅ V8.3.21优化完成")
             print(f"     最优分数: {v8321_result['top_10_configs'][0]['score']:.3f}")
             print(f"     捕获率: {v8321_result['top_10_configs'][0]['metrics']['capture_rate']*100:.0f}%")
             print(f"     平均利润: {v8321_result['top_10_configs'][0]['metrics']['avg_profit']:.1f}%")
@@ -26133,13 +26107,13 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
             
             # 打印关键洞察
             if v8321_result['context_analysis'].get('key_insights'):
-                print(f"\n  💡 关键发现:")
+                print("\n  💡 关键发现:")
                 for insight in v8321_result['context_analysis']['key_insights'][:3]:
                     print(f"     {insight}")
             
             # 打印参数敏感度（Top 3）
             if v8321_result['statistics'].get('param_sensitivity'):
-                print(f"\n  📊 参数敏感度（影响最大的3个）:")
+                print("\n  📊 参数敏感度（影响最大的3个）:")
                 sorted_params = sorted(
                     v8321_result['statistics']['param_sensitivity'].items(),
                     key=lambda x: abs(x[1]['avg_impact']),
@@ -26150,13 +26124,13 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
                           f"(影响={sensitivity['avg_impact']:+.3f})")
             
             # 【V8.4.2修复】重新计算actual_profit以确保与参数一致
-            print(f"\n  📊 计算前后对比（使用实际利润）...")
+            print("\n  📊 计算前后对比（使用实际利润）...")
             
             # 导入实际利润计算模块
             from calculate_actual_profit import calculate_actual_profit_batch
             
             # 为baseline重新计算actual_profit
-            print(f"     计算baseline（当前参数）...")
+            print("     计算baseline（当前参数）...")
             baseline_opps_copy = [opp.copy() for opp in opportunities]
             baseline_opps_updated = calculate_actual_profit_batch(
                 opportunities=baseline_opps_copy,
@@ -26164,10 +26138,10 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
                 batch_size=100,
                 use_dynamic_atr=True
             )
-            print(f"")  # 换行
+            print("")  # 换行
             
             # 为optimized重新计算actual_profit
-            print(f"     计算optimized（新参数）...")
+            print("     计算optimized（新参数）...")
             optimized_opps_copy = [opp.copy() for opp in opportunities]
             optimized_opps_updated = calculate_actual_profit_batch(
                 opportunities=optimized_opps_copy,
@@ -26175,7 +26149,7 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
                 batch_size=100,
                 use_dynamic_atr=True
             )
-            print(f"")  # 换行
+            print("")  # 换行
             
             # 【V8.4.5修复】统计所有交易（包括time_exit），与阶段3评分函数一致
             baseline_all_trades = baseline_opps_updated
@@ -26208,7 +26182,7 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
             
             if ai_decision:
                 # AI参与了迭代决策
-                print(f"  🤖 AI迭代决策:")
+                print("  🤖 AI迭代决策:")
                 print(f"     选择: Rank {ai_decision.get('selected_rank', 1)}")
                 print(f"     调整: {'是' if ai_decision.get('needs_adjustment') else '否'}")
                 
@@ -26257,7 +26231,7 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
                     'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
                 save_learning_config(config)
-                print(f"  ✅ V8.3.21波段洞察已保存到 compressed_insights")
+                print("  ✅ V8.3.21波段洞察已保存到 compressed_insights")
             except Exception as e:
                 print(f"  ⚠️  保存V8.3.21洞察失败: {e}")
             
@@ -26308,7 +26282,7 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
     
     # 【V8.3.16】使用initial_params作为Grid Search的起点
     if initial_params:
-        print(f"     ℹ️  应用V7.7.0初始参数到Grid Search")
+        print("     ℹ️  应用V7.7.0初始参数到Grid Search")
         # 将initial_params合并到current_params
         current_params = {**current_params, **initial_params}
     
@@ -26317,7 +26291,7 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
     # ========== 阶段1: Grid Search ==========
     # 【V8.3.15】激进调整参数范围，解决Time Exit率82%和捕获率5%问题
     # 关键变化：延长持仓时间，大幅降低TP距离50-70%
-    print(f"\n  📊 阶段1: Grid Search（54组参数，V8.3.15激进优化）")
+    print("\n  📊 阶段1: Grid Search（54组参数，V8.3.15激进优化）")
     param_grid = {
         'max_holding_hours': [48, 60, 72],          # 延长（24-48h → 48-72h）
         'atr_tp_multiplier': [2.0, 3.0, 4.0],       # 大幅降低（4.0-6.0 → 2.0-4.0）
@@ -26332,7 +26306,7 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
     # 计算基准表现
     baseline_params = current_params.copy()
     baseline_result = simulate_params_on_opportunities(opportunities, baseline_params)
-    baseline_score = calculate_swing_optimization_score(baseline_result)
+    calculate_swing_optimization_score(baseline_result)
     
     print(f"     基准: 平均利润={baseline_result['avg_profit']:.1f}%, 捕获率={baseline_result['capture_rate']*100:.0f}%")
     
@@ -26376,7 +26350,7 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
     print(f"     ✅ Grid Search完成: 平均利润={best_result['avg_profit']:.1f}%, 捕获率={best_result['capture_rate']*100:.0f}%")
     
     # ========== 阶段2: Exit Analysis ==========
-    print(f"\n  🔍 阶段2: Exit Analysis")
+    print("\n  🔍 阶段2: Exit Analysis")
     detailed_result = simulate_params_on_opportunities_with_details(opportunities, best_params)
     exit_analysis = analyze_exit_patterns(detailed_result['exit_details'])
     
@@ -26389,7 +26363,7 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
         print(f"     Take Profit: {tp['count']}笔 ({tp['rate']:.0f}%) | {tp['early_count']}笔过早")
     
     # ========== 【V8.3.13.4】多时间框架分析 ==========
-    print(f"\n  📊 【V8.3.13.4】多时间框架分析")
+    print("\n  📊 【V8.3.13.4】多时间框架分析")
     timeframe_analysis = analyze_multi_timeframe_exits(
         exit_details=detailed_result['exit_details'],
         timeframes=['1H', '4H']
@@ -26411,7 +26385,7 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
     
     # ========== 阶段3: AI策略分析（条件调用+动态激进度）==========
     # 【V8.3.16】技术债3修复：条件AI调用+动态激进度
-    print(f"\n  🤖 阶段3: AI策略分析（V8.3.16条件调用）")
+    print("\n  🤖 阶段3: AI策略分析（V8.3.16条件调用）")
     
     te_rate = exit_analysis['time_exit']['rate'] / 100 if exit_analysis else 0
     ai_suggestions = None
@@ -26432,25 +26406,25 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
         if AI_AGGRESSIVENESS_DYNAMIC:
             if te_rate > 0.9:
                 aggressiveness = 1.0
-                print(f"     📊 Time Exit率>90% → AI激进度=100%（全部采纳）")
+                print("     📊 Time Exit率>90% → AI激进度=100%（全部采纳）")
             elif te_rate > 0.8:
                 aggressiveness = 0.9
-                print(f"     📊 Time Exit率>80% → AI激进度=90%")
+                print("     📊 Time Exit率>80% → AI激进度=90%")
             elif te_rate > 0.6:
                 aggressiveness = 0.7
-                print(f"     📊 Time Exit率>60% → AI激进度=70%")
+                print("     📊 Time Exit率>60% → AI激进度=70%")
             else:
                 aggressiveness = 0.5
-                print(f"     📊 Time Exit率<60% → AI激进度=50%（保守）")
+                print("     📊 Time Exit率<60% → AI激进度=50%（保守）")
         else:
             aggressiveness = 0.8
-            print(f"     📊 使用固定AI激进度=80%")
+            print("     📊 使用固定AI激进度=80%")
         
         # 应用AI建议
         final_params = apply_ai_suggestions(best_params, ai_suggestions, apply_aggressiveness=aggressiveness)
         
         # 验证AI调整后的效果
-        print(f"\n  ✅ 验证AI调整后的效果...")
+        print("\n  ✅ 验证AI调整后的效果...")
         final_result = simulate_params_on_opportunities(opportunities, final_params)
         final_score = calculate_swing_optimization_score(final_result)
         
@@ -26459,12 +26433,12 @@ def optimize_swing_params(swing_data, current_params, initial_params=None, ai_su
         
         # 如果AI调整后反而变差，使用Grid Search结果
         if final_score < best_score * 0.95:  # 允许5%的容错
-            print(f"     ⚠️  AI调整效果不佳，保持Grid Search结果")
+            print("     ⚠️  AI调整效果不佳，保持Grid Search结果")
             final_params = best_params
             final_result = best_result
     else:
         if should_call_ai:
-            print(f"     ⚠️  AI分析失败，使用Grid Search结果")
+            print("     ⚠️  AI分析失败，使用Grid Search结果")
         final_result = best_result
     
     return {
@@ -26499,14 +26473,13 @@ def analyze_per_symbol_opportunities(market_snapshots, old_config, symbols=None)
     }
     """
     try:
-        import pandas as pd
         
         if symbols is None:
             symbols = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'LTC']
         
         per_symbol_data = {}
         
-        print(f"  🔍 【V8.3.13.3】Per-Symbol分析")
+        print("  🔍 【V8.3.13.3】Per-Symbol分析")
         
         for symbol in symbols:
             symbol_data = market_snapshots[market_snapshots['coin'] == symbol]
@@ -26684,7 +26657,7 @@ def generate_timeframe_recommendations(timeframe_analysis, signal_type):
                 else:
                     recommendations['recommended_timeframe'] = '4H'
                     recommendations['recommended_holding_hours'] = tf_4h['tp_avg_time']
-                    recommendations['reason'] = f"4H时间框架Time Exit率更低"
+                    recommendations['reason'] = "4H时间框架Time Exit率更低"
         
         # 波段：选择4H
         else:
@@ -26694,7 +26667,7 @@ def generate_timeframe_recommendations(timeframe_analysis, signal_type):
                 recommendations['recommended_holding_hours'] = tf_4h.get('avg_holding_time', 24)
                 recommendations['reason'] = "波段交易适合4H时间框架"
         
-        recommendations['expected_improvement'] = f"预计Time Exit率降低5-10%"
+        recommendations['expected_improvement'] = "预计Time Exit率降低5-10%"
         
         return recommendations
         
@@ -26840,7 +26813,7 @@ def analyze_missed_opportunities(trends, actual_trades, config):
             # 添加趋势不一致判断（假设从market_snapshots可获取）
             reason_parts.append("可能三层趋势不一致")
             
-            reason = f"可能原因：" + "、".join(reason_parts)
+            reason = "可能原因：" + "、".join(reason_parts)
             suggestion = f"建议：降低盈亏比至{risk_reward:.1f}或增加模式2（短线逆势）交易"
             
             missed.append({
@@ -27046,11 +27019,11 @@ def analyze_exit_timing(yesterday_trades, kline_snapshots):
     
     # 【V8.5.2.4.47 DEBUG】检查订单数据中的字段
     if not yesterday_trades.empty:
-        print(f"\n  🔍 【共振数据诊断】昨日订单字段:")
+        print("\n  🔍 【共振数据诊断】昨日订单字段:")
         print(f"     字段列表: {list(yesterday_trades.columns)[:15]}")
         if len(yesterday_trades) > 0:
             first_order = yesterday_trades.iloc[0]
-            print(f"     第一笔订单:")
+            print("     第一笔订单:")
             print(f"       '共振指标数': {first_order.get('共振指标数', 'N/A')}")
             print(f"       'indicator_consensus': {first_order.get('indicator_consensus', 'N/A')}")
             print(f"       '信号分数': {first_order.get('信号分数', 'N/A')}")
@@ -27321,7 +27294,7 @@ def merge_historical_insights(config):
     2. 保留最近3天的完整洞察
     3. 将7天前的洞察合并为"历史模式总结"
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime
     
     insights = config.get('compressed_insights', {})
     if not insights:
@@ -27410,7 +27383,7 @@ def build_decision_context(current_positions=None):
         # 🆕 V8.3.21.2: 传递V8.3.21优化洞察给AI（约80-100 tokens）
         v8321 = insights.get('v8321_insights', {})
         if v8321:
-            context += f"\n## 🔬 Optimized Context Patterns (V8.3.21)\n"
+            context += "\n## 🔬 Optimized Context Patterns (V8.3.21)\n"
             context += f"*Data-driven insights from {len(v8321)} backtested strategies*\n\n"
             
             # 超短线洞察
@@ -27433,15 +27406,15 @@ def build_decision_context(current_positions=None):
                 for ctx in w.get('best_contexts', [])[:2]:  # 只显示前2条
                     context += f"  • {ctx}\n"
             
-            context += f"\n*Use these patterns to evaluate current market context quality.*\n"
+            context += "\n*Use these patterns to evaluate current market context quality.*\n"
         
         # 🆕 V8.3.23: AI自主学习洞察（开仓+平仓经验）
         ai_entry = insights.get('ai_entry_analysis', {})
         ai_exit = insights.get('ai_exit_analysis', {})
         
         if ai_entry or ai_exit:
-            context += f"\n## 🧠 AI Self-Learning Insights (English)\n"
-            context += f"*Deep analysis from recent backtests - Apply these lessons to improve decisions*\n\n"
+            context += "\n## 🧠 AI Self-Learning Insights (English)\n"
+            context += "*Deep analysis from recent backtests - Apply these lessons to improve decisions*\n\n"
             
             # 开仓经验
             if ai_entry and ai_entry.get('learning_insights'):
@@ -27451,7 +27424,7 @@ def build_decision_context(current_positions=None):
                 
                 # 添加关键建议
                 if ai_entry.get('key_recommendations'):
-                    context += f"\n**Priority Actions for Entry**:\n"
+                    context += "\n**Priority Actions for Entry**:\n"
                     for rec in ai_entry['key_recommendations'][:2]:  # TOP2高优先级
                         if rec.get('priority') == 'High':
                             context += f"  → {rec['action']}: {rec['threshold']}\n"
@@ -27464,12 +27437,12 @@ def build_decision_context(current_positions=None):
                 
                 # 添加关键建议
                 if ai_exit.get('key_recommendations'):
-                    context += f"\n**Priority Actions for Exit**:\n"
+                    context += "\n**Priority Actions for Exit**:\n"
                     for rec in ai_exit['key_recommendations'][:2]:  # TOP2高优先级
                         if rec.get('priority') == 'High':
                             context += f"  → {rec['action']}: {rec['threshold']}\n"
             
-            context += f"\n*These insights were generated by AI analyzing your trade history. Follow them strictly.*\n"
+            context += "\n*These insights were generated by AI analyzing your trade history. Follow them strictly.*\n"
     
     except Exception as e:
         print(f"⚠️ Failed to read compressed insights: {e}")
@@ -27482,7 +27455,7 @@ def build_decision_context(current_positions=None):
                 position_contexts = json.load(f)
             
             if position_contexts:
-                context += f"\n## 🔒 Position Commitments\n"
+                context += "\n## 🔒 Position Commitments\n"
                 for coin, ctx in position_contexts.items():
                     # Only show symbols still in position
                     if coin in current_positions:

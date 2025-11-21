@@ -17,8 +17,7 @@ import os
 import gc
 import random
 import numpy as np
-from typing import Dict, List, Tuple, Any
-from datetime import datetime
+from typing import Dict, List, Optional
 
 # 尝试导入psutil（可选）
 try:
@@ -36,7 +35,7 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
                                       current_params: Dict, 
                                       signal_type: str = 'scalping',
                                       max_combinations: int = 200,
-                                      ai_suggested_params: Dict = None) -> Dict:
+                                      ai_suggested_params: Optional[Dict] = None) -> Dict:
     """
     【V8.3.21】轻量级参数优化
     
@@ -63,8 +62,8 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
     # 设置进程优先级（nice值=10，避免影响实时AI）
     try:
         os.nice(10)
-        print(f"   ℹ️  已设置进程优先级（nice=10），避免影响实时AI")
-    except:
+        print("   ℹ️  已设置进程优先级（nice=10），避免影响实时AI")
+    except (OSError, AttributeError):
         pass
     
     print(f"\n{'='*60}")
@@ -74,7 +73,7 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
     if HAS_PSUTIL:
         print(f"  内存限制: 检测到{psutil.virtual_memory().total / (1024**3):.1f}G，将主动控制")
     else:
-        print(f"  资源监控: 不可用（psutil未安装）")
+        print("  资源监控: 不可用（psutil未安装）")
     print(f"{'='*60}\n")
     
     # ===== 阶段1：定义搜索空间 =====
@@ -84,18 +83,18 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
     param_grid = define_param_grid_v8321(signal_type, baseline_params=current_params)
     total_combinations = calculate_total_combinations(param_grid)
     
-    print(f"   ✅ 搜索空间定义完成")
+    print("   ✅ 搜索空间定义完成")
     print(f"      理论组合数: {total_combinations}组")
     print(f"      实际测试数: {max_combinations}组（随机采样）")
     
     # ===== 阶段2：随机采样Grid Search =====
-    print(f"\n🔍 阶段2: 随机采样Grid Search...")
+    print("\n🔍 阶段2: 随机采样Grid Search...")
     
     sampled_params = random_sample_param_grid(param_grid, max_combinations)
     
     # 【V8.3.25.10】将AI建议的参数加入测试候选集
     if ai_suggested_params:
-        print(f"   🤖 发现AI建议参数，加入测试候选集...")
+        print("   🤖 发现AI建议参数，加入测试候选集...")
         ai_config = {}
         # 🔧 V8.3.25.12: 只保留搜索空间中存在的参数
         valid_param_names = set(param_grid.keys())
@@ -110,7 +109,7 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
             sampled_params.insert(0, ai_config)
             print(f"      ✅ AI建议参数已加入（优先测试）: {ai_config}")
         else:
-            print(f"      ℹ️  AI建议的参数都不在搜索空间中，跳过")
+            print("      ℹ️  AI建议的参数都不在搜索空间中，跳过")
     
     all_results = []
     
@@ -139,7 +138,7 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
     # 排序并取Top 10
     top_10 = sorted(all_results, key=lambda x: x['score'], reverse=True)[:10]
     
-    print(f"   ✅ Grid Search完成")
+    print("   ✅ Grid Search完成")
     print(f"      最高分: {top_10[0]['score']:.3f}")
     print(f"      测试组数: {len(all_results)}")
     
@@ -147,7 +146,7 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
     gc.collect()
     
     # ===== 阶段3：本地统计分析 =====
-    print(f"\n📈 阶段3: 本地统计分析（免费）...")
+    print("\n📈 阶段3: 本地统计分析（免费）...")
     
     # 本地计算：参数敏感度
     param_sensitivity = calculate_param_sensitivity_local(all_results)
@@ -158,12 +157,12 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
     # 本地检测：异常情况
     anomalies = detect_anomalies_local(all_results, param_sensitivity)
     
-    print(f"   ✅ 统计分析完成")
+    print("   ✅ 统计分析完成")
     print(f"      关键参数: {list(param_sensitivity.keys())[:3]}")
     print(f"      异常检测: {len(anomalies)}个")
     
     # ===== 阶段4：数据压缩 =====
-    print(f"\n🗜️  阶段4: 数据压缩（节省AI成本）...")
+    print("\n🗜️  阶段4: 数据压缩（节省AI成本）...")
     
     compressed_data = compress_optimization_results(
         top_10=top_10,
@@ -176,7 +175,7 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
     original_tokens = len(all_results) * 100  # 假设原始每组100 tokens
     cost_saved = (original_tokens - estimated_tokens) * 0.00002  # GPT-4价格
     
-    print(f"   ✅ 数据压缩完成")
+    print("   ✅ 数据压缩完成")
     print(f"      原始: ~{original_tokens} tokens")
     print(f"      压缩后: ~{estimated_tokens} tokens")
     print(f"      💰 预计节省: ${cost_saved:.4f}")
@@ -186,7 +185,7 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
     ai_adjusted_params = None
     
     if max_combinations >= 100:  # 只有大规模搜索才值得AI介入
-        print(f"\n🤖 阶段5: AI迭代决策...")
+        print("\n🤖 阶段5: AI迭代决策...")
         try:
             ai_decision = call_ai_for_iterative_optimization(
                 top_10_configs=top_10,
@@ -198,7 +197,7 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
             )
             
             if ai_decision and ai_decision.get('needs_adjustment'):
-                print(f"   🔧 AI建议调整参数...")
+                print("   🔧 AI建议调整参数...")
                 ai_adjusted_params = apply_ai_adjustments(
                     base_params=top_10[0]['params'],
                     adjustments=ai_decision['param_adjustments']
@@ -208,32 +207,31 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
                 ai_result = simulate_params_with_v8321_filter(opportunities, ai_adjusted_params)
                 ai_score = calculate_v8321_optimization_score(ai_result)
                 
-                print(f"   📊 AI调整效果:")
+                print("   📊 AI调整效果:")
                 print(f"      Grid最优: {top_10[0]['score']:.3f}")
                 print(f"      AI调整后: {ai_score:.3f} ({ai_score-top_10[0]['score']:+.3f})")
                 
                 # 如果AI调整后更好，使用AI参数
                 if ai_score > top_10[0]['score']:
-                    print(f"   ✅ AI调整有效，采纳AI建议")
+                    print("   ✅ AI调整有效，采纳AI建议")
                     final_params = ai_adjusted_params
-                    final_score = ai_score
                     cost_saved += 0.01  # AI调用成本约$0.01
                 else:
-                    print(f"   ⚠️  AI调整效果不佳，保持Grid结果")
+                    print("   ⚠️  AI调整效果不佳，保持Grid结果")
                     final_params = top_10[0]['params']
-                    final_score = top_10[0]['score']
+                    top_10[0]['score']
             else:
-                print(f"   ✅ AI认为当前参数已是最优")
+                print("   ✅ AI认为当前参数已是最优")
                 final_params = top_10[0]['params']
-                final_score = top_10[0]['score']
+                top_10[0]['score']
                 
         except Exception as e:
             print(f"   ⚠️  AI决策失败: {e}")
             final_params = top_10[0]['params']
-            final_score = top_10[0]['score']
+            top_10[0]['score']
     else:
         final_params = top_10[0]['params']
-        final_score = top_10[0]['score']
+        top_10[0]['score']
     
     return {
         'optimized_params': final_params,
@@ -251,7 +249,7 @@ def optimize_params_v8321_lightweight(opportunities: List[Dict],
     }
 
 
-def define_param_grid_v8321(signal_type: str, baseline_params: Dict = None) -> Dict:
+def define_param_grid_v8321(signal_type: str, baseline_params: Optional[Dict] = None) -> Dict:
     """
     【V8.4.4】定义V8.3.21参数搜索空间（动态范围约束）
     
@@ -481,9 +479,9 @@ def random_sample_param_grid(grid: Dict, sample_size: int) -> List[Dict]:
             }
             samples.append(config)
     
-    print(f"   📊 智能采样统计:")
+    print("   📊 智能采样统计:")
     print(f"      边界采样: {len(boundary_samples_unique)}组")
-    print(f"      中心点: 1组")
+    print("      中心点: 1组")
     print(f"      随机填充: {len(samples) - len(boundary_samples_unique) - 1}组")
     print(f"      总计: {len(samples)}组")
     
@@ -532,7 +530,7 @@ def simulate_params_with_v8321_filter(opportunities: List[Dict], params: Dict) -
     【V8.3.21.1修复】：Layer 2-4默认不启用，避免过度过滤历史数据
     """
     captured = []
-    missed_reasons = {}
+    missed_reasons: Dict[str, int] = {}
     
     # 【V8.3.21.1修复】高级过滤器默认不启用
     enable_advanced_filters = params.get('enable_advanced_filters', False)
@@ -827,7 +825,7 @@ def analyze_context_features_local(opportunities: List[Dict], best_params: Dict)
 def analyze_kline_context_impact(captured: List[Dict]) -> Dict:
     """分析K线上下文与成功率的关系"""
     # 按阳线比例分组
-    groups = {
+    groups: Dict[str, List[Dict]] = {
         '0.6-0.7': [],
         '0.7-0.8': [],
         '0.8-1.0': []
@@ -864,7 +862,7 @@ def analyze_kline_context_impact(captured: List[Dict]) -> Dict:
 def analyze_market_structure_impact(captured: List[Dict]) -> Dict:
     """分析市场结构与成功率的关系"""
     # 按swing类型分组
-    groups = {}
+    groups: Dict[str, List[Dict]] = {}
     for opp in captured:
         swing_type = opp.get('mkt_struct_swing', 'unknown')
         if swing_type not in groups:
@@ -892,7 +890,7 @@ def analyze_market_structure_impact(captured: List[Dict]) -> Dict:
 def analyze_sr_history_impact(captured: List[Dict]) -> Dict:
     """分析S/R历史与成功率的关系"""
     # 按测试次数分组
-    groups = {
+    groups: Dict[str, List[Dict]] = {
         '1-2次': [],
         '3-5次': [],
         '5次+': []
@@ -956,7 +954,7 @@ def detect_anomalies_local(all_results: List[Dict], param_sensitivity: Dict) -> 
     # 异常1：某个参数导致捕获率骤降
     for param_name in param_sensitivity.keys():
         # 找到该参数的极端值
-        param_results = {}
+        param_results: Dict[float, List[float]] = {}
         for r in all_results:
             pval = r['params'][param_name]
             if pval not in param_results:
@@ -1028,7 +1026,7 @@ def calculate_v8321_optimization_score(result: Dict) -> float:
         return 0.0
     
     # 提取核心指标
-    avg_profit = result.get('avg_profit', 0)
+    result.get('avg_profit', 0)
     win_rate = result.get('win_rate', 0)
     avg_win = result.get('avg_win', 0)
     avg_loss = result.get('avg_loss', 0)
@@ -1376,7 +1374,7 @@ Respond with ONLY the JSON, no additional text."""
     return prompt
 
 
-def call_deepseek_for_optimization(prompt: str) -> str:
+def call_deepseek_for_optimization(prompt: str) -> Optional[str]:
     """
     Call DeepSeek API for optimization decision
     
@@ -1411,7 +1409,7 @@ def call_deepseek_for_optimization(prompt: str) -> str:
         return None
 
 
-def parse_ai_optimization_response(ai_response: str) -> Dict:
+def parse_ai_optimization_response(ai_response: Optional[str]) -> Optional[Dict]:
     """
     Parse AI response (JSON format)
     

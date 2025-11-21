@@ -8032,7 +8032,10 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     phase3_result = None
     phase4_result = None
     
-    if phase2_baseline and all_opportunities_sorted:
+    # 【V8.5.2.4.89.38】合并scalping和swing opportunities供Phase 3使用
+    all_opportunities_for_phase3 = scalping_opportunities + swing_opportunities
+    
+    if phase2_baseline and all_opportunities_for_phase3:
         try:
             from phase3_enhanced_optimizer import phase3_enhanced_optimization
             
@@ -8044,7 +8047,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             model_name = os.getenv("MODEL_NAME", "deepseek")
             # 【V8.5.2.4.46】kline_snapshots参数可选，传None即可（所有数据已在opportunities中）
             phase3_result = phase3_enhanced_optimization(
-                all_opportunities=all_opportunities_sorted,
+                all_opportunities=all_opportunities_for_phase3,
                 phase1_baseline=phase1_baseline,
                 phase2_baseline=phase2_baseline,
                 kline_snapshots=None,
@@ -8062,9 +8065,10 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         try:
             from phase4_validator import phase4_validation_and_overfitting_detection
             
+            # 【V8.5.2.4.89.38】使用合并后的opportunities
             phase4_result = phase4_validation_and_overfitting_detection(
                 phase3_result=phase3_result,
-                all_opportunities=all_opportunities_sorted,
+                all_opportunities=all_opportunities_for_phase3,
                 phase1_baseline=phase1_baseline
             )
             
@@ -8228,7 +8232,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         'phase2_baseline': phase2_baseline,  # 🆕 V8.5.2.4.10
         'phase3_result': phase3_result,  # 🆕 V8.5.2.4.41
         'phase4_result': phase4_result,  # 🆕 V8.5.2.4.42
-        'all_opportunities_sorted': all_opportunities_sorted if 'all_opportunities_sorted' in locals() else []  # 🆕 V8.5.2.4.47: 供邮件使用
+        'all_opportunities_sorted': all_opportunities_for_phase3 if 'all_opportunities_for_phase3' in locals() else []  # 🆕 V8.5.2.4.47: 供邮件使用
     }
 
 

@@ -73,7 +73,6 @@ def fix_trades(model_name):
         open_time = trade.get('开仓时间', '').strip()
         close_time = trade.get('平仓时间', '').strip()
         open_price = trade.get('开仓价格', '').strip()
-        close_price = trade.get('平仓价格', '').strip()
         quantity = trade.get('数量', '').strip()
         
         # 对于已平仓的记录，使用更完整的唯一键（包括平仓时间和数量）
@@ -109,14 +108,14 @@ def fix_trades(model_name):
             unique_trades.append(trade)
     
     print(f"✓ 删除了 {removed_dup} 条真正重复的记录")
-    print(f"✓ 保留了分批止盈的多条记录")
+    print("✓ 保留了分批止盈的多条记录")
     
     # 步骤3: 统计
     final_count = len(unique_trades)
     open_count = sum(1 for t in unique_trades if not t.get('平仓时间', '').strip())
     closed_count = final_count - open_count
     
-    print(f"\n📊 修复后统计:")
+    print("\n📊 修复后统计:")
     print(f"  原始记录: {original_count}")
     print(f"  删除空值: {removed_empty}")
     print(f"  删除重复: {removed_dup}")

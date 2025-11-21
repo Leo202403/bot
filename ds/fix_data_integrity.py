@@ -14,14 +14,14 @@
 
 import json
 import csv
-import os
 import sys
 from pathlib import Path
 from datetime import datetime
 import shutil
+from typing import Dict, Optional, Any
 
 
-def show_help():
+def show_help() -> None:
     """显示帮助信息"""
     print("""
 数据完整性修正工具
@@ -57,7 +57,7 @@ def show_help():
     """)
 
 
-def backup_files(model_name):
+def backup_files(model_name: str) -> Path:
     """备份原始文件"""
     data_dir = Path(__file__).parent / "trading_data" / model_name
     backup_dir = Path(__file__).parent / "data_backup" / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -82,7 +82,7 @@ def backup_files(model_name):
     return backup_dir
 
 
-def recalculate_total_assets(model_name):
+def recalculate_total_assets(model_name: str) -> Optional[Dict[str, Any]]:
     """重新计算总资产"""
     data_dir = Path(__file__).parent / "trading_data" / model_name
     status_file = data_dir / "system_status.json"
@@ -148,7 +148,7 @@ def recalculate_total_assets(model_name):
     print(f"   初始资金: {initial_capital:.2f} U")
     print(f"   已实现盈亏: {realized_pnl:.2f} U ({closed_trades_count} 笔)")
     print(f"   未实现盈亏: {unrealized_pnl:.2f} U ({position_count} 持仓)")
-    print(f"   ---")
+    print("   ---")
     print(f"   旧记录总资产: {old_total_assets:.2f} U")
     print(f"   正确总资产: {correct_total_assets:.2f} U")
     print(f"   差异: {correct_total_assets - old_total_assets:.2f} U")
@@ -166,7 +166,7 @@ def recalculate_total_assets(model_name):
     }
 
 
-def fix_total_assets(model_name, correct_value):
+def fix_total_assets(model_name: str, correct_value: float) -> None:
     """修正system_status.json中的总资产"""
     data_dir = Path(__file__).parent / "trading_data" / model_name
     status_file = data_dir / "system_status.json"
@@ -185,11 +185,10 @@ def fix_total_assets(model_name, correct_value):
     print(f"✅ {model_name}: 总资产已更新为 {correct_value:.2f} U")
 
 
-def check_missing_trades(model_name):
+def check_missing_trades(model_name: str) -> None:
     """检查订单记录完整性"""
     data_dir = Path(__file__).parent / "trading_data" / model_name
     trades_file = data_dir / "trades_history.csv"
-    positions_file = data_dir / "current_positions.csv"
     status_file = data_dir / "system_status.json"
     
     print(f"\n🔍 {model_name} 订单完整性检查:")
@@ -265,7 +264,7 @@ def check_missing_trades(model_name):
             print(f"   ✓ 订单编号连续 ({order_ids[0]}-{order_ids[-1]})")
 
 
-def restore_missing_trades_from_positions(model_name):
+def restore_missing_trades_from_positions(model_name: str) -> None:
     """从current_positions.csv恢复缺失的订单记录"""
     data_dir = Path(__file__).parent / "trading_data" / model_name
     trades_file = data_dir / "trades_history.csv"
@@ -357,7 +356,7 @@ def restore_missing_trades_from_positions(model_name):
     print(f"✅ {model_name}: 已恢复 {len(recovered_trades)} 条订单记录")
 
 
-def main():
+def main() -> None:
     """主函数"""
     # 检查命令行参数
     if '--help' in sys.argv or '-h' in sys.argv:
