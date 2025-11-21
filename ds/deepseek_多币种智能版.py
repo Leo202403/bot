@@ -7320,8 +7320,8 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         
         test_results = []
         strategy_label = '⚡超短线' if strategy_type == 'scalping' else '🌊波段'
-    
-    for i, test_params in enumerate(test_points):
+        
+        for i, test_params in enumerate(test_points):
             config_variant = {
                 'min_risk_reward': test_params['min_risk_reward'],
                 'min_indicator_consensus': test_params['min_indicator_consensus'],
