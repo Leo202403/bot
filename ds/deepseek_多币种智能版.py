@@ -23412,21 +23412,21 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         _, row_data = future_row
                         
                         # 计算当前利润
-                    if direction == 'long':
-                        profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
-                    else:
-                        profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
-                    
-                    # 启动跟踪
-                    if not tracking_started and profit_pct >= MIN_PROFIT_THRESHOLD:
-                        tracking_started = True
-                        max_profit_seen = profit_pct
-                        bars_to_max_profit = bar_idx
-                    
-                    # 更新最大利润
-                    if tracking_started and profit_pct > max_profit_seen:
-                        max_profit_seen = profit_pct
-                        bars_to_max_profit = bar_idx
+                        if direction == 'long':
+                            profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
+                        else:
+                            profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
+                        
+                        # 启动跟踪
+                        if not tracking_started and profit_pct >= MIN_PROFIT_THRESHOLD:
+                            tracking_started = True
+                            max_profit_seen = profit_pct
+                            bars_to_max_profit = bar_idx
+                        
+                        # 更新最大利润
+                        if tracking_started and profit_pct > max_profit_seen:
+                            max_profit_seen = profit_pct
+                            bars_to_max_profit = bar_idx
                     
                     if not tracking_started:
                         continue
