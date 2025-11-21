@@ -447,13 +447,26 @@ def generate_signal_weights_comparison_table(
     if swing_weights is None:
         swing_weights = {}
     
+    # 【V8.5.2.4.89.58】兼容两种权重结构：
+    # 1. {'weights': {...}, 'name': '...'} (旧格式)
+    # 2. {'momentum': 20, ..., 'name': '...'} (新格式，直接包含权重)
+    def extract_weights(weight_dict):
+        """提取权重，兼容新旧两种格式"""
+        if not weight_dict:
+            return {}
+        # 如果有'weights'键，使用它（旧格式）
+        if 'weights' in weight_dict:
+            return weight_dict['weights']
+        # 否则，直接使用字典本身（新格式），但排除'name'键
+        return {k: v for k, v in weight_dict.items() if k != 'name'}
+    
     # 提取权重字典
-    scalp_w = scalping_weights.get('weights', {})
-    swing_w = swing_weights.get('weights', {})
+    scalp_w = extract_weights(scalping_weights)
+    swing_w = extract_weights(swing_weights)
     
     # 旧权重（用于显示变化）
-    old_scalp_w = old_scalping_weights.get('weights', {}) if old_scalping_weights else {}
-    old_swing_w = old_swing_weights.get('weights', {}) if old_swing_weights else {}
+    old_scalp_w = extract_weights(old_scalping_weights)
+    old_swing_w = extract_weights(old_swing_weights)
     
     # 定义权重项（超短线）
     scalping_items = [
