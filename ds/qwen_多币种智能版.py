@@ -7774,7 +7774,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             print(f"     #{idx} {res['name']}")
             print(f"        捕获率: {res['capture_rate']*100:.1f}% ({res['captured_count']}个)")
             print(f"        平均利润: {res['avg_profit']:.2f}%")
-            print(f"        综合得分: {res['total_profit']:.0f}")
+            print(f"        综合得分: {res['composite_score']:.0f}")
             print(f"        参数: R:R={res['params']['min_risk_reward']:.1f}, 共振={res['params']['min_indicator_consensus']}, 分数≥{res['params'].get('min_signal_score', 50)}")
     else:
         print(f"     ⚠️ 无有效测试结果")
