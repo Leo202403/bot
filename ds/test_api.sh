@@ -6,6 +6,9 @@ echo "🧪 测试后端API"
 echo "=========================================="
 echo ""
 
+# 后端项目路径
+BACKEND_DIR="/root/pythonc程序/my_project"
+
 # 1. 检查后端进程
 echo "【步骤1】检查后端进程..."
 echo ""
@@ -17,7 +20,7 @@ else
     echo "❌ 后端进程未运行！"
     echo ""
     echo "启动命令:"
-    echo "  cd /root/10-23-bot"
+    echo "  cd $BACKEND_DIR"
     echo "  nohup python3 每日壁纸更换.py > nohup.out 2>&1 &"
     exit 1
 fi
@@ -106,20 +109,23 @@ echo ""
 echo "【步骤3】检查后端日志..."
 echo ""
 
-if [ -f "/root/10-23-bot/nohup.out" ]; then
+LOG_FILE="$BACKEND_DIR/nohup.out"
+
+if [ -f "$LOG_FILE" ]; then
+    echo "日志文件: $LOG_FILE"
     echo "最后20行日志:"
     echo "----------------------------------------"
-    tail -20 /root/10-23-bot/nohup.out
+    tail -20 "$LOG_FILE"
     echo "----------------------------------------"
     
     # 检查错误
-    if tail -50 /root/10-23-bot/nohup.out | grep -i "error\|exception\|traceback" > /dev/null; then
+    if tail -50 "$LOG_FILE" | grep -i "error\|exception\|traceback" > /dev/null; then
         echo ""
         echo "⚠️  发现错误信息:"
-        tail -50 /root/10-23-bot/nohup.out | grep -i -A 3 "error\|exception"
+        tail -50 "$LOG_FILE" | grep -i -A 3 "error\|exception"
     fi
 else
-    echo "❌ 未找到日志文件: /root/10-23-bot/nohup.out"
+    echo "❌ 未找到日志文件: $LOG_FILE"
 fi
 
 echo ""
@@ -185,7 +191,7 @@ else:
     if results['qwen'] != 'OK':
         print("  1. 检查 trading_data/qwen/ 目录权限")
         print("  2. 检查 system_status.json 是否存在且格式正确")
-    print("  3. 查看完整日志: tail -100 /root/10-23-bot/nohup.out")
+    print(f"  3. 查看完整日志: tail -100 {os.getenv('BACKEND_DIR', '/root/pythonc程序/my_project')}/nohup.out")
     print("  4. 重启后端服务")
 EOF
 
