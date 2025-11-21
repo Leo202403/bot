@@ -81,17 +81,28 @@ def sample_opportunities_for_phase3(opportunities: List[Dict], max_size: int = 8
 
 def _sample_by_quality(opportunities: List[Dict], quota: int) -> List[Dict]:
     """
-    【V8.5.2.4.89.4】按质量分层采样（内部辅助函数）
+    【V8.5.2.4.89.63】按质量分层采样（动态阈值，避免超短线/波段采样失衡）
     """
     import random
     
     if len(opportunities) <= quota:
         return opportunities
     
+    # 【修复】动态计算质量阈值（基于当前数据分布，而非固定90/80）
+    scores = [o.get('signal_score', 0) for o in opportunities]
+    scores_sorted = sorted(scores, reverse=True)
+    
+    # 使用分位数动态设置阈值
+    p75_idx = int(len(scores_sorted) * 0.25)  # Top 25%
+    p50_idx = int(len(scores_sorted) * 0.50)  # Top 50%
+    
+    high_threshold = scores_sorted[p75_idx] if p75_idx < len(scores_sorted) else 80
+    medium_threshold = scores_sorted[p50_idx] if p50_idx < len(scores_sorted) else 60
+    
     # 按质量分层
-    high_quality = [o for o in opportunities if o.get('signal_score', 0) >= 90]
-    medium_quality = [o for o in opportunities if 80 <= o.get('signal_score', 0) < 90]
-    low_quality = [o for o in opportunities if o.get('signal_score', 0) < 80]
+    high_quality = [o for o in opportunities if o.get('signal_score', 0) >= high_threshold]
+    medium_quality = [o for o in opportunities if medium_threshold <= o.get('signal_score', 0) < high_threshold]
+    low_quality = [o for o in opportunities if o.get('signal_score', 0) < medium_threshold]
     
     # 保留所有高质量
     sampled = high_quality.copy()
@@ -99,8 +110,8 @@ def _sample_by_quality(opportunities: List[Dict], quota: int) -> List[Dict]:
     
     if remaining_quota > 0:
         # 从中低质量中按比例采样
-        medium_sample_size = int(remaining_quota * 0.7)
-        low_sample_size = remaining_quota - medium_sample_size
+        medium_sample_size = int(remaining_quota * 0.6)  # 60%中质量
+        low_sample_size = remaining_quota - medium_sample_size  # 40%低质量
         
         if len(medium_quality) > medium_sample_size:
             sampled.extend(random.sample(medium_quality, medium_sample_size))

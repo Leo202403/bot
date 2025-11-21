@@ -10324,6 +10324,17 @@ def analyze_and_adjust_params():
                 # 【V8.5.2.4.89.7】计算真实的捕获率
                 old_capture_rate = len(old_captured) / len(all_opportunities_sorted) * 100 if all_opportunities_sorted else 0
                 
+                # 【V8.5.2.4.89.63】计算分类捕获率
+                scalping_old_captured = [o for o in old_captured if o.get('signal_type') == 'scalping']
+                scalping_new_captured = [o for o in new_captured if o.get('signal_type') == 'scalping']
+                swing_old_captured = [o for o in old_captured if o.get('signal_type') == 'swing']
+                swing_new_captured = [o for o in new_captured if o.get('signal_type') == 'swing']
+                
+                scalping_old_rate = len(scalping_old_captured) / len(scalping_opps) * 100 if scalping_opps else 0
+                scalping_new_rate = len(scalping_new_captured) / len(scalping_opps) * 100 if scalping_opps else 0
+                swing_old_rate = len(swing_old_captured) / len(swing_opps) * 100 if swing_opps else 0
+                swing_new_rate = len(swing_new_captured) / len(swing_opps) * 100 if swing_opps else 0
+                
                 # 构建stats
                 stats = {
                     'total_opportunities': len(all_opportunities_sorted),
@@ -10334,7 +10345,12 @@ def analyze_and_adjust_params():
                     'avg_old_captured_profit': avg_old_profit,
                     'avg_new_captured_profit': avg_new_profit,
                     'validation_status': phase4_result_extracted.get('overall_status', 'UNKNOWN') if phase4_result_extracted else 'NO_PHASE4',
-                    'stability_score': phase4_result_extracted.get('stability', {}).get('stability_score', 0) if phase4_result_extracted else 0
+                    'stability_score': phase4_result_extracted.get('stability', {}).get('stability_score', 0) if phase4_result_extracted else 0,
+                    # 【V8.5.2.4.89.63】新增分类捕获率
+                    'scalping_old_rate': scalping_old_rate,
+                    'scalping_new_rate': scalping_new_rate,
+                    'swing_old_rate': swing_old_rate,
+                    'swing_new_rate': swing_new_rate
                 }
                 
                 opportunity_analysis = {
