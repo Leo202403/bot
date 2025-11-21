@@ -13,9 +13,19 @@ BACKEND_DIR="/root/pythonc程序/my_project"
 echo "【步骤1】检查后端进程..."
 echo ""
 
-if ps aux | grep "每日壁纸更换.py" | grep -v grep > /dev/null; then
+# 检测方法1: 通过端口检查（最可靠）
+if netstat -tlnp 2>/dev/null | grep ":5000" | grep -q "LISTEN" || \
+   ss -tlnp 2>/dev/null | grep ":5000" | grep -q "LISTEN"; then
+    echo "✓ 后端服务运行中（监听端口5000）"
+    
+    # 尝试显示进程信息
+    if ps aux | grep -E "python.*my_project" | grep -v grep > /dev/null; then
+        echo "  进程信息:"
+        ps aux | grep -E "python.*my_project" | grep -v grep | head -3
+    fi
+elif pgrep -f "$BACKEND_DIR" > /dev/null; then
     echo "✓ 后端进程运行中"
-    ps aux | grep "每日壁纸更换.py" | grep -v grep
+    echo "  PID(s): $(pgrep -f "$BACKEND_DIR" | tr '\n' ' ')"
 else
     echo "❌ 后端进程未运行！"
     echo ""
