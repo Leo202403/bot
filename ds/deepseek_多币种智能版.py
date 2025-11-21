@@ -9754,8 +9754,9 @@ def analyze_and_adjust_params():
             quick_search_opportunities = None
             quick_search_baseline = None
             
+            # 【V8.5.2.4.89.57】禁用缓存，每次重新计算（避免深拷贝问题，多2分钟但更稳定）
             # 检查是否有今日缓存
-            if '_phase1_cache' in config and config['_phase1_cache'].get('date') == datetime.now().strftime('%Y-%m-%d'):
+            if False:  # 禁用缓存
                 print("  💾 【使用Phase 1缓存】避免重复计算（节省约2分钟）")
                 # 【V8.5.2.4.89.55】直接使用缓存引用（已在保存时深拷贝）
                 quick_search_opportunities = config['_phase1_cache']['opportunities']
@@ -9993,8 +9994,8 @@ def analyze_and_adjust_params():
         
         if kline_snapshots is not None and not kline_snapshots.empty:
             try:
-                # 【V8.5.2.4.87】优先使用Phase 1缓存
-                if '_phase1_cache' in config and config['_phase1_cache'].get('date') == datetime.now().strftime('%Y-%m-%d'):
+                # 【V8.5.2.4.89.57】禁用缓存，每次重新计算
+                if False:  # 禁用缓存
                     print("  💾 【使用Phase 1缓存】避免重复计算（节省约2分钟）")
                     # 缓存结构：{'opportunities': {'scalping': {...}, 'swing': {...}}, 'baseline': {...}}
                     cached_opps = config['_phase1_cache']['opportunities']
