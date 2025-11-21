@@ -468,13 +468,16 @@ def generate_signal_weights_comparison_table(
     old_scalp_w = extract_weights(old_scalping_weights)
     old_swing_w = extract_weights(old_swing_weights)
     
-    # 定义权重项（超短线）
+    # 【V8.5.2.4.89.61】定义权重项（超短线 - 新增3个专属维度）
     scalping_items = [
         ('momentum', '动量评分', scalp_w.get('momentum', 0)),
         ('volume', '成交量评分', scalp_w.get('volume', 0)),
         ('breakout', '突破评分', scalp_w.get('breakout', 0)),
         ('pattern', '形态评分', scalp_w.get('pattern', 0)),
-        ('trend_align', '趋势对齐', scalp_w.get('trend_align', 0))
+        ('trend_align', '趋势对齐', scalp_w.get('trend_align', 0)),
+        ('volatility', '短期波动率', scalp_w.get('volatility', 0)),
+        ('volume_pulse', '成交量脉冲', scalp_w.get('volume_pulse', 0)),
+        ('momentum_accel', '动量加速', scalp_w.get('momentum_accel', 0))
     ]
     
     # 定义权重项（波段）

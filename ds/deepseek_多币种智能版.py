@@ -6705,18 +6705,23 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     # 为超短线和波段分别找到最优权重组合
     print("\n  🎯 【信号分权重优化】")
     
-    # 定义权重候选组合（围绕默认值微调）
+    # 【V8.5.2.4.89.61】定义权重候选组合（新增3个超短线专属维度）
     scalping_weight_candidates = [
-        # 默认权重
-        {'momentum': 20, 'volume': 35, 'breakout': 25, 'pattern': 12, 'trend_align': 10, 'name': '默认'},
-        # 强调动量
-        {'momentum': 25, 'volume': 30, 'breakout': 25, 'pattern': 12, 'trend_align': 10, 'name': '动量优先'},
-        # 强调成交量
-        {'momentum': 20, 'volume': 40, 'breakout': 20, 'pattern': 12, 'trend_align': 10, 'name': '放量优先'},
-        # 强调突破
-        {'momentum': 20, 'volume': 30, 'breakout': 30, 'pattern': 12, 'trend_align': 10, 'name': '突破优先'},
-        # 平衡型
-        {'momentum': 22, 'volume': 33, 'breakout': 25, 'pattern': 12, 'trend_align': 10, 'name': '平衡'},
+        # 默认权重（理论最高分207，与波段205平衡）
+        {'momentum': 25, 'volume': 30, 'breakout': 25, 'pattern': 15, 'trend_align': 12, 
+         'volatility': 20, 'volume_pulse': 15, 'momentum_accel': 15, 'name': '默认'},
+        # 强调动量（动量+加速）
+        {'momentum': 30, 'volume': 28, 'breakout': 25, 'pattern': 15, 'trend_align': 10, 
+         'volatility': 18, 'volume_pulse': 12, 'momentum_accel': 20, 'name': '动量优先'},
+        # 强调成交量（成交量+脉冲）
+        {'momentum': 22, 'volume': 35, 'breakout': 22, 'pattern': 15, 'trend_align': 10, 
+         'volatility': 18, 'volume_pulse': 20, 'momentum_accel': 12, 'name': '放量优先'},
+        # 强调突破+波动
+        {'momentum': 22, 'volume': 28, 'breakout': 30, 'pattern': 15, 'trend_align': 10, 
+         'volatility': 25, 'volume_pulse': 12, 'momentum_accel': 12, 'name': '突破优先'},
+        # 平衡型（各维度均衡）
+        {'momentum': 24, 'volume': 29, 'breakout': 24, 'pattern': 14, 'trend_align': 11, 
+         'volatility': 19, 'volume_pulse': 14, 'momentum_accel': 14, 'name': '平衡'},
     ]
     
     swing_weight_candidates = [
@@ -21921,15 +21926,21 @@ def recalculate_signal_score_from_snapshot(snapshot_row, signal_type, learning_c
     try:
         # 🔧 V8.5.2.3: 从原始数据重新计算+支持权重配置
         
-        # 获取权重配置（默认权重）
+        # 【V8.5.2.4.89.61】获取权重配置（调整超短线权重+新增专属维度）
+        # 超短线理论最高分：50 + 25+30+25+15+12 + 20+15+15 = 207分（与波段205分平衡）
         DEFAULT_SCALPING_WEIGHTS = {
-            'momentum': 20,
-            'volume': 35,
-            'breakout': 25,
-            'pattern': 12,
-            'trend_align': 10
+            'momentum': 25,           # 提高（20→25），超短线更看重快速动量
+            'volume': 30,             # 降低（35→30），因为有新的"成交量脉冲"
+            'breakout': 25,           # 保持
+            'pattern': 15,            # 提高（12→15），形态对超短线重要
+            'trend_align': 12,        # 略提高（10→12）
+            # 新增超短线专属维度（3个）
+            'volatility': 20,         # 短期波动率（ATR/价格）
+            'volume_pulse': 15,       # 成交量脉冲（1h vs 24h）
+            'momentum_accel': 15,     # 短期动量加速（15m vs 1h）
         }
         
+        # 波段权重保持不变（理论最高分：50 + 20+35+25+35+15+25 = 205分）
         DEFAULT_SWING_WEIGHTS = {
             'momentum': 20,
             'volume': 35,
@@ -22037,6 +22048,35 @@ def recalculate_signal_score_from_snapshot(snapshot_row, signal_type, learning_c
                 total_score += weights.get('trend_4h_strength', 25)
             elif "多头" in trend_4h or "空头" in trend_4h:
                 total_score += weights.get('trend_4h_strength', 25) * 0.6
+        
+        # 【V8.5.2.4.89.61】【8-10. 超短线专用：3个新维度】
+        if signal_type == 'scalping':
+            # 【8. 短期波动率】：ATR/价格比例，反映短期波动强度
+            atr = safe_float(snapshot_row.get('atr', 0))
+            if atr > 0 and close > 0:
+                volatility = (atr / close) * 100
+                if volatility >= 2.0:  # 高波动（≥2%）
+                    total_score += weights.get('volatility', 20)
+                elif volatility >= 1.5:  # 中高波动（1.5-2%）
+                    total_score += weights.get('volatility', 20) * 0.75
+                elif volatility >= 1.2:  # 中等波动（1.2-1.5%）
+                    total_score += weights.get('volatility', 20) * 0.5
+            
+            # 【9. 成交量脉冲】：短期成交量暴增（快照数据可能没有1h数据，用volume_ratio替代）
+            # volume_ratio已经是与过去24h的比较，可以直接用
+            if volume_ratio > 2.5:  # 极端脉冲（>2.5x）
+                total_score += weights.get('volume_pulse', 15)
+            elif volume_ratio > 2.0:  # 强脉冲（2-2.5x）
+                total_score += weights.get('volume_pulse', 15) * 0.67
+            
+            # 【10. 短期动量加速】：价格变化率加速（用K线实体判断）
+            if open_price > 0 and close > 0:
+                candle_body_pct = abs((close - open_price) / open_price) * 100
+                # 如果K线实体大（>1.5%），说明短期动量强
+                if candle_body_pct >= 1.5:  # 大实体（动量强）
+                    total_score += weights.get('momentum_accel', 15)
+                elif candle_body_pct >= 1.0:  # 中等实体
+                    total_score += weights.get('momentum_accel', 15) * 0.67
         
         # 【减分项】
         # RSI极端值（超短线惩罚小，波段惩罚大）
