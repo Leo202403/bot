@@ -419,7 +419,7 @@ def generate_profit_comparison_table(phase_data):
 
 def generate_optimized_bark_content(yesterday_data, phase2_data, phase4_data):
     """
-    【V8.5.2.4.89.10】生成优化后的Bark推送内容（单行精简版）
+    【V8.5.2.4.89.27】生成优化后的Bark推送内容（多行清晰版）
     
     Args:
         yesterday_data: {
@@ -440,7 +440,7 @@ def generate_optimized_bark_content(yesterday_data, phase2_data, phase4_data):
         }
     
     Returns:
-        str: Bark内容（单行，无换行符）
+        str: Bark内容（多行格式）
     """
     # 确保所有参数都是字典类型
     if not isinstance(yesterday_data, dict):
@@ -454,19 +454,32 @@ def generate_optimized_bark_content(yesterday_data, phase2_data, phase4_data):
     phase2_data = phase2_data or {}
     phase4_data = phase4_data or {}
     
-    # 【修复】极度精简，单行显示，避免换行符导致Bark URL解析错误
+    # 提取数据
     yesterday_winrate = yesterday_data.get('winrate', 0) * 100
     yesterday_profit = yesterday_data.get('profit', 0)
     
-    # 优化效果
-    swing_capture_change = phase4_data.get('swing_capture', 0) - phase2_data.get('swing_capture', 0)
-    swing_profit_change = phase4_data.get('swing_profit', 0) - phase2_data.get('swing_profit', 0)
+    # Phase 4数据
+    p4_scalping_cap = phase4_data.get('scalping_capture', 0)
+    p4_scalping_prof = phase4_data.get('scalping_profit', 0)
+    p4_swing_cap = phase4_data.get('swing_capture', 0)
+    p4_swing_prof = phase4_data.get('swing_profit', 0)
     
-    # 单行格式：昨日胜率X% 利润Y | P4波段捕获Z% 利润W% | 优化+A%捕获 +B%利润
+    # 优化效果
+    scalping_cap_change = p4_scalping_cap - phase2_data.get('scalping_capture', 0)
+    scalping_prof_change = p4_scalping_prof - phase2_data.get('scalping_profit', 0)
+    swing_cap_change = p4_swing_cap - phase2_data.get('swing_capture', 0)
+    swing_prof_change = p4_swing_prof - phase2_data.get('swing_profit', 0)
+    
+    # 多行格式：每行一个主题
     content = (
-        f"昨日{yesterday_winrate:.0f}% {yesterday_profit:+.1f}U | "
-        f"P4波段{phase4_data.get('swing_capture', 0):.0f}%捕获 {phase4_data.get('swing_profit', 0):.1f}%利 | "
-        f"优化{swing_capture_change:+.0f}%捕 {swing_profit_change:+.1f}%利"
+        f"📊 昨日表现：{yesterday_winrate:.0f}%胜率 {yesterday_profit:+.1f}U\n"
+        f"\n"
+        f"⚡ 超短线P4：{p4_scalping_cap:.0f}%捕获 {p4_scalping_prof:.1f}%利润\n"
+        f"🌊 波段P4：{p4_swing_cap:.0f}%捕获 {p4_swing_prof:.1f}%利润\n"
+        f"\n"
+        f"🎯 优化提升：\n"
+        f"  超短线 {scalping_cap_change:+.0f}%捕 {scalping_prof_change:+.1f}%利\n"
+        f"  波段 {swing_cap_change:+.0f}%捕 {swing_prof_change:+.1f}%利"
     )
     
     print(f"[Bark] 内容长度: {len(content)}字符")
