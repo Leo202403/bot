@@ -2788,43 +2788,62 @@ def save_market_snapshot_v7(market_data_list):
                 if not data or not isinstance(data, dict):
                     raise ValueError("Invalid market_data")
                 
-                # 先分类信号类型
-                signal_classification = classify_signal_type(data)
-                signal_type = signal_classification.get('signal_type', 'swing')
+                # 【V8.5.2.4.89.25】双信号分评估：同时计算超短线和波段视角
+                scalping_components = calculate_signal_score_components(data, 'scalping')
+                swing_components = calculate_signal_score_components(data, 'swing')
                 
-                # 计算各个维度的分数
-                components = calculate_signal_score_components(data, signal_type)
+                # 直接使用components中的total_score（已根据权重计算）
+                scalping_score = scalping_components.get('total_score', 0)
+                swing_score = swing_components.get('total_score', 0)
+                
+                # 保存双信号分到data中
+                data['scalping_signal_score'] = scalping_score
+                data['swing_signal_score'] = swing_score
+                
+                # 判断推荐策略：根据配置的阈值
+                scalping_threshold = 80  # 超短线高阈值
+                swing_threshold = 65     # 波段低阈值
+                
+                scalping_qualified = scalping_score >= scalping_threshold
+                swing_qualified = swing_score >= swing_threshold
+                
+                # 兼容性：signal_type和components使用较高分数的那个
+                # 但同时考虑阈值（合格性）
+                if scalping_qualified and (not swing_qualified or scalping_score >= swing_score):
+                    signal_type = 'scalping'
+                    components = scalping_components
+                    data['signal_score'] = scalping_score
+                    data['recommended_strategy'] = 'scalping'
+                elif swing_qualified:
+                    signal_type = 'swing'
+                    components = swing_components
+                    data['signal_score'] = swing_score
+                    data['recommended_strategy'] = 'swing'
+                else:
+                    # 都不合格，选分数高的
+                    if scalping_score >= swing_score:
+                        signal_type = 'scalping'
+                        components = scalping_components
+                        data['signal_score'] = scalping_score
+                        data['recommended_strategy'] = 'scalping'
+                    else:
+                        signal_type = 'swing'
+                        components = swing_components
+                        data['signal_score'] = swing_score
+                        data['recommended_strategy'] = 'swing'
+                
             except Exception as e:
                 print(f"⚠️ 计算评分维度失败: {e}")
+                # 降级：使用默认值
                 components = {
                     'signal_type': 'scalping',
                     'total_score': 0,
-                    # 默认维度值
-                    'volume_surge_type': '',
-                    'volume_surge_score': 0,
-                    'has_breakout': False,
-                    'breakout_score': 0,
-                    'momentum_value': 0,
-                    'momentum_score': 0,
-                    'consecutive_candles': 0,
-                    'consecutive_score': 0,
-                    'pin_bar': '',
-                    'pin_bar_score': 0,
-                    'engulfing': '',
-                    'engulfing_score': 0,
-                    'trend_alignment': 0,
-                    'trend_alignment_score': 0,
-                    'trend_initiation_strength': '',
-                    'trend_initiation_score': 0,
-                    'trend_4h_strength': '',
-                    'trend_4h_strength_score': 0,
-                    'ema_divergence_pct': 0,
-                    'ema_divergence_score': 0,
-                    'pullback_type': '',
-                    'pullback_score': 0,
-                    'volume_confirmed': False,
-                    'volume_confirmed_score': 0
                 }
+                data['scalping_signal_score'] = 0
+                data['swing_signal_score'] = 0
+                data['scalping_signal_score_weighted'] = 0
+                data['swing_signal_score_weighted'] = 0
+                signal_type = 'swing'
             
             # 【V8.4】更新consensus_score的形态评分部分（使用components中的数据）
             try:
@@ -16459,9 +16478,29 @@ def ai_portfolio_decision(
         if consensus_score > 0:
             enhanced_info += f" Q:{consensus_score}"  # Q=Quality Score
         
+        # 【V8.5.2.4.89.25】双信号分展示
+        scalping_score = data.get('scalping_signal_score', 0)
+        swing_score = data.get('swing_signal_score', 0)
+        recommended = data.get('recommended_strategy', 'unknown')
+        
+        # 判断合格性
+        scalping_qualified = "✓" if scalping_score >= 80 else "✗"
+        swing_qualified = "✓" if swing_score >= 65 else "✗"
+        
+        # 推荐策略标记
+        recommend_mark = ""
+        if recommended == 'scalping':
+            recommend_mark = " ← Recommended"
+        elif recommended == 'swing':
+            recommend_mark = " ← Recommended"
+        
         market_overview += f"""
 === {coin_name} ===
 Price: ${price:,.2f} ({data['price_change']:+.2f}%)
+
+🎯Signal Score (Dual Assessment):
+  ⚡Scalping: {scalping_score} (threshold≥80) {scalping_qualified}{recommend_mark if recommended == 'scalping' else ''}
+  🌊Swing: {swing_score} (threshold≥65) {swing_qualified}{recommend_mark if recommended == 'swing' else ''}
 
 🔹Trend: 4H={trend_4h_en}, 1H={trend_1h_en}, 15m={trend_15m_en}{enhanced_info}
 → {mode}
