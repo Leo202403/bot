@@ -41,7 +41,7 @@ def generate_simple_ai_reflection(entry_analysis, exit_analysis, ai_decisions):
         if deepseek_key:
             api_key = deepseek_key.strip()
             base_url = "https://api.deepseek.com"
-            model_name = "deepseek-reasoner"
+            model_name = "deepseek-chat"  # 修复：使用deepseek-chat（成本更低，效果足够，与entry_timing_analyzer保持一致）
             model_type = "DeepSeek"
         elif qwen_key:
             api_key = qwen_key.strip()
@@ -79,10 +79,23 @@ def generate_simple_ai_reflection(entry_analysis, exit_analysis, ai_decisions):
         )
         
         # 解析结果
-        result_text = response.choices[0].message.content.strip()
+        # 【兼容】处理deepseek-reasoner的特殊格式（如果未来切回）
+        message = response.choices[0].message
+        result_text = ""
+        
+        # 优先使用reasoning_content（deepseek-reasoner）
+        if hasattr(message, 'reasoning_content') and message.reasoning_content:
+            result_text = message.reasoning_content.strip()
+            print(f"[调试] 使用reasoning_content: {len(result_text)}字符")
+        
+        # 否则使用普通content（deepseek-chat, qwen）
+        if not result_text and message.content:
+            result_text = message.content.strip()
         
         # 【修复】检查是否为空
         if not result_text:
+            print(f"[调试] response类型: {type(response)}")
+            print(f"[调试] message字段: {dir(message)}")
             raise ValueError("AI返回空内容，可能是模型限制或网络问题")
         
         # 打印调试信息（前200字符）
