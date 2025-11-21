@@ -6661,9 +6661,9 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             scalping_atrs = [o.get('atr', 0) for o in scalping_opps if o.get('atr', 0) > 0]
             # 【V8.5.2.4.89.22】如果phase1_baseline没有密度，再从机会数据计算
             if scalping_avg_density == 10.0:  # 默认值说明phase1_baseline没提供
-            scalping_densities = [o.get('profit_density', 0) for o in scalping_opps if o.get('profit_density', 0) > 0]
-            if scalping_densities:
-                scalping_avg_density = np.mean(scalping_densities)
+                scalping_densities = [o.get('profit_density', 0) for o in scalping_opps if o.get('profit_density', 0) > 0]
+                if scalping_densities:
+                    scalping_avg_density = np.mean(scalping_densities)
             if scalping_atrs:
                 scalping_median_atr = np.median(scalping_atrs)
         
@@ -6671,9 +6671,9 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             swing_atrs = [o.get('atr', 0) for o in swing_opps if o.get('atr', 0) > 0]
             # 【V8.5.2.4.89.22】如果phase1_baseline没有密度，再从机会数据计算
             if swing_avg_density == 1.0:  # 默认值说明phase1_baseline没提供
-            swing_densities = [o.get('profit_density', 0) for o in swing_opps if o.get('profit_density', 0) > 0]
-            if swing_densities:
-                swing_avg_density = np.mean(swing_densities)
+                swing_densities = [o.get('profit_density', 0) for o in swing_opps if o.get('profit_density', 0) > 0]
+                if swing_densities:
+                    swing_avg_density = np.mean(swing_densities)
             if swing_atrs:
                 swing_median_atr = np.median(swing_atrs)
     
