@@ -178,7 +178,9 @@ def _analyze_volatility(data_list: List[Dict]) -> Dict:
     
     for data in data_list:
         # 使用ATR/价格比例衡量波动性
-        atr = data.get('atr', 0)
+        atr_data = data.get('atr', {})
+        # 【修复】atr是嵌套字典，需要获取atr_14值
+        atr = atr_data.get('atr_14', 0) if isinstance(atr_data, dict) else atr_data
         price = data.get('price', 1)
         
         if atr > 0 and price > 0:

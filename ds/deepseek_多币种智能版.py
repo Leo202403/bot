@@ -1440,27 +1440,19 @@ def set_tpsl_orders_via_papi(symbol: str, side: str, amount: float, stop_loss: f
     else:
         binance_symbol = symbol
     
-    # 🆕 V8.5.1.3: 获取市场精度信息
+    # 🔧 V8.5.2.5: 使用ccxt官方精度方法（自动处理所有格式）
     try:
-        markets = exchange.load_markets()
-        market_info = markets.get(symbol, {})
-        amount_precision_raw = market_info.get('precision', {}).get('amount', 3)
-        price_precision_raw = market_info.get('precision', {}).get('price', 2)
-        
-        # 🔧 V8.5.1.4: 转换precision为整数（支持浮点数格式）
-        amount_precision = _precision_to_decimal_places(amount_precision_raw)
-        price_precision = _precision_to_decimal_places(price_precision_raw)
-        
-        # 对数量和价格进行精度舍入
-        amount = round(amount, amount_precision)
+        amount = float(exchange.amount_to_precision(symbol, amount))
         if stop_loss:
-            stop_loss = round(stop_loss, price_precision)
+            stop_loss = float(exchange.price_to_precision(symbol, stop_loss))
         if take_profit:
-            take_profit = round(take_profit, price_precision)
+            take_profit = float(exchange.price_to_precision(symbol, take_profit))
+        if verbose:
+            print(f"  ✓ 精度处理: amount={amount}, SL={stop_loss}, TP={take_profit}")
     except Exception as e:
         if verbose:
-            print(f"  ⚠️ 获取市场精度失败，使用默认值: {e}")
-        # 使用默认精度
+            print(f"  ⚠️ ccxt精度处理失败，使用默认舍入: {e}")
+        # 后备方案：简单舍入
         amount = round(amount, 3)
         if stop_loss:
             stop_loss = round(stop_loss, 2)
@@ -19920,16 +19912,31 @@ def _execute_single_open_action_v55(
         leverage = min(suggested_leverage, max_leverage_for_type)
         print(f"✓ 使用系统建议杠杆: {leverage}x (上限{max_leverage_for_type}x)")
 
-    # 🆕 V8.5.1.9.4: 确保仓位满足最小名义价值要求（考虑精度舍入）
+    # 🔧 V8.5.2.5: 使用ccxt获取准确的limits + 智能调整策略
     try:
-        # 🔧 V8.5.1.9.2: BTC需要100 USDT，其他币种5 USDT
+        import math
         coin_name = symbol.split('/')[0]
-        if coin_name == 'BTC':
-            MIN_NOTIONAL = 100  # BTC特殊要求
-        else:
-            MIN_NOTIONAL = 5  # 其他币种标准要求
         
-        # 🔧 V8.5.1.9.4: 提前获取entry_price
+        # 🔧 V8.5.2.5: 从ccxt获取交易所实时limits
+        try:
+            markets = exchange.load_markets()
+            market_info = markets.get(symbol, {})
+            min_cost = market_info.get('limits', {}).get('cost', {}).get('min')  # 最小名义价值
+            min_amount = market_info.get('limits', {}).get('amount', {}).get('min')  # 最小数量
+            
+            # 后备值（如果API返回None）
+            if min_cost is None:
+                min_cost = 100 if coin_name == 'BTC' else 5
+            if min_amount is None:
+                min_amount = 0.001 if coin_name == 'BTC' else 0.01
+            
+            print(f"   [调试] ccxt limits: min_cost=${min_cost}, min_amount={min_amount}")
+        except Exception as e:
+            print(f"   ⚠️ 获取ccxt limits失败: {e}, 使用默认值")
+            min_cost = 100 if coin_name == 'BTC' else 5
+            min_amount = 0.001 if coin_name == 'BTC' else 0.01
+        
+        # 获取entry_price
         try:
             ticker = exchange.fetch_ticker(symbol)
             entry_price_check = ticker["last"]
@@ -19938,82 +19945,66 @@ def _execute_single_open_action_v55(
             entry_price_check = None
         
         if entry_price_check and entry_price_check > 0:
-            import math
-            
-            # 获取精度信息
-            try:
-                markets = exchange.load_markets()
-                market_info = markets.get(symbol, {})
-                amount_precision_raw = market_info.get('precision', {}).get('amount')
-                
-                # 🔧 V8.5.1.4: 使用统一的精度转换函数
-                if amount_precision_raw is None:
-                    amount_precision = 3  # 默认BTC精度
-                else:
-                    amount_precision = _precision_to_decimal_places(amount_precision_raw)
-            except Exception as e:
-                print(f"   ⚠️ 获取精度失败: {e}，使用默认精度3")
-                amount_precision = 3  # 默认BTC精度
-            
-            print(f"   [调试] 币种精度: {amount_precision}位小数, 价格: ${entry_price_check:.2f}")
-            
-            # 计算实际下单数量（考虑精度）
+            # 计算实际下单数量
             calculated_amount = (planned_position * leverage) / entry_price_check
             print(f"   [调试] 计划仓位: ${planned_position:.2f} × {leverage}x ÷ ${entry_price_check:.2f} = {calculated_amount:.6f}")
             
-            # 模拟精度舍入
-            if amount_precision and amount_precision > 0:
-                amount_step = 10 ** (-amount_precision)
-                rounded_amount = round(calculated_amount / amount_step) * amount_step
-                
-                # 保护：如果舍入导致严重损失，使用原始值
-                if rounded_amount < calculated_amount * 0.1:
-                    rounded_amount = calculated_amount
-            else:
+            # 🔧 V8.5.2.5: 使用ccxt精度方法
+            try:
+                rounded_amount = float(exchange.amount_to_precision(symbol, calculated_amount))
+                print(f"   [调试] ccxt精度舍入: {calculated_amount:.6f} → {rounded_amount:.6f}")
+            except Exception as e:
+                print(f"   ⚠️ ccxt精度处理失败: {e}, 使用原始值")
                 rounded_amount = calculated_amount
             
             # 计算舍入后的实际名义价值
             actual_notional = rounded_amount * entry_price_check
-            print(f"   [调试] 舍入后数量: {rounded_amount:.6f}, 名义价值: ${actual_notional:.2f}")
+            print(f"   [调试] 舍入后名义价值: ${actual_notional:.2f} (最小要求: ${min_cost})")
             
-            if actual_notional < MIN_NOTIONAL:
-                # 计算需要的仓位（考虑精度影响）
-                target_notional = MIN_NOTIONAL * 1.2
-                min_amount_needed = target_notional / entry_price_check
+            # 检查是否满足最小要求
+            if actual_notional < min_cost or rounded_amount < min_amount:
+                # 计算满足要求的最小仓位
+                target_notional = max(min_cost * 1.2, min_amount * entry_price_check)
+                required_amount = target_notional / entry_price_check
                 
-                # 向上取整到精度
-                if amount_precision and amount_precision > 0:
-                    amount_step = 10 ** (-amount_precision)
-                    required_amount = math.ceil(min_amount_needed / amount_step) * amount_step
-                else:
-                    required_amount = min_amount_needed
-                
-                print(f"   [调试] 目标名义价值: ${target_notional:.2f}, 需要数量: {required_amount:.6f}")
+                # 使用ccxt精度处理
+                try:
+                    required_amount = float(exchange.amount_to_precision(symbol, required_amount))
+                except:
+                    required_amount = math.ceil(required_amount * 1000) / 1000
                 
                 # 计算对应的仓位（保证金）
                 min_position_required = (required_amount * entry_price_check) / leverage
+                adjustment_pct = (min_position_required - planned_position) / planned_position * 100 if planned_position > 0 else 100
                 
-                print(f"   [调试] 最小保证金: ${min_position_required:.2f} (可用余额: ${available_balance:.2f})")
+                print(f"   [调试] 需要调整: ${planned_position:.2f} → ${min_position_required:.2f} (+{adjustment_pct:.1f}%)")
                 
-                # 检查是否在资金允许范围内
-                if min_position_required <= available_balance:
-                    print(f"   💡 仓位自动调整: ${planned_position:.2f} → ${min_position_required:.2f} (考虑精度后名义价值≥${MIN_NOTIONAL})")
+                # 🔧 V8.5.2.5: 智能调整策略（20%阈值）
+                if adjustment_pct <= 20:
+                    # 小幅调整，自动接受（不问AI，节省成本）
+                    print(f"   ✓ 仓位微调: ${planned_position:.2f} → ${min_position_required:.2f} (+{adjustment_pct:.1f}%, 自动接受)")
                     planned_position = min_position_required
                 else:
-                    print("❌ 余额不足以满足最小名义价值要求")
-                    print(f"   需要保证金: ${min_position_required:.2f}U")
-                    print(f"   可用余额: ${available_balance:.2f}U")
-                    print(f"   名义价值要求: {MIN_NOTIONAL}U × 1.2 = {target_notional:.0f}U")
-                    send_bark_notification(
-                        f"[{MODEL_DISPLAY_NAME}]{coin_name}余额不足❌",
-                        f"最小名义价值要求: {MIN_NOTIONAL}U\n"
-                        f"需要保证金: ${min_position_required:.2f}U ({leverage}x杠杆)\n"
-                        f"可用余额: ${available_balance:.2f}U\n"
-                        f"建议: 充值或等待其他持仓平仓",
-                    )
-                    return
+                    # 大幅调整，检查余额
+                    if min_position_required <= available_balance:
+                        print(f"   ⚠️ 仓位需大幅调整: ${planned_position:.2f} → ${min_position_required:.2f} (+{adjustment_pct:.1f}%)")
+                        print(f"   💡 自动调整到最小要求（名义价值≥${min_cost}）")
+                        planned_position = min_position_required
+                    else:
+                        print("❌ 余额不足以满足最小要求")
+                        print(f"   需要保证金: ${min_position_required:.2f}U")
+                        print(f"   可用余额: ${available_balance:.2f}U")
+                        print(f"   最小名义价值: ${min_cost}")
+                        send_bark_notification(
+                            f"[{MODEL_DISPLAY_NAME}]{coin_name}余额不足❌",
+                            f"最小名义价值要求: ${min_cost}\n"
+                            f"需要保证金: ${min_position_required:.2f}U ({leverage}x杠杆)\n"
+                            f"可用余额: ${available_balance:.2f}U\n"
+                            f"建议: 充值或等待其他持仓平仓",
+                        )
+                        return
     except Exception as e:
-        print(f"⚠️ 最小名义价值检查失败: {e}")
+        print(f"⚠️ 最小要求检查失败: {e}")
         import traceback
         traceback.print_exc()
 
