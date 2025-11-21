@@ -9887,13 +9887,12 @@ def analyze_and_adjust_params():
             else:
                 print(f"  ⚠️  Phase 1未生成客观机会池，跳过开仓时机分析")
             
-            # V2需要：昨日开仓交易、市场快照、AI决策记录、昨日日期、确认的机会
+            # V2需要：昨日开仓交易、市场快照、AI决策记录、昨日日期
             entry_analysis = analyze_entry_timing_v2(
                 yesterday_closed_trades,  # 🔧 V8.3.25.12: 改用yesterday_closed_trades
                 kline_snapshots,
                 ai_decisions_for_entry,  # 🔧 V8.3.25.12: 传入加载的AI决策
-                yesterday_date_formatted,
-                confirmed_opportunities  # 🔧 V8.3.25.15: 传入确认的盈利机会
+                yesterday_date_formatted
             )
             # V2会自动打印统计信息和改进建议
         except Exception as e:
@@ -18995,6 +18994,9 @@ def check_swing_partial_exit(position, market_data, entry_context, config):
         # 检查参数有效性
         if not market_data:
             return False, 0, "市场数据缺失"
+        
+        if not entry_context:
+            return False, 0, "入场上下文缺失"
         
         signal_type = entry_context.get('signal_type', 'swing')
         if signal_type != 'swing':
