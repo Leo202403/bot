@@ -9699,14 +9699,16 @@ def analyze_and_adjust_params():
         
         # 【V8.5.2.4.89.9】保存优化前的参数快照（baseline_config）
         # 用于后续机会对比分析
+        # 【V8.5.2.4.89.59】修复：应该保存global参数作为baseline，因为Phase 2优化的是global
+        # 之前的逻辑会使用已存在的scalping_params/swing_params（从之前运行保存的），导致对比错误
         baseline_config_snapshot = {
-            'scalping_params': current_config.get('scalping_params', current_config.get('global', {})).copy(),
-            'swing_params': current_config.get('swing_params', current_config.get('global', {})).copy(),
+            'scalping_params': current_config.get('global', {}).copy(),  # ✅ 使用global参数
+            'swing_params': current_config.get('global', {}).copy(),    # ✅ 使用global参数
             'global': current_config.get('global', {}).copy(),
             'timestamp': datetime.now().isoformat(),
             'stage': 'before_phase2'
         }
-        print("  💾 【备份】保存优化前参数快照（baseline_config）")
+        print("  💾 【备份】保存优化前参数快照（baseline_config - 使用global参数）")
         
         # 准备原始统计数据
         original_stats = {
