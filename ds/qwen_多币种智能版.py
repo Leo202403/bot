@@ -10024,6 +10024,9 @@ def analyze_and_adjust_params():
         # ========== 第2步：多轮迭代参数优化 (V7.6.3.3) ==========
         print("\n【第2步：多轮迭代参数优化】")
         
+        # 【修复】加载当前配置
+        current_config = load_learning_config()
+        
         # 【V8.5.2.4.89.9】保存优化前的参数快照（baseline_config）
         # 用于后续机会对比分析
         baseline_config_snapshot = {
@@ -23236,21 +23239,21 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         _, row_data = future_row
                         
                         # 计算当前利润
-                    if direction == 'long':
-                        profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
-                    else:
-                        profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
-                    
-                    # 启动跟踪
-                    if not tracking_started and profit_pct >= MIN_PROFIT_THRESHOLD:
-                        tracking_started = True
-                        max_profit_seen = profit_pct
-                        bars_to_max_profit = bar_idx
-                    
-                    # 更新最大利润
-                    if tracking_started and profit_pct > max_profit_seen:
-                        max_profit_seen = profit_pct
-                        bars_to_max_profit = bar_idx
+                        if direction == 'long':
+                            profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
+                        else:
+                            profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
+                        
+                        # 启动跟踪
+                        if not tracking_started and profit_pct >= MIN_PROFIT_THRESHOLD:
+                            tracking_started = True
+                            max_profit_seen = profit_pct
+                            bars_to_max_profit = bar_idx
+                        
+                        # 更新最大利润
+                        if tracking_started and profit_pct > max_profit_seen:
+                            max_profit_seen = profit_pct
+                            bars_to_max_profit = bar_idx
                     
                     if not tracking_started:
                         continue
