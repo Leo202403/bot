@@ -35,8 +35,13 @@ def generate_simple_ai_reflection(entry_analysis, exit_analysis, ai_decisions):
     """
     try:
         # 检测API配置
+        # 【修复】兼容多种环境变量命名（服务器可能使用不同名称）
         deepseek_key = os.getenv('DEEPSEEK_API_KEY')
-        qwen_key = os.getenv('QWEN_API_KEY')
+        qwen_key = os.getenv('QWEN_API_KEY') or os.getenv('DASHSCOPE_API_KEY')  # 兼容旧命名
+        
+        print(f"[调试] DEEPSEEK_API_KEY: {'✓ 存在' if deepseek_key else '✗ 不存在'}")
+        print(f"[调试] QWEN_API_KEY: {'✓ 存在' if os.getenv('QWEN_API_KEY') else '✗ 不存在'}")
+        print(f"[调试] DASHSCOPE_API_KEY: {'✓ 存在' if os.getenv('DASHSCOPE_API_KEY') else '✗ 不存在'}")
         
         if deepseek_key:
             api_key = deepseek_key.strip()
@@ -53,11 +58,22 @@ def generate_simple_ai_reflection(entry_analysis, exit_analysis, ai_decisions):
         
         print(f"[AI Self-Reflection] 使用{model_type} API ({model_name})进行自我反思...")
         
-        # 准备数据
+        # 准备数据（限制数量避免超token）
         analysis_data = prepare_reflection_data(entry_analysis, exit_analysis, ai_decisions)
+        
+        # 【修复】控制prompt长度（deepseek-chat限制8k，需留足够response空间）
+        # 限制每类决策数量
+        analysis_data['open_decisions'] = analysis_data['open_decisions'][:5]  # 15→5
+        analysis_data['close_decisions'] = analysis_data['close_decisions'][:5]  # 15→5
+        analysis_data['skip_decisions'] = analysis_data['skip_decisions'][:5]  # 15→5
         
         # 构建prompt
         prompt = build_reflection_prompt(analysis_data)
+        
+        # 【调试】打印prompt长度
+        prompt_chars = len(prompt)
+        est_tokens = prompt_chars // 3  # 粗略估算
+        print(f"[调试] Prompt长度: {prompt_chars}字符 (约{est_tokens} tokens)")
         
         # 调用AI
         client = OpenAI(api_key=api_key, base_url=base_url)
@@ -75,7 +91,7 @@ def generate_simple_ai_reflection(entry_analysis, exit_analysis, ai_decisions):
                 }
             ],
             temperature=0.3,
-            max_tokens=1500
+            max_tokens=2000  # 【修复】增加到2000（prompt已缩减，留足够输出空间）
         )
         
         # 解析结果
