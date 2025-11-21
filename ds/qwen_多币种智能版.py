@@ -8054,6 +8054,12 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             overall_status = phase4_result.get('overall_status', 'FAILED')
             
             if overall_status in ['PASSED', 'WARNING']:
+                # 【V8.5.2.4.89.9】验证通过前，再次保存当前参数作为before_phase4快照
+                # 防止Phase 3参数在Phase 4被覆盖
+                if '_iterative_history' in current_config and 'baseline_config' not in current_config['_iterative_history']:
+                    current_config['_iterative_history']['baseline_config'] = baseline_config_snapshot
+                    print(f"  💾 【补充】baseline_config已添加（从phase2前快照）")
+                
                 # 验证通过，应用Phase 3的分离参数到current_config
                 print(f"\n  ✅ Phase 4验证通过，应用Phase 3优化参数")
                 
@@ -10017,6 +10023,17 @@ def analyze_and_adjust_params():
         # ========== 第2步：多轮迭代参数优化 (V7.6.3.3) ==========
         print("\n【第2步：多轮迭代参数优化】")
         
+        # 【V8.5.2.4.89.9】保存优化前的参数快照（baseline_config）
+        # 用于后续机会对比分析
+        baseline_config_snapshot = {
+            'scalping_params': current_config.get('scalping_params', current_config.get('global', {})).copy(),
+            'swing_params': current_config.get('swing_params', current_config.get('global', {})).copy(),
+            'global': current_config.get('global', {}).copy(),
+            'timestamp': datetime.now().isoformat(),
+            'stage': 'before_phase2'
+        }
+        print(f"  💾 【备份】保存优化前参数快照（baseline_config）")
+        
         # 准备原始统计数据
         original_stats = {
             'win_rate': win_rate,
@@ -10186,8 +10203,10 @@ def analyze_and_adjust_params():
             else:
                 print(f"   综合利润指标: {baseline_metric:.4f} → {best_metric:.4f}")
             
-            # 保存迭代历史供邮件使用
+            # 【V8.5.2.4.89.9】保存迭代历史+baseline_config供邮件和机会对比使用
             config['_iterative_history'] = iterative_result
+            config['_iterative_history']['baseline_config'] = baseline_config_snapshot  # 添加baseline快照
+            print(f"  💾 【记录】baseline_config已添加到迭代历史")
             
             # 构建adjustments格式（兼容后续代码）
             # 比较最优配置与当前配置，找出变化
