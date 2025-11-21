@@ -13,9 +13,9 @@ BACKEND_DIR="/root/pythonc程序/my_project"
 echo "【步骤1】检查后端进程..."
 echo ""
 
-if ps aux | grep "[每]日壁纸更换.py" > /dev/null; then
+if ps aux | grep "每日壁纸更换.py" | grep -v grep > /dev/null; then
     echo "✓ 后端进程运行中"
-    ps aux | grep "[每]日壁纸更换.py"
+    ps aux | grep "每日壁纸更换.py" | grep -v grep
 else
     echo "❌ 后端进程未运行！"
     echo ""

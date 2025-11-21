@@ -12,7 +12,7 @@ BACKEND_DIR="/root/pythonc程序/my_project"
 # 1. 停止现有进程
 echo "【步骤1】停止现有进程..."
 
-if ps aux | grep "[每]日壁纸更换.py" > /dev/null; then
+if ps aux | grep "每日壁纸更换.py" | grep -v grep > /dev/null; then
     echo "  正在停止..."
     pkill -f "每日壁纸更换.py"
     
@@ -20,7 +20,7 @@ if ps aux | grep "[每]日壁纸更换.py" > /dev/null; then
     sleep 3
     
     # 确认停止
-    if ps aux | grep "[每]日壁纸更换.py" > /dev/null; then
+    if ps aux | grep "每日壁纸更换.py" | grep -v grep > /dev/null; then
         echo "  ⚠️  进程仍在运行，强制终止..."
         pkill -9 -f "每日壁纸更换.py"
         sleep 2
@@ -57,10 +57,10 @@ echo "【步骤3】等待启动..."
 sleep 5
 
 # 4. 检查进程
-if ps aux | grep "[每]日壁纸更换.py" > /dev/null; then
+if ps aux | grep "每日壁纸更换.py" | grep -v grep > /dev/null; then
     echo "  ✓ 进程运行正常"
     echo ""
-    ps aux | grep "[每]日壁纸更换.py" | grep -v grep
+    ps aux | grep "每日壁纸更换.py" | grep -v grep
 else
     echo "  ❌ 进程启动失败！"
     echo ""
