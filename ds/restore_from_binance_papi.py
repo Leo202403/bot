@@ -282,19 +282,34 @@ def restore_to_trades_history(model_name, orders, positions):
             if reader.fieldnames:
                 fieldnames = list(reader.fieldnames)
     
-    # 查找未平仓订单
+    # 查找未平仓订单（考虑分批止盈，使用开仓价格作为唯一标识）
     open_trade_keys = set()
     for trade in existing_trades:
         if not trade.get('平仓时间', '').strip():
-            key = f"{trade.get('币种', '')}_{trade.get('方向', '')}"
+            # 未平仓记录：使用币种_方向_开仓时间_开仓价格作为唯一键
+            key = f"{trade.get('币种', '')}_{trade.get('方向', '')}_{trade.get('开仓时间', '')}_{trade.get('开仓价格', '')}"
             open_trade_keys.add(key)
     
     # 需要添加的持仓
     trades_to_add = []
     for pos in positions:
-        key = f"{pos.get('币种', '')}_{pos.get('方向', '')}"
+        # 生成唯一键（与上面的逻辑一致）
+        # 注意：从API获取的持仓没有开仓时间，所以需要用开仓价格判断
+        key = f"{pos.get('币种', '')}_{pos.get('方向', '')}_{pos.get('开仓时间', '')}_{pos.get('开仓价格', '')}"
         
-        if key not in open_trade_keys:
+        # 如果开仓时间为空，则只用币种和方向匹配（向后兼容）
+        if not pos.get('开仓时间', ''):
+            simple_key = f"{pos.get('币种', '')}_{pos.get('方向', '')}"
+            # 检查是否已存在该币种方向的未平仓记录
+            already_exists = any(simple_key in k for k in open_trade_keys)
+            if already_exists:
+                continue
+        elif key in open_trade_keys:
+            # 精确匹配，跳过
+            continue
+        
+        # 如果到这里，说明没有匹配的记录，需要添加
+        if True:
             # 尝试从订单历史中获取开仓时间
             open_time = ''
             for order in orders:

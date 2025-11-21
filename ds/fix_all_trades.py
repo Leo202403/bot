@@ -61,41 +61,55 @@ def fix_trades(model_name):
     
     print(f"✓ 删除了 {removed_empty} 条空值记录")
     
-    # 步骤2: 删除重复记录
-    print("\n【步骤2】删除重复记录...")
+    # 步骤2: 删除重复记录（考虑分批止盈情况）
+    print("\n【步骤2】删除重复记录（支持分批止盈）...")
     seen = {}
     unique_trades = []
     removed_dup = 0
     
     for trade in valid_trades:
-        # 生成唯一键：币种_方向_开仓时间
         coin = trade.get('币种', '').strip()
         direction = trade.get('方向', '').strip()
         open_time = trade.get('开仓时间', '').strip()
+        close_time = trade.get('平仓时间', '').strip()
+        open_price = trade.get('开仓价格', '').strip()
+        close_price = trade.get('平仓价格', '').strip()
+        quantity = trade.get('数量', '').strip()
         
-        key = f"{coin}_{direction}_{open_time}"
+        # 对于已平仓的记录，使用更完整的唯一键（包括平仓时间和数量）
+        # 这样可以区分同一持仓的分批止盈记录
+        if close_time:
+            # 已平仓：币种_方向_开仓时间_平仓时间_数量
+            # 允许同一开仓有多条不同平仓时间的记录（分批止盈）
+            key = f"{coin}_{direction}_{open_time}_{close_time}_{quantity}"
+        else:
+            # 未平仓：币种_方向_开仓时间_开仓价格
+            # 未平仓的持仓应该是唯一的
+            key = f"{coin}_{direction}_{open_time}_{open_price}"
         
         if key in seen:
-            # 重复记录
+            # 真正的重复记录（所有关键信息都相同）
             removed_dup += 1
-            # 如果重复的记录，保留有平仓时间的（已平仓的）
             existing = seen[key]
-            existing_closed = existing.get('平仓时间', '').strip()
-            current_closed = trade.get('平仓时间', '').strip()
             
-            if current_closed and not existing_closed:
-                # 当前记录已平仓，替换之前的未平仓记录
+            # 对于完全相同的记录，保留更完整的那条
+            existing_pnl = existing.get('盈亏(U)', '').strip()
+            current_pnl = trade.get('盈亏(U)', '').strip()
+            
+            if current_pnl and not existing_pnl:
+                # 当前记录有盈亏数据，替换之前的
                 idx = unique_trades.index(existing)
                 unique_trades[idx] = trade
                 seen[key] = trade
-                print(f"  - 替换重复: {coin} {direction} (保留已平仓版本)")
+                print(f"  - 替换重复: {coin} {direction} (保留完整数据版本)")
             else:
-                print(f"  - 删除重复: {coin} {direction}")
+                print(f"  - 删除重复: {coin} {direction} @{close_time if close_time else '未平仓'}")
         else:
             seen[key] = trade
             unique_trades.append(trade)
     
-    print(f"✓ 删除了 {removed_dup} 条重复记录")
+    print(f"✓ 删除了 {removed_dup} 条真正重复的记录")
+    print(f"✓ 保留了分批止盈的多条记录")
     
     # 步骤3: 统计
     final_count = len(unique_trades)

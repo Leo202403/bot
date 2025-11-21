@@ -118,24 +118,67 @@ def check_trades_format(model_name):
                     open_time = t.get('开仓时间', 'N/A')
                     print(f"    - {coin} {direction} (开仓: {open_time})")
             
-            # 检查是否有重复记录
-            print(f"\n🔄 检查重复记录:")
+            # 检查是否有重复记录（考虑分批止盈）
+            print(f"\n🔄 检查重复记录（支持分批止盈）:")
             seen = {}
             duplicates = []
+            partial_closes = []
             
             for idx, trade in enumerate(trades):
-                key = f"{trade.get('币种', '')}_{trade.get('方向', '')}_{trade.get('开仓时间', '')}"
+                coin = trade.get('币种', '')
+                direction = trade.get('方向', '')
+                open_time = trade.get('开仓时间', '')
+                close_time = trade.get('平仓时间', '').strip()
+                open_price = trade.get('开仓价格', '')
+                quantity = trade.get('数量', '')
+                
+                # 对于已平仓的记录，使用完整的唯一键
+                if close_time:
+                    # 已平仓：包括平仓时间和数量，允许分批止盈
+                    key = f"{coin}_{direction}_{open_time}_{close_time}_{quantity}"
+                    
+                    # 同时检查是否是同一开仓的分批平仓
+                    base_key = f"{coin}_{direction}_{open_time}"
+                    if base_key in seen:
+                        # 同一开仓的另一条记录
+                        partial_closes.append((seen[base_key], idx))
+                    seen[base_key] = idx
+                else:
+                    # 未平仓：不包括平仓时间
+                    key = f"{coin}_{direction}_{open_time}_{open_price}"
+                
+                # 检查完全重复
                 if key in seen:
                     duplicates.append((seen[key], idx))
                 else:
                     seen[key] = idx
             
             if duplicates:
-                print(f"  ⚠️  发现 {len(duplicates)} 组重复记录:")
+                print(f"  ⚠️  发现 {len(duplicates)} 组真正重复的记录:")
                 for orig_idx, dup_idx in duplicates[:5]:
-                    print(f"    记录 #{orig_idx+1} 和 #{dup_idx+1} 重复")
+                    orig = trades[orig_idx]
+                    dup = trades[dup_idx]
+                    print(f"    #{orig_idx+1} 和 #{dup_idx+1}: {orig.get('币种')} {orig.get('方向')} "
+                          f"@{orig.get('平仓时间', '未平仓')}")
+                if len(duplicates) > 5:
+                    print(f"    ... 还有 {len(duplicates)-5} 组")
             else:
-                print(f"  ✓ 没有重复记录")
+                print(f"  ✓ 没有真正重复的记录")
+            
+            if partial_closes:
+                print(f"  ℹ️  发现 {len(partial_closes)} 组分批止盈记录（正常）:")
+                # 统计每个开仓的分批次数
+                batch_counts = {}
+                for orig_idx, dup_idx in partial_closes:
+                    orig = trades[orig_idx]
+                    base_key = f"{orig.get('币种')}_{orig.get('方向')}_{orig.get('开仓时间')}"
+                    batch_counts[base_key] = batch_counts.get(base_key, 0) + 1
+                
+                for base_key, count in list(batch_counts.items())[:5]:
+                    parts = base_key.split('_')
+                    print(f"    {parts[0]} {parts[1]}: {count+1} 次平仓")
+                if len(batch_counts) > 5:
+                    print(f"    ... 还有 {len(batch_counts)-5} 组")
             
             # 尝试读取后端可能的错误
             print(f"\n🧪 模拟后端读取:")
