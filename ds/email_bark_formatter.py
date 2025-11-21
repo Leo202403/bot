@@ -355,17 +355,27 @@ def generate_profit_comparison_table(phase_data: Dict[str, Any]) -> str:
     improvement_icon = "📈" if improvement_amount > 0 else "📉" if improvement_amount < 0 else "➡️"
     improvement_color = "#28a745" if improvement_amount > 0 else "#dc3545" if improvement_amount < 0 else "#6c757d"
     
+    # 【V8.5.2.4.89.65】计算分类提升（去掉合计列，只显示分类利润）
+    scalping_improvement = p4_scalping_total - p2_scalping_total
+    scalping_improvement_pct = (scalping_improvement / p2_scalping_total * 100) if p2_scalping_total > 0 else 0
+    swing_improvement = p4_swing_total - p2_swing_total
+    swing_improvement_pct = (swing_improvement / p2_swing_total * 100) if p2_swing_total > 0 else 0
+    
+    scalping_icon = "📈" if scalping_improvement > 0 else "📉" if scalping_improvement < 0 else "➡️"
+    scalping_color = "#28a745" if scalping_improvement > 0 else "#dc3545" if scalping_improvement < 0 else "#6c757d"
+    swing_icon = "📈" if swing_improvement > 0 else "📉" if swing_improvement < 0 else "➡️"
+    swing_color = "#28a745" if swing_improvement > 0 else "#dc3545" if swing_improvement < 0 else "#6c757d"
+    
     html = f"""
 <div class="summary-box" style="background: #e8f5e9; border: 2px solid #4caf50; margin: 20px 0; padding: 20px; border-radius: 8px;">
-    <h2 style="color: #1b5e20; margin-top: 0;">💰 累计收益率对比分析</h2>
+    <h2 style="color: #1b5e20; margin-top: 0;">💰 分类累计收益率对比分析</h2>
     
     <table style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 14px;">
         <thead>
             <tr style="background: #4caf50; color: white;">
                 <th style="padding: 12px; border: 1px solid #dee2e6; text-align: left;">阶段</th>
-                <th style="padding: 12px; border: 1px solid #dee2e6; text-align: right;">超短线累计收益率</th>
-                <th style="padding: 12px; border: 1px solid #dee2e6; text-align: right;">波段累计收益率</th>
-                <th style="padding: 12px; border: 1px solid #dee2e6; text-align: right;">合计</th>
+                <th style="padding: 12px; border: 1px solid #dee2e6; text-align: right;">⚡ 超短线累计收益率</th>
+                <th style="padding: 12px; border: 1px solid #dee2e6; text-align: right;">🌊 波段累计收益率</th>
             </tr>
         </thead>
         <tbody>
@@ -377,9 +387,6 @@ def generate_profit_comparison_table(phase_data: Dict[str, Any]) -> str:
                 <td style="padding: 10px; border: 1px solid #dee2e6; text-align: right; font-family: monospace;">
                     +{p1_swing_total:.2f}%
                 </td>
-                <td style="padding: 10px; border: 1px solid #dee2e6; text-align: right; font-weight: bold; font-family: monospace;">
-                    +{p1_total:.2f}%
-                </td>
             </tr>
             <tr>
                 <td style="padding: 10px; border: 1px solid #dee2e6;">Phase 2 (探索)</td>
@@ -388,9 +395,6 @@ def generate_profit_comparison_table(phase_data: Dict[str, Any]) -> str:
                 </td>
                 <td style="padding: 10px; border: 1px solid #dee2e6; text-align: right; font-family: monospace;">
                     +{p2_swing_total:.2f}%
-                </td>
-                <td style="padding: 10px; border: 1px solid #dee2e6; text-align: right; font-weight: bold; font-family: monospace;">
-                    +{p2_total:.2f}%
                 </td>
             </tr>
             <tr>
@@ -401,9 +405,6 @@ def generate_profit_comparison_table(phase_data: Dict[str, Any]) -> str:
                 <td style="padding: 10px; border: 1px solid #dee2e6; text-align: right; font-family: monospace;">
                     +{p3_swing_total:.2f}%
                 </td>
-                <td style="padding: 10px; border: 1px solid #dee2e6; text-align: right; font-weight: bold; font-family: monospace;">
-                    +{p3_total:.2f}%
-                </td>
             </tr>
             <tr style="background: #d4edda;">
                 <td style="padding: 10px; border: 1px solid #dee2e6; font-weight: bold;">Phase 4 (最终)</td>
@@ -413,21 +414,24 @@ def generate_profit_comparison_table(phase_data: Dict[str, Any]) -> str:
                 <td style="padding: 10px; border: 1px solid #dee2e6; text-align: right; font-weight: bold; font-family: monospace;">
                     +{p4_swing_total:.2f}%
                 </td>
-                <td style="padding: 10px; border: 1px solid #dee2e6; text-align: right; font-weight: bold; font-size: 1.1em; font-family: monospace;">
-                    +{p4_total:.2f}%
-                </td>
             </tr>
         </tbody>
     </table>
     
-    <div style="margin-top: 15px; padding: 15px; background: white; border-radius: 5px; border-left: 4px solid {improvement_color};">
+    <div style="margin-top: 15px; padding: 15px; background: white; border-radius: 5px;">
         <p style="margin: 5px 0; font-size: 1.05em;">
-            {improvement_icon} <strong>Phase 2 → Phase 4提升</strong>: 
-            <span style="color: {improvement_color}; font-weight: bold; font-size: 1.1em;">
-                {improvement_amount:+.2f}% ({improvement_pct:+.1f}%)
+            {scalping_icon} <strong>⚡ 超短线 Phase 2 → Phase 4提升</strong>: 
+            <span style="color: {scalping_color}; font-weight: bold; font-size: 1.1em;">
+                {scalping_improvement:+.2f}% ({scalping_improvement_pct:+.1f}%)
             </span>
         </p>
-        <p style="margin: 5px 0; color: #6c757d; font-size: 0.9em;">
+        <p style="margin: 5px 0; font-size: 1.05em;">
+            {swing_icon} <strong>🌊 波段 Phase 2 → Phase 4提升</strong>: 
+            <span style="color: {swing_color}; font-weight: bold; font-size: 1.1em;">
+                {swing_improvement:+.2f}% ({swing_improvement_pct:+.1f}%)
+            </span>
+        </p>
+        <p style="margin: 10px 0 5px 0; color: #6c757d; font-size: 0.9em;">
             💡 累计收益率 = 捕获机会数 × 平均单笔收益率（理论值）
         </p>
         <p style="margin: 5px 0; color: #6c757d; font-size: 0.9em;">
