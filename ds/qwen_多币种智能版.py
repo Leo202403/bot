@@ -10768,14 +10768,23 @@ def analyze_and_adjust_params():
                 old_scalping_params = {}
                 old_swing_params = {}
                 
+                print(f"\n  📊 【DEBUG】参数提取调试:")
+                print(f"     - iterative_result存在: {iterative_result is not None}")
+                print(f"     - _iterative_history存在: {'_iterative_history' in config}")
+                
                 if iterative_result and '_iterative_history' in config:
                     history = config['_iterative_history']
+                    print(f"     - history类型: {type(history)}")
+                    print(f"     - baseline_config存在: {'baseline_config' in history if isinstance(history, dict) else 'N/A'}")
+                    
                     # iterative_result是字典，包含baseline_config（优化前）和best_config（优化后）
                     if isinstance(history, dict) and 'baseline_config' in history:
                         baseline = history['baseline_config']
                         old_scalping_params = baseline.get('scalping_params', {})
                         old_swing_params = baseline.get('swing_params', {})
                         print(f"     ✓ 使用基准参数（优化前配置）")
+                        print(f"     - old_scalping_params: {old_scalping_params}")
+                        print(f"     - old_swing_params: {old_swing_params}")
                     elif isinstance(history, dict):
                         # 如果没有baseline_config，尝试从best_config回推（降级）
                         print(f"     ⚠️ 无baseline_config，使用global参数")
@@ -10785,10 +10794,18 @@ def analyze_and_adjust_params():
                     old_scalping_params = config.get('global', {})
                     old_swing_params = config.get('global', {})
                     print(f"     ⚠️ 无历史参数，使用global参数作为基准")
+                    print(f"     - global参数: {config.get('global', {})}")
                 
                 # 计算每个机会是否会被新/旧参数捕获
                 scalping_params = config.get('scalping_params', config.get('global', {}))
                 swing_params = config.get('swing_params', config.get('global', {}))
+                
+                print(f"\n  📊 【DEBUG】新参数:")
+                print(f"     - scalping_params: {scalping_params}")
+                print(f"     - swing_params: {swing_params}")
+                
+                # 【V8.5.2.4.89.26】调试：采样前3个机会检查数据
+                debug_sample_count = 0
                 
                 for opp in all_opportunities_sorted:
                     signal_type = opp.get('signal_type')
@@ -10799,6 +10816,15 @@ def analyze_and_adjust_params():
                     signal_score = opp.get('signal_score', 0)
                     consensus = opp.get('indicator_consensus', 0)
                     
+                    # 【DEBUG】采样前3个机会
+                    if debug_sample_count < 3:
+                        print(f"\n  📊 【DEBUG】机会 {debug_sample_count + 1}:")
+                        print(f"     - 币种: {opp.get('coin')}, 类型: {signal_type}")
+                        print(f"     - signal_score: {signal_score}, consensus: {consensus}")
+                        print(f"     - 新参数阈值: min_signal={new_params.get('min_signal_score', 50)}, min_consensus={new_params.get('min_indicator_consensus', 0)}")
+                        print(f"     - 旧参数阈值: min_signal={old_params.get('min_signal_score', 50)}, min_consensus={old_params.get('min_indicator_consensus', 0)}")
+                        debug_sample_count += 1
+                    
                     # 新参数判断
                     min_signal_new = new_params.get('min_signal_score', 50)
                     min_consensus_new = new_params.get('min_indicator_consensus', 0)
@@ -10808,6 +10834,11 @@ def analyze_and_adjust_params():
                     min_signal_old = old_params.get('min_signal_score', 50)
                     min_consensus_old = old_params.get('min_indicator_consensus', 0)
                     opp['old_can_entry'] = (signal_score >= min_signal_old and consensus >= min_consensus_old)
+                    
+                    # 【DEBUG】显示判断结果
+                    if debug_sample_count <= 3:
+                        print(f"     - 新参数可入场: {opp['new_can_entry']}")
+                        print(f"     - 旧参数可入场: {opp['old_can_entry']}")
                     
                     # 添加捕获利润和效率字段（供邮件显示）
                     if opp['new_can_entry']:
