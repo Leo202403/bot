@@ -2821,6 +2821,8 @@ def save_market_snapshot_v7(market_data_list):
                 }
                 data['scalping_signal_score'] = 0
                 data['swing_signal_score'] = 0
+                data['scalping_signal_score_weighted'] = 0
+                data['swing_signal_score_weighted'] = 0
             
             # 【V8.4】更新consensus_score的形态评分部分（使用components中的数据）
             try:
