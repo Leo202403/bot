@@ -7176,14 +7176,20 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         print("     💡 使用TP/SL测试找到的最优值进行计算")
     
     # 【V8.5.2.4.89.23】为超短线和波段分别定义测试参数
-    # 超短线：更注重信号质量（高信号分），快速进出
+    # 【V8.5.2.4.89.60】修复：超短线参数过严，调整为宽松→严格的梯度（50-75分）
+    # 超短线：从宽松开始，最大化捕获机会和利润（Phase 2目标）
     scalping_test_points = [
-        # 高信号分组合（适合超短线的快速决策）
-        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '超短-标准'},
-        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 85, 'name': '超短-高分'},
-        {'min_risk_reward': 1.0, 'min_indicator_consensus': 2, 'min_signal_score': 82, 'name': '超短-双共振'},
-        {'min_risk_reward': 1.5, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '超短-平衡'},
-        {'min_risk_reward': 1.5, 'min_indicator_consensus': 2, 'min_signal_score': 80, 'name': '超短-严格'},
+        # 第一组：极宽松参数（最大化召回率）
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 50, 'name': '超短-极宽松'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 55, 'name': '超短-很宽松'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 60, 'name': '超短-宽松'},
+        # 第二组：标准参数（平衡捕获和质量）
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 65, 'name': '超短-标准'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 70, 'name': '超短-偏严'},
+        # 第三组：较严格参数（高质量）
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 2, 'min_signal_score': 65, 'name': '超短-双共振'},
+        {'min_risk_reward': 1.5, 'min_indicator_consensus': 1, 'min_signal_score': 70, 'name': '超短-高R标准'},
+        {'min_risk_reward': 1.5, 'min_indicator_consensus': 2, 'min_signal_score': 75, 'name': '超短-严格'},
     ]
     
     # 波段：更宽松（捕获趋势），可以接受较低信号分
@@ -7202,7 +7208,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         {'min_risk_reward': 1.8, 'min_indicator_consensus': 2, 'min_signal_score': 75, 'name': '波段-双共振'},
     ]
     
-    print(f"     📊 超短线将测试{len(scalping_test_points)}组参数，波段将测试{len(swing_test_points)}组参数")
+    print(f"     📊 超短线将测试{len(scalping_test_points)}组参数（信号分50-75，渐进收紧），波段将测试{len(swing_test_points)}组参数（信号分65-75）")
     
     # 【V8.5.2.4.45】更新test_points_meta，添加更多信息
     test_points_meta['phase1_real_holding'] = {

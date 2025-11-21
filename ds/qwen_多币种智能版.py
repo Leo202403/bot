@@ -7173,16 +7173,23 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         print("     💡 使用TP/SL测试找到的最优值进行计算")
     
     # 【V8.5.2.4.89.23】为超短线和波段分别定义测试参数
-    # 超短线：更注重信号质量（高信号分），快速进出
+    # 【V8.5.2.4.89.60】修复：超短线参数过严，调整为宽松→严格的梯度（50-75分）
+    # 超短线：从宽松开始，最大化捕获机会和利润（Phase 2目标）
     scalping_test_points = [
-        # 高信号分组合（适合超短线的快速决策）
-        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '超短-标准'},
-        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 85, 'name': '超短-高分'},
-        {'min_risk_reward': 1.0, 'min_indicator_consensus': 2, 'min_signal_score': 82, 'name': '超短-双共振'},
-        {'min_risk_reward': 1.5, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '超短-平衡'},
-        {'min_risk_reward': 1.5, 'min_indicator_consensus': 2, 'min_signal_score': 80, 'name': '超短-严格'},
+        # 第一组：极宽松参数（最大化召回率）
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 50, 'name': '超短-极宽松'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 55, 'name': '超短-很宽松'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 60, 'name': '超短-宽松'},
+        # 第二组：标准参数（平衡捕获和质量）
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 65, 'name': '超短-标准'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 70, 'name': '超短-偏严'},
+        # 第三组：较严格参数（高质量）
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 2, 'min_signal_score': 65, 'name': '超短-双共振'},
+        {'min_risk_reward': 1.5, 'min_indicator_consensus': 1, 'min_signal_score': 70, 'name': '超短-高R标准'},
+        {'min_risk_reward': 1.5, 'min_indicator_consensus': 2, 'min_signal_score': 75, 'name': '超短-严格'},
     ]
     
+    # 【V8.5.2.4.89.60】波段：从宽松开始，最大化捕获（Phase 2目标），简化为7组
     # 波段：更宽松（捕获趋势），可以接受较低信号分
     swing_test_points = [
         # 第一组：极宽松参数（最大化召回率）
@@ -7194,36 +7201,9 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'min_signal_score': 70, 'name': '波段-宽松R'},
         {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'min_signal_score': 75, 'name': '波段-平衡'},
         
-        # 第三组：平衡参数
+        # 第三组：平衡参数（不再包含过严组合，Phase 3会进一步优化）
         {'min_risk_reward': 1.8, 'min_indicator_consensus': 1, 'min_signal_score': 75, 'name': '波段-偏严R'},
         {'min_risk_reward': 1.8, 'min_indicator_consensus': 2, 'min_signal_score': 75, 'name': '波段-双共振'},
-        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'min_signal_score': 82, 'name': '快速止盈'},
-        {'min_risk_reward': 2.0, 'min_indicator_consensus': 2, 'min_signal_score': 85, 'name': '标准平衡'},
-        {'min_risk_reward': 2.2, 'min_indicator_consensus': 2, 'min_signal_score': 85, 'name': '高质量'},
-        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'min_signal_score': 87, 'name': '高R平衡'},
-        
-        # 第四组：严格参数（高精准，信号分递增测试）
-        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'min_signal_score': 85, 'name': '偏严格-标准'},
-        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'min_signal_score': 87, 'name': '偏严格'},
-        {'min_risk_reward': 2.8, 'min_indicator_consensus': 3, 'min_signal_score': 88, 'name': '严格-中R'},
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'min_signal_score': 88, 'name': '严格'},
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'min_signal_score': 90, 'name': '极严格'},
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'min_signal_score': 92, 'name': '超严格'},
-        
-        # 第五组：共振优先（测试高共振+低R的组合）
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 3, 'min_signal_score': 85, 'name': '低R高共振-标准'},
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 3, 'min_signal_score': 88, 'name': '低R高共振'},
-        {'min_risk_reward': 1.8, 'min_indicator_consensus': 4, 'min_signal_score': 85, 'name': '超高共振'},
-        
-        # 第六组：信号分优先（测试高信号分+低共振的组合）
-        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'min_signal_score': 88, 'name': '高分低共振'},
-        {'min_risk_reward': 2.2, 'min_indicator_consensus': 1, 'min_signal_score': 90, 'name': '超高分低共振'},
-        {'min_risk_reward': 2.5, 'min_indicator_consensus': 1, 'min_signal_score': 92, 'name': '极高分低共振'},
-        
-        # 第七组：R:R优化（测试不同R:R）
-        {'min_risk_reward': 1.5, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '低R-标准'},
-        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '中R-标准'},
-        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'min_signal_score': 85, 'name': '高R-标准'},
     ]
     
     print(f"     📊 将测试{len(scalping_test_points) + len(swing_test_points)}组参数组合（超短线{len(scalping_test_points)}组，波段{len(swing_test_points)}组）")
