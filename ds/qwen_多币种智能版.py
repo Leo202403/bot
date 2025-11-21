@@ -23323,6 +23323,25 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             gc.collect()
         
         print(f"\n  ✅ Phase 1.1完成: 收集到{len(all_profit_opportunities)}个盈利机会")
+        
+        # 【调试】Phase 1.1后的密度初步统计
+        if all_profit_opportunities:
+            import numpy as np
+            phase1_densities = [o['profit_density'] for o in all_profit_opportunities]
+            phase1_holdings = [o['holding_hours'] for o in all_profit_opportunities]
+            phase1_profits = [o['objective_profit'] for o in all_profit_opportunities]
+            print(f"\n  🔍 【Phase 1.1密度分布】")
+            print(f"     密度范围: {np.min(phase1_densities):.2f} ~ {np.max(phase1_densities):.2f}")
+            print(f"     密度分位: q25={np.percentile(phase1_densities, 25):.2f}, q50={np.percentile(phase1_densities, 50):.2f}, q75={np.percentile(phase1_densities, 75):.2f}, q85={np.percentile(phase1_densities, 85):.2f}")
+            print(f"     持仓范围: {np.min(phase1_holdings):.2f}h ~ {np.max(phase1_holdings):.2f}h (中位数={np.median(phase1_holdings):.2f}h)")
+            print(f"     利润范围: {np.min(phase1_profits):.2f}% ~ {np.max(phase1_profits):.2f}% (中位数={np.median(phase1_profits):.2f}%)")
+            
+            # 检查异常值
+            high_density_count = sum(1 for d in phase1_densities if d > 20)
+            low_density_count = sum(1 for d in phase1_densities if d < 1)
+            print(f"     高密度(>20): {high_density_count}个 ({high_density_count/len(phase1_densities)*100:.1f}%)")
+            print(f"     低密度(<1): {low_density_count}个 ({low_density_count/len(phase1_densities)*100:.1f}%)")
+        
         gc.collect()
         
         # ========================================
@@ -23470,6 +23489,37 @@ def analyze_separated_opportunities(market_snapshots, old_config):
             print(f"  ⚡ 超短线: {len(scalping_opps)}个")
             print(f"  🌊 波段: {len(swing_opps)}个")
             
+            # 【调试】Phase 1.3分类后的密度详细统计
+            if scalping_opps:
+                scalping_densities = [o['profit_density'] for o in scalping_opps]
+                scalping_holdings = [o['holding_hours'] for o in scalping_opps]
+                scalping_profits = [o['objective_profit'] for o in scalping_opps]
+                print(f"\n  🔍 【超短线密度详情】")
+                print(f"     密度: min={np.min(scalping_densities):.2f}, q25={np.percentile(scalping_densities, 25):.2f}, median={np.median(scalping_densities):.2f}, q75={np.percentile(scalping_densities, 75):.2f}, max={np.max(scalping_densities):.2f}")
+                print(f"     平均密度: {np.mean(scalping_densities):.2f} (期望 >> {thresholds['high_density_threshold']:.1f})")
+                print(f"     持仓时间: min={np.min(scalping_holdings):.2f}h, median={np.median(scalping_holdings):.2f}h, max={np.max(scalping_holdings):.2f}h")
+                print(f"     利润: min={np.min(scalping_profits):.2f}%, median={np.median(scalping_profits):.2f}%, max={np.max(scalping_profits):.2f}%")
+                
+                # 统计分类原因
+                from collections import Counter
+                reasons = Counter([o.get('classify_reason', 'Unknown') for o in scalping_opps])
+                print(f"     分类原因: {dict(reasons)}")
+            
+            if swing_opps:
+                swing_densities = [o['profit_density'] for o in swing_opps]
+                swing_holdings = [o['holding_hours'] for o in swing_opps]
+                swing_profits = [o['objective_profit'] for o in swing_opps]
+                print(f"\n  🔍 【波段密度详情】")
+                print(f"     密度: min={np.min(swing_densities):.2f}, q25={np.percentile(swing_densities, 25):.2f}, median={np.median(swing_densities):.2f}, q75={np.percentile(swing_densities, 75):.2f}, max={np.max(swing_densities):.2f}")
+                print(f"     平均密度: {np.mean(swing_densities):.2f} (期望 << {thresholds['high_density_threshold']:.1f})")
+                print(f"     持仓时间: min={np.min(swing_holdings):.2f}h, median={np.median(swing_holdings):.2f}h, max={np.max(swing_holdings):.2f}h")
+                print(f"     利润: min={np.min(swing_profits):.2f}%, median={np.median(swing_profits):.2f}%, max={np.max(swing_profits):.2f}%")
+                
+                # 统计分类原因
+                from collections import Counter
+                reasons = Counter([o.get('classify_reason', 'Unknown') for o in swing_opps])
+                print(f"     分类原因: {dict(reasons)}")
+            
             # ========================================
             # 【Phase 1.4】验证分类质量
             # ========================================
@@ -23500,9 +23550,30 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     status = '✅' if passed else '⚠️'
                     print(f"  {status} {check_name}")
                 
+                # 【调试】密度合理性检查
+                print(f"\n  🔍 【密度合理性检查】")
+                threshold_val = thresholds['high_density_threshold']
+                print(f"     分类阈值: {threshold_val:.2f}")
+                print(f"     超短线平均密度: {scalping_avg_density:.2f} (期望 >> {threshold_val:.2f})")
+                print(f"     波段平均密度: {swing_avg_density:.2f} (期望 << {threshold_val:.2f})")
+                
+                # 检查超短线密度是否合理
+                if scalping_avg_density < threshold_val:
+                    print(f"  ⚠️  【异常】超短线平均密度({scalping_avg_density:.2f}) < 阈值({threshold_val:.2f})")
+                    print(f"      可能原因: 规则3(距离判断)把大量低密度机会错误分给超短线")
+                    
+                    # 统计真正高密度的超短线数量
+                    high_density_scalping = sum(1 for o in scalping_opps if o['profit_density'] > threshold_val)
+                    print(f"      真正高密度(>{threshold_val:.2f})的超短线: {high_density_scalping}/{len(scalping_opps)} ({high_density_scalping/len(scalping_opps)*100:.1f}%)")
+                
+                # 检查波段密度是否合理
+                if swing_avg_density > threshold_val * 0.5:
+                    print(f"  ⚠️  【异常】波段平均密度({swing_avg_density:.2f}) 过高 (期望 < {threshold_val*0.5:.2f})")
+                    print(f"      可能原因: 高密度机会被错误分到波段")
+                
                 passed_checks = sum(checks.values())
                 if passed_checks < 2:
-                    print(f"  ⚠️  分类质量不佳({passed_checks}/3通过)，但继续使用")
+                    print(f"\n  ⚠️  分类质量不佳({passed_checks}/3通过)，但继续使用")
             else:
                 print(f"  ⚠️  样本数不足以验证质量")
         
