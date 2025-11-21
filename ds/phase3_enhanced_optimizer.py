@@ -47,19 +47,26 @@ def sample_opportunities_for_phase3(opportunities: List[Dict], max_size: int = 8
         print(f"  ✓ 机会数({len(opportunities)})未超限，无需采样")
         return opportunities
     
-    # 【V8.5.2.4.89.4】按类型比例分配配额
-    scalping_ratio = len(scalping_opps) / len(opportunities) if opportunities else 0
-    scalping_quota = int(max_size * scalping_ratio)
-    swing_quota = max_size - scalping_quota
-    
-    # 确保至少各有一些样本（如果存在的话）
-    # 【修复】scalping机会少，至少保留200个避免过度过滤
-    if len(scalping_opps) > 0 and scalping_quota < 200:
-        scalping_quota = min(200, len(scalping_opps))
+    # 【V8.5.2.4.89.64】优先均分配额（避免不平衡）
+    # 如果两类机会都存在，则均分配额（各50%）
+    if len(scalping_opps) > 0 and len(swing_opps) > 0:
+        # 均分策略
+        scalping_quota = max_size // 2
         swing_quota = max_size - scalping_quota
-    if len(swing_opps) > 0 and swing_quota < 100:
-        swing_quota = min(100, len(swing_opps))
-        scalping_quota = max_size - swing_quota
+        print(f"  📊 采样策略: 均分配额（超短线{scalping_quota}, 波段{swing_quota}）")
+    elif len(scalping_opps) > 0:
+        # 只有超短线
+        scalping_quota = min(max_size, len(scalping_opps))
+        swing_quota = 0
+        print(f"  📊 采样策略: 仅超短线（{scalping_quota}）")
+    elif len(swing_opps) > 0:
+        # 只有波段
+        scalping_quota = 0
+        swing_quota = min(max_size, len(swing_opps))
+        print(f"  📊 采样策略: 仅波段（{swing_quota}）")
+    else:
+        scalping_quota = 0
+        swing_quota = 0
     
     sampled = []
     
@@ -155,10 +162,11 @@ def phase3_enhanced_optimization(
     print("  【V8.5.2.4.88】内存优化：智能采样 + 分批测试")
     print(f"{'='*70}")
     
-    # 【V8.5.2.4.88】内存优化：采样机会
+    # 【V8.5.2.4.89.64】内存优化：采样机会（降低max_size避免内存问题）
     print("\n  💾 【内存优化】机会采样")
     print(f"     原始机会数: {len(all_opportunities)}")
-    all_opportunities = sample_opportunities_for_phase3(all_opportunities, max_size=800)
+    # 【修复】降低max_size从800到600，确保采样更激进，避免内存压力
+    all_opportunities = sample_opportunities_for_phase3(all_opportunities, max_size=600)
     print(f"     采样后机会数: {len(all_opportunities)}")
     
     # 【步骤1】提取Phase 2学到的特征

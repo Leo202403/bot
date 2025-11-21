@@ -190,12 +190,28 @@ def generate_params_comparison_table(
     scalping_trailing = "✅" if scalping_params and scalping_params.get('trailing_stop_enabled') else "❌"
     swing_trailing = "✅" if swing_params and swing_params.get('trailing_stop_enabled') else "❌"
     
-    # 【V8.5.2.4.83】从learned_features提取密度信息
+    # 【V8.5.2.4.89.64】从learned_features提取密度信息（修复显示错误）
     if learned_features is None:
         learned_features = {}
-    scalping_density = safe_get(learned_features, 'scalping_avg_density', 'N/A')
-    swing_density = safe_get(learned_features, 'swing_avg_density', 'N/A')
+    
+    # 【DEBUG】输出learned_features内容用于调试
+    print(f"  📊 【DEBUG】learned_features: {learned_features}")
+    
+    scalping_density_raw = safe_get(learned_features, 'scalping_avg_density', 'N/A')
+    swing_density_raw = safe_get(learned_features, 'swing_avg_density', 'N/A')
     high_density_threshold = safe_get(learned_features, 'high_density_threshold', 'N/A')
+    
+    # 【修复】如果密度值异常（< 2），标记为数据异常，提示用户检查Phase 1统计
+    # 正常情况下，超短线密度应该 > 5，波段密度应该 > 0.5
+    if isinstance(scalping_density_raw, (int, float)) and scalping_density_raw < 2:
+        scalping_density = f"⚠️ {scalping_density_raw:.2f} (异常低，请检查Phase 1统计)"
+    else:
+        scalping_density = scalping_density_raw if scalping_density_raw == 'N/A' else f"{scalping_density_raw:.2f}"
+    
+    if isinstance(swing_density_raw, (int, float)) and swing_density_raw < 0.5:
+        swing_density = f"⚠️ {swing_density_raw:.2f} (异常低，请检查Phase 1统计)"
+    else:
+        swing_density = swing_density_raw if swing_density_raw == 'N/A' else f"{swing_density_raw:.2f}"
     
     html = f"""
 <div class="summary-box" style="background: #fff3e0; border: 2px solid #ff9800; margin: 20px 0; padding: 20px; border-radius: 8px;">

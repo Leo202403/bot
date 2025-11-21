@@ -20245,51 +20245,37 @@ def _execute_single_open_action_v55(
         # 计算数量
         amount = (planned_position * leverage) / entry_price
 
-        # 🔧 V8.3.32.12 & V7.7.0.14: 检查最小要求（名义价值 + 交易数量）+ AI智能调整
+        # 🔧 V8.5.2.5: 使用ccxt获取准确limits + 精度处理
         try:
+            import math
             markets = exchange.load_markets()
             market_info = markets.get(symbol, {})
+            
+            # 🔧 V8.5.2.5: 从ccxt获取交易所实时limits
             min_amount = market_info.get('limits', {}).get('amount', {}).get('min', 0)
-            amount_precision_raw = market_info.get('precision', {}).get('amount', 3)  # 获取数量精度
+            min_cost = market_info.get('limits', {}).get('cost', {}).get('min')
             
-            # 🔧 V8.5.1.4: 转换precision为整数
-            amount_precision = _precision_to_decimal_places(amount_precision_raw)
-            
-            # 🆕 V8.5.1.2 + V8.5.1.9增强: 考虑精度限制的最小名义价值检查
-            # 币安要求名义价值 > 5 USDT
-            import math
+            # 后备值（如果API返回None）
+            coin_name = symbol.split('/')[0]
+            if min_cost is None:
+                min_cost = 100 if coin_name == 'BTC' else 5
+            if not min_amount or min_amount == 0:
+                min_amount = 0.001 if coin_name == 'BTC' else 0.01
             
             # 计算当前amount
             calculated_amount = (planned_position * leverage) / entry_price
             
-            # 🔧 V8.5.1.9改进：安全的精度舍入
-            # 不依赖precision字段，直接根据实际情况判断
+            # 🔧 V8.5.2.5: 使用ccxt官方精度方法
             try:
-                # 尝试使用精度信息
-                if amount_precision and amount_precision > 0:
-                    amount_step = 10 ** (-amount_precision)
-                    rounded_amount = round(calculated_amount / amount_step) * amount_step
-                else:
-                    # 精度信息无效，使用原始值
-                    rounded_amount = calculated_amount
-                
-                # 保护机制：确保舍入后不会变成0或负数
-                if rounded_amount <= 0 or rounded_amount < calculated_amount * 0.1:
-                    print(f"   ⚠️ 精度舍入异常（{calculated_amount:.6f}→{rounded_amount:.6f}），使用原始值")
-                    rounded_amount = calculated_amount
+                rounded_amount = float(exchange.amount_to_precision(symbol, calculated_amount))
             except Exception as e:
-                print(f"   ⚠️ 精度计算失败: {e}，使用原始值")
+                print(f"   ⚠️ ccxt精度处理失败: {e}，使用原始值")
                 rounded_amount = calculated_amount
             
             # 计算舍入后的实际名义价值
             actual_notional = rounded_amount * entry_price
             
-            # 🔧 V8.5.1.9.2: 根据币种动态判断最小名义价值
-            coin_name = symbol.split('/')[0]
-            if coin_name == 'BTC':
-                min_notional_required = 100  # BTC特殊要求
-            else:
-                min_notional_required = 5  # 其他币种标准要求
+            min_notional_required = min_cost
             
             needs_adjustment = False
             adjustment_reason = ""
@@ -20299,11 +20285,14 @@ def _execute_single_open_action_v55(
                 needs_adjustment = True
                 adjustment_reason = "名义价值不足（考虑精度舍入）"
                 
-                # 计算满足要求的最小amount（向上取整到精度）
+                # 计算满足要求的最小amount
                 # 添加1.2倍安全边际，确保舍入后仍满足要求
                 target_notional = min_notional_required * 1.2
                 min_amount_needed = target_notional / entry_price
-                suggested_amount = math.ceil(min_amount_needed / amount_step) * amount_step
+                try:
+                    suggested_amount = float(exchange.amount_to_precision(symbol, min_amount_needed))
+                except:
+                    suggested_amount = math.ceil(min_amount_needed * 1000) / 1000
                 
                 # 根据建议的amount计算仓位
                 suggested_position = (suggested_amount * entry_price) / leverage
@@ -20311,8 +20300,8 @@ def _execute_single_open_action_v55(
                 print("\n⚠️ 名义价值不足（考虑精度舍入）")
                 print(f"计算数量: {calculated_amount:.6f} → 舍入后: {rounded_amount:.6f}")
                 print(f"舍入后名义价值: ${actual_notional:.2f}")
-                print(f"最小要求: >${min_notional_required:.2f}")
-                print(f"建议数量: {suggested_amount:.6f} (精度{amount_precision}位)")
+                print(f"最小要求(ccxt): >${min_notional_required:.2f}")
+                print(f"建议数量: {suggested_amount:.6f}")
                 print(f"建议仓位: ${suggested_position:.2f}U")
             
             elif min_amount and amount < min_amount:
@@ -20389,15 +20378,63 @@ def _execute_single_open_action_v55(
             f"\n开{'多' if operation=='OPEN_LONG' else '空'}仓: ${planned_position:.2f} {leverage}x杠杆 (约{amount:.6f}个)"
                 )
 
-        order_side = "buy" if operation == "OPEN_LONG" else "sell"
-        order = exchange.create_market_order(
-            symbol, order_side, amount, params={"tag": "f1ee03b510d5SUDE"}
-        )
-        print("✓ 开仓成功")
+        # 🔧 V8.5.2.5: 下单前最后一次精度处理 + 增强错误处理
+        try:
+            # 最后精度处理
+            amount = float(exchange.amount_to_precision(symbol, amount))
+            if stop_loss:
+                stop_loss = float(exchange.price_to_precision(symbol, stop_loss))
+            if take_profit:
+                take_profit = float(exchange.price_to_precision(symbol, take_profit))
+            
+            order_side = "buy" if operation == "OPEN_LONG" else "sell"
+            order = exchange.create_market_order(
+                symbol, order_side, amount, params={"tag": "f1ee03b510d5SUDE"}
+            )
+            print("✓ 开仓成功")
+        except Exception as e:
+            error_msg = str(e)
+            
+            # 🔧 V8.5.2.5: 分类错误类型，提供详细信息
+            if 'PRECISION' in error_msg.upper():
+                error_type = "精度错误"
+                suggestion = "ccxt精度处理异常，请检查市场信息"
+            elif 'MIN_NOTIONAL' in error_msg.upper():
+                error_type = "名义价值不足"
+                suggestion = f"需要>${min_cost}，当前${actual_notional:.2f}"
+            elif 'INSUFFICIENT' in error_msg.upper():
+                error_type = "余额不足"
+                suggestion = "账户余额不足，请充值"
+            elif 'INVALID_ORDER_TYPE' in error_msg.upper():
+                error_type = "订单类型错误"
+                suggestion = "交易所不支持此订单类型"
+            else:
+                error_type = "未知错误"
+                suggestion = "查看详细错误日志"
+            
+            print(f"❌ 下单失败: {error_type}")
+            print(f"详细错误: {error_msg}")
+            
+            # 发送详细通知
+            send_bark_notification(
+                f"[{MODEL_DISPLAY_NAME}]{coin_name}下单失败❌",
+                f"错误类型: {error_type}\n"
+                f"计划仓位: ${planned_position:.0f}U ({leverage}x杠杆)\n"
+                f"数量: {amount:.6f}\n"
+                f"价格: ${entry_price:.2f}\n"
+                f"建议: {suggestion}\n"
+                f"错误: {error_msg[:150]}"
+            )
+            
+            # 不重试，直接返回
+            return
 
         # === 立即设置交易所止损/止盈订单（硬保护）===
         try:
             close_side = "sell" if operation == "OPEN_LONG" else "buy"
+            
+            # 🔧 V8.5.2.5: 止损止盈价格精度处理（已在上面处理过，这里确保使用）
+            # stop_loss和take_profit已经通过exchange.price_to_precision处理
             
             # 1. 设置止损订单（必须设置，防爆仓）
             if stop_loss and stop_loss > 0:
@@ -20440,11 +20477,16 @@ def _execute_single_open_action_v55(
                 print(f"✓ 止盈单已设置: ${take_profit:,.2f} (Tag: {tp_tag})")
                 
         except Exception as e:
-            print(f"⚠️ 设置止损/止盈订单失败: {e}")
-            # 失败不中断流程，但发送警告
+            error_msg = str(e)
+            print(f"⚠️ 设置止损/止盈订单失败: {error_msg}")
+            # 失败不中断流程，但发送详细警告
             send_bark_notification(
-                f"[DeepSeek]{coin_name}止损单设置失败⚠️",
-                f"已开仓但止损单未设置！\n仓位:{planned_position:.0f}U\n止损价:{stop_loss:.2f}\n请手动设置保护！",
+                f"[{MODEL_DISPLAY_NAME}]{coin_name}止损单设置失败⚠️",
+                f"已开仓但止损单未设置！\n"
+                f"仓位:{planned_position:.0f}U\n"
+                f"止损价:{stop_loss:.2f}\n"
+                f"错误:{error_msg[:100]}\n"
+                f"⚠️请立即手动设置保护！",
             )
 
         # 【V7.9】立即发送通知（增加信号类型和预期持仓时间）
@@ -23023,11 +23065,12 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     if entry_price <= 0:
                         continue
                     
-                    # 【V8.5.2.4.40】智能读取consensus（优先CSV，兼容旧数据）
+                    # 【V8.5.2.4.89.64】智能读取consensus（优先CSV，兼容旧数据）
                     consensus_from_csv = int(float(current.get('indicator_consensus', 0)))
                     
-                    # 如果CSV中consensus=0且缺少trend_1h字段，尝试重新计算
-                    if consensus_from_csv == 0 and 'trend_1h' not in current:
+                    # 【修复】如果CSV中consensus=0，始终重新计算（不再要求trend_1h缺失）
+                    # 原因：CSV中indicator_consensus=0可能是数据问题，应该重新计算
+                    if consensus_from_csv == 0:
                         consensus = recalculate_consensus_from_snapshot(current)
                     else:
                         consensus = consensus_from_csv
