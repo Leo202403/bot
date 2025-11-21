@@ -10261,7 +10261,8 @@ def analyze_and_adjust_params():
                     
                     # 判断是否满足参数要求
                     signal_score = opp.get('signal_score', 0)
-                    consensus = opp.get('indicator_consensus', 0)
+                    # 【V8.5.2.4.89.56】修复：Phase 1机会数据使用的字段名是consensus，不是indicator_consensus
+                    consensus = opp.get('consensus', 0)
                     
                     # 【DEBUG】采样前3个机会
                     if debug_sample_count < 3:
