@@ -6661,9 +6661,9 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             scalping_atrs = [o.get('atr', 0) for o in scalping_opps if o.get('atr', 0) > 0]
             # 【V8.5.2.4.89.22】如果phase1_baseline没有密度，再从机会数据计算
             if scalping_avg_density == 10.0:  # 默认值说明phase1_baseline没提供
-                scalping_densities = [o.get('profit_density', 0) for o in scalping_opps if o.get('profit_density', 0) > 0]
-                if scalping_densities:
-                    scalping_avg_density = np.mean(scalping_densities)
+            scalping_densities = [o.get('profit_density', 0) for o in scalping_opps if o.get('profit_density', 0) > 0]
+            if scalping_densities:
+                scalping_avg_density = np.mean(scalping_densities)
             if scalping_atrs:
                 scalping_median_atr = np.median(scalping_atrs)
         
@@ -6671,9 +6671,9 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             swing_atrs = [o.get('atr', 0) for o in swing_opps if o.get('atr', 0) > 0]
             # 【V8.5.2.4.89.22】如果phase1_baseline没有密度，再从机会数据计算
             if swing_avg_density == 1.0:  # 默认值说明phase1_baseline没提供
-                swing_densities = [o.get('profit_density', 0) for o in swing_opps if o.get('profit_density', 0) > 0]
-                if swing_densities:
-                    swing_avg_density = np.mean(swing_densities)
+            swing_densities = [o.get('profit_density', 0) for o in swing_opps if o.get('profit_density', 0) > 0]
+            if swing_densities:
+                swing_avg_density = np.mean(swing_densities)
             if swing_atrs:
                 swing_median_atr = np.median(swing_atrs)
     
@@ -7278,7 +7278,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         raise ValueError("【V8.5.2.3】quick_global_search_v8316必须提供confirmed_opportunities，不再支持降级使用market_snapshots")
     
     # 【V8.5.2.4.89.23】修复：分别处理超短线和波段机会
-    print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
+        print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
     scalping_opportunities = confirmed_opportunities['scalping']['opportunities']
     swing_opportunities = confirmed_opportunities['swing']['opportunities']
     print(f"     ✓ 真实盈利机会: 超短线{len(scalping_opportunities)}个 + 波段{len(swing_opportunities)}个 = {len(scalping_opportunities) + len(swing_opportunities)}个")
@@ -7320,8 +7320,8 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         
         test_results = []
         strategy_label = '⚡超短线' if strategy_type == 'scalping' else '🌊波段'
-        
-        for i, test_params in enumerate(test_points):
+    
+    for i, test_params in enumerate(test_points):
             config_variant = {
                 'min_risk_reward': test_params['min_risk_reward'],
                 'min_indicator_consensus': test_params['min_indicator_consensus'],
@@ -7429,9 +7429,9 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         best_swing_result = None
         print(f"\n  ⚠️  【波段】未找到有效参数组合")
     
-    # 【V8.5.2.4.89.23】以下旧代码已废弃，通过if False禁用
+    # 【V8.5.2.4.89.28】废弃代码块已被pass占位符替代
     if False:
-        for i, test_params in enumerate([]):
+        pass
         # 【V8.5.2.4.54】test_points不再包含TP/SL，使用.get()避免KeyError
         # TP/SL将由后续逻辑从best_scalping_tp_sl/best_swing_tp_sl获取
         config_variant = {
@@ -7842,8 +7842,8 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                         default_tp = swing_params_range['atr_tp'][2]
                         default_sl = swing_params_range['atr_sl'][1]
                     default_holding = swing_params_range['max_holding'][2]
-                    
-                    strategy_params = {
+                
+                strategy_params = {
                         **swing_params,
                         'atr_tp_multiplier': swing_params.get('atr_tp_multiplier', default_tp),
                         'atr_stop_multiplier': swing_params.get('atr_stop_multiplier', default_sl),
@@ -7851,8 +7851,8 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     }
                     
                     actual_profit = calculate_single_actual_profit(opp, strategy_params=strategy_params, use_dynamic_atr=False)
-                    opp['_phase2_actual_profit'] = actual_profit
-                
+                opp['_phase2_actual_profit'] = actual_profit
+            
                 swing_phase1_count = phase1_baseline.get('swing', {}).get('count', 0)
                 swing_baseline_data = {
                     'captured_count': len(swing_captured),
@@ -11214,21 +11214,21 @@ def analyze_and_adjust_params():
                     }
                 else:
                     # 兼容旧格式（如果phase2_baseline没有分离结构）
-                    total_capture_rate = phase2_baseline.get('capture_rate', 0) * 100
-                    total_avg_profit = phase2_baseline.get('avg_profit', 0)
-                    total_captured = phase2_baseline.get('captured_count', 0)
-                    
+                total_capture_rate = phase2_baseline.get('capture_rate', 0) * 100
+                total_avg_profit = phase2_baseline.get('avg_profit', 0)
+                total_captured = phase2_baseline.get('captured_count', 0)
+                
                     # 降级方案：各占一半
-                    phase2_data = {
+                phase2_data = {
                         'scalping_capture': total_capture_rate / 2,
-                        'scalping_profit': total_avg_profit,
-                        'scalping_count': total_captured // 2,
+                    'scalping_profit': total_avg_profit,
+                    'scalping_count': total_captured // 2,
                         'swing_capture': total_capture_rate / 2,
-                        'swing_profit': total_avg_profit,
-                        'swing_count': total_captured - (total_captured // 2),
-                        'scalping_total_profit': (total_captured // 2) * total_avg_profit,
-                        'swing_total_profit': (total_captured - (total_captured // 2)) * total_avg_profit
-                    }
+                    'swing_profit': total_avg_profit,
+                    'swing_count': total_captured - (total_captured // 2),
+                    'scalping_total_profit': (total_captured // 2) * total_avg_profit,
+                    'swing_total_profit': (total_captured - (total_captured // 2)) * total_avg_profit
+                }
             
             # Phase 3数据（分离优化）
             phase3_data = {}
@@ -23412,21 +23412,21 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                         _, row_data = future_row
                         
                         # 计算当前利润
-                        if direction == 'long':
-                            profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
-                        else:
-                            profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
-                        
-                        # 启动跟踪
-                        if not tracking_started and profit_pct >= MIN_PROFIT_THRESHOLD:
-                            tracking_started = True
-                            max_profit_seen = profit_pct
-                            bars_to_max_profit = bar_idx
-                        
-                        # 更新最大利润
-                        if tracking_started and profit_pct > max_profit_seen:
-                            max_profit_seen = profit_pct
-                            bars_to_max_profit = bar_idx
+                    if direction == 'long':
+                        profit_pct = (float(row_data['high']) - entry_price) / entry_price * 100
+                    else:
+                        profit_pct = (entry_price - float(row_data['low'])) / entry_price * 100
+                    
+                    # 启动跟踪
+                    if not tracking_started and profit_pct >= MIN_PROFIT_THRESHOLD:
+                        tracking_started = True
+                        max_profit_seen = profit_pct
+                        bars_to_max_profit = bar_idx
+                    
+                    # 更新最大利润
+                    if tracking_started and profit_pct > max_profit_seen:
+                        max_profit_seen = profit_pct
+                        bars_to_max_profit = bar_idx
                     
                     if not tracking_started:
                         continue

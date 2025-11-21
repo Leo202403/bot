@@ -7457,11 +7457,9 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         best_swing_result = None
         print(f"\n  ⚠️  【波段】未找到有效参数组合")
     
-    # 【V8.5.2.4.89.23】以下旧代码已废弃，通过if False禁用
+    # 【V8.5.2.4.89.28】废弃代码块已被pass占位符替代
     if False:
-        print(f"\n  🔍 测试{len(test_points) if 'test_points' in locals() else 0}组战略采样（含signal_score优化）...")
-    
-    for i, test_params in enumerate(test_points):
+        pass
         # 【V8.5.2.4.54】test_points不再包含TP/SL，使用.get()避免KeyError
         # TP/SL将由后续逻辑从best_scalping_tp_sl/best_swing_tp_sl获取
         config_variant = {
