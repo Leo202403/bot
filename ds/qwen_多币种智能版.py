@@ -7193,28 +7193,37 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     else:
         print(f"     ⚠️  跳过TP/SL测试（无机会数据）")
     
-    # 【V8.5.2.4.39】Phase 2核心任务5：扩展参数组合测试，覆盖更广范围
-    print(f"\n  🎯 【参数组合测试】寻找捕获率最高的参数组合...")
+    # 【V8.5.2.4.89.23】Phase 2核心任务5：分离参数组合测试
+    print(f"\n  🎯 【参数组合测试】分别为超短线和波段寻找最优参数...")
     print(f"     💡 注意：此时使用的是优化权重计算的signal_score")
     if best_scalping_tp_sl or best_swing_tp_sl:
         print(f"     💡 使用TP/SL测试找到的最优值进行计算")
     
-    # 【V8.5.2.4.54】移除TP/SL参数，完全使用测试出的最优值
-    # test_points只控制：R:R、共识、信号分，TP/SL由best_scalping_tp_sl/best_swing_tp_sl决定
-    test_points = [
-        # 第一组：极宽松参数（最大化召回率，测试信号分下限）
-        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 70, 'name': '超宽松-低分'},
-        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 75, 'name': '超宽松'},
-        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '超宽松-标准'},
+    # 【V8.5.2.4.89.23】为超短线和波段分别定义测试参数
+    # 超短线：更注重信号质量（高信号分），快速进出
+    scalping_test_points = [
+        # 高信号分组合（适合超短线的快速决策）
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '超短-标准'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 85, 'name': '超短-高分'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 2, 'min_signal_score': 82, 'name': '超短-双共振'},
+        {'min_risk_reward': 1.5, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '超短-平衡'},
+        {'min_risk_reward': 1.5, 'min_indicator_consensus': 2, 'min_signal_score': 80, 'name': '超短-严格'},
+    ]
+    
+    # 波段：更宽松（捕获趋势），可以接受较低信号分
+    swing_test_points = [
+        # 第一组：极宽松参数（最大化召回率）
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 65, 'name': '波段-宽松'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 70, 'name': '波段-标准'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 75, 'name': '波段-偏严'},
         
         # 第二组：宽松参数（高召回）
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'min_signal_score': 75, 'name': '极宽松'},
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '宽松'},
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'min_signal_score': 85, 'name': '宽松-高分'},
-        {'min_risk_reward': 1.8, 'min_indicator_consensus': 1, 'min_signal_score': 82, 'name': '偏宽松'},
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'min_signal_score': 70, 'name': '波段-宽松R'},
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'min_signal_score': 75, 'name': '波段-平衡'},
         
-        # 第三组：平衡参数（R:R递增测试）
-        {'min_risk_reward': 1.8, 'min_indicator_consensus': 2, 'min_signal_score': 80, 'name': '平衡-低R'},
+        # 第三组：平衡参数
+        {'min_risk_reward': 1.8, 'min_indicator_consensus': 1, 'min_signal_score': 75, 'name': '波段-偏严R'},
+        {'min_risk_reward': 1.8, 'min_indicator_consensus': 2, 'min_signal_score': 75, 'name': '波段-双共振'},
         {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'min_signal_score': 82, 'name': '快速止盈'},
         {'min_risk_reward': 2.0, 'min_indicator_consensus': 2, 'min_signal_score': 85, 'name': '标准平衡'},
         {'min_risk_reward': 2.2, 'min_indicator_consensus': 2, 'min_signal_score': 85, 'name': '高质量'},
@@ -7276,33 +7285,32 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         # 【V8.5.2.3】移除降级容错，必须提供confirmed_opportunities
         raise ValueError("【V8.5.2.3】quick_global_search_v8316必须提供confirmed_opportunities，不再支持降级使用market_snapshots")
     
-    # 🔧 V8.5.2.4.33: 修复all_opportunities变量未定义 - 正确的缩进
+    # 【V8.5.2.4.89.23】修复：分别处理超短线和波段机会
     print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
-    # 合并超短线和波段机会
-    all_opportunities = (
-        confirmed_opportunities['scalping']['opportunities'] + 
-        confirmed_opportunities['swing']['opportunities']
-    )
-    print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
+    scalping_opportunities = confirmed_opportunities['scalping']['opportunities']
+    swing_opportunities = confirmed_opportunities['swing']['opportunities']
+    print(f"     ✓ 真实盈利机会: 超短线{len(scalping_opportunities)}个 + 波段{len(swing_opportunities)}个 = {len(scalping_opportunities) + len(swing_opportunities)}个")
     
-    # 【V8.5.2.4.18】前向验证：分割训练集和验证集
-    print(f"\n  📊 【前向验证】数据分割（70%训练/30%验证）...")
+    # 【V8.5.2.4.89.23】前向验证：超短线和波段分别分割
+    print(f"\n  📊 【前向验证】超短线和波段分别数据分割（70%训练/30%验证）...")
     
-    # 按时间排序（确保前向测试，而非随机分割）
-    all_opportunities_sorted = sorted(
-        all_opportunities,
-        key=lambda x: x.get('timestamp', '2000-01-01 00:00:00')
-    )
+    # 超短线分割
+    scalping_sorted = sorted(scalping_opportunities, key=lambda x: x.get('timestamp', '2000-01-01 00:00:00'))
+    scalping_split = int(len(scalping_sorted) * 0.7)
+    train_scalping = scalping_sorted[:scalping_split]
+    validation_scalping = scalping_sorted[scalping_split:]
     
-    split_point = int(len(all_opportunities_sorted) * 0.7)
-    train_opportunities = all_opportunities_sorted[:split_point]
-    validation_opportunities = all_opportunities_sorted[split_point:]
+    # 波段分割
+    swing_sorted = sorted(swing_opportunities, key=lambda x: x.get('timestamp', '2000-01-01 00:00:00'))
+    swing_split = int(len(swing_sorted) * 0.7)
+    train_swing = swing_sorted[:swing_split]
+    validation_swing = swing_sorted[swing_split:]
     
-    print(f"     训练集: {len(train_opportunities)}个机会（前70%，用于参数优化）")
-    print(f"     验证集: {len(validation_opportunities)}个机会（后30%，用于过拟合检测）")
+    print(f"     ⚡ 超短线训练集: {len(train_scalping)}个，验证集: {len(validation_scalping)}个")
+    print(f"     🌊 波段训练集: {len(train_swing)}个，验证集: {len(validation_swing)}个")
     
-    # 【V8.5.2.4.18】在训练集上进行参数搜索
-    all_opportunities = train_opportunities  # 暂时使用训练集
+    # 兼容性：保留全部数据的sorted版本
+    all_opportunities_sorted = scalping_sorted + swing_sorted
     
     # 【V8.5.2.4.38】收集所有测试结果，用于选择top5
     all_test_results = []

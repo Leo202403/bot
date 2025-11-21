@@ -7193,58 +7193,40 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
     else:
         print(f"     ⚠️  跳过TP/SL测试（无机会数据）")
     
-    # 【V8.5.2.4.39】Phase 2核心任务5：扩展参数组合测试，覆盖更广范围
-    print(f"\n  🎯 【参数组合测试】寻找捕获率最高的参数组合...")
+    # 【V8.5.2.4.89.23】Phase 2核心任务5：分离参数组合测试
+    print(f"\n  🎯 【参数组合测试】分别为超短线和波段寻找最优参数...")
     print(f"     💡 注意：此时使用的是优化权重计算的signal_score")
     if best_scalping_tp_sl or best_swing_tp_sl:
         print(f"     💡 使用TP/SL测试找到的最优值进行计算")
     
-    # 【V8.5.2.4.54】移除TP/SL参数，完全使用测试出的最优值
-    # test_points只控制：R:R、共识、信号分，TP/SL由best_scalping_tp_sl/best_swing_tp_sl决定
-    test_points = [
-        # 第一组：极宽松参数（最大化召回率，测试信号分下限）
-        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 70, 'name': '超宽松-低分'},
-        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 75, 'name': '超宽松'},
-        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '超宽松-标准'},
-        
-        # 第二组：宽松参数（高召回）
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'min_signal_score': 75, 'name': '极宽松'},
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '宽松'},
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'min_signal_score': 85, 'name': '宽松-高分'},
-        {'min_risk_reward': 1.8, 'min_indicator_consensus': 1, 'min_signal_score': 82, 'name': '偏宽松'},
-        
-        # 第三组：平衡参数（R:R递增测试）
-        {'min_risk_reward': 1.8, 'min_indicator_consensus': 2, 'min_signal_score': 80, 'name': '平衡-低R'},
-        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'min_signal_score': 82, 'name': '快速止盈'},
-        {'min_risk_reward': 2.0, 'min_indicator_consensus': 2, 'min_signal_score': 85, 'name': '标准平衡'},
-        {'min_risk_reward': 2.2, 'min_indicator_consensus': 2, 'min_signal_score': 85, 'name': '高质量'},
-        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'min_signal_score': 87, 'name': '高R平衡'},
-        
-        # 第四组：严格参数（高精准，信号分递增测试）
-        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'min_signal_score': 85, 'name': '偏严格-标准'},
-        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'min_signal_score': 87, 'name': '偏严格'},
-        {'min_risk_reward': 2.8, 'min_indicator_consensus': 3, 'min_signal_score': 88, 'name': '严格-中R'},
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'min_signal_score': 88, 'name': '严格'},
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'min_signal_score': 90, 'name': '极严格'},
-        {'min_risk_reward': rr_max, 'min_indicator_consensus': 3, 'min_signal_score': 92, 'name': '超严格'},
-        
-        # 第五组：共振优先（测试高共振+低R的组合）
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 3, 'min_signal_score': 85, 'name': '低R高共振-标准'},
-        {'min_risk_reward': rr_min, 'min_indicator_consensus': 3, 'min_signal_score': 88, 'name': '低R高共振'},
-        {'min_risk_reward': 1.8, 'min_indicator_consensus': 4, 'min_signal_score': 85, 'name': '超高共振'},
-        
-        # 第六组：信号分优先（测试高信号分+低共振的组合）
-        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'min_signal_score': 88, 'name': '高分低共振'},
-        {'min_risk_reward': 2.2, 'min_indicator_consensus': 1, 'min_signal_score': 90, 'name': '超高分低共振'},
-        {'min_risk_reward': 2.5, 'min_indicator_consensus': 1, 'min_signal_score': 92, 'name': '极高分低共振'},
-        
-        # 第七组：R:R优化（测试不同R:R）
-        {'min_risk_reward': 1.5, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '低R-标准'},
-        {'min_risk_reward': 2.0, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '中R-标准'},
-        {'min_risk_reward': 2.5, 'min_indicator_consensus': 2, 'min_signal_score': 85, 'name': '高R-标准'},
+    # 【V8.5.2.4.89.23】为超短线和波段分别定义测试参数
+    # 超短线：更注重信号质量（高信号分），快速进出
+    scalping_test_points = [
+        # 高信号分组合（适合超短线的快速决策）
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '超短-标准'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 85, 'name': '超短-高分'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 2, 'min_signal_score': 82, 'name': '超短-双共振'},
+        {'min_risk_reward': 1.5, 'min_indicator_consensus': 1, 'min_signal_score': 80, 'name': '超短-平衡'},
+        {'min_risk_reward': 1.5, 'min_indicator_consensus': 2, 'min_signal_score': 80, 'name': '超短-严格'},
     ]
     
-    print(f"     📊 将测试{len(test_points)}组参数组合（覆盖R:R 1.0-3.5, 信号分70-92, 共振1-4）")
+    # 波段：更宽松（捕获趋势），可以接受较低信号分
+    swing_test_points = [
+        # 第一组：极宽松参数（最大化召回率）
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 65, 'name': '波段-宽松'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 70, 'name': '波段-标准'},
+        {'min_risk_reward': 1.0, 'min_indicator_consensus': 1, 'min_signal_score': 75, 'name': '波段-偏严'},
+        
+        # 第二组：宽松参数（高召回）
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'min_signal_score': 70, 'name': '波段-宽松R'},
+        {'min_risk_reward': rr_min, 'min_indicator_consensus': 1, 'min_signal_score': 75, 'name': '波段-平衡'},
+        
+        # 第三组：平衡参数
+        {'min_risk_reward': 1.8, 'min_indicator_consensus': 1, 'min_signal_score': 75, 'name': '波段-偏严R'},
+        {'min_risk_reward': 1.8, 'min_indicator_consensus': 2, 'min_signal_score': 75, 'name': '波段-双共振'},
+    ]
+    
+    print(f"     📊 超短线将测试{len(scalping_test_points)}组参数，波段将测试{len(swing_test_points)}组参数")
     
     # 【V8.5.2.4.45】更新test_points_meta，添加更多信息
     test_points_meta['phase1_real_holding'] = {
@@ -7276,40 +7258,161 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         # 【V8.5.2.3】移除降级容错，必须提供confirmed_opportunities
         raise ValueError("【V8.5.2.3】quick_global_search_v8316必须提供confirmed_opportunities，不再支持降级使用market_snapshots")
     
-    # 🔧 V8.5.2.4.33: 修复all_opportunities变量未定义 - 正确的缩进
+    # 【V8.5.2.4.89.23】修复：分别处理超短线和波段机会
     print(f"  ✅ 使用confirmed_opportunities（真实盈利机会）")
-    # 合并超短线和波段机会
-    all_opportunities = (
-        confirmed_opportunities['scalping']['opportunities'] + 
-        confirmed_opportunities['swing']['opportunities']
+    scalping_opportunities = confirmed_opportunities['scalping']['opportunities']
+    swing_opportunities = confirmed_opportunities['swing']['opportunities']
+    print(f"     ✓ 真实盈利机会: 超短线{len(scalping_opportunities)}个 + 波段{len(swing_opportunities)}个 = {len(scalping_opportunities) + len(swing_opportunities)}个")
+    
+    # 【V8.5.2.4.89.23】前向验证：超短线和波段分别分割
+    print(f"\n  📊 【前向验证】超短线和波段分别数据分割（70%训练/30%验证）...")
+    
+    # 超短线分割
+    scalping_sorted = sorted(scalping_opportunities, key=lambda x: x.get('timestamp', '2000-01-01 00:00:00'))
+    scalping_split = int(len(scalping_sorted) * 0.7)
+    train_scalping = scalping_sorted[:scalping_split]
+    validation_scalping = scalping_sorted[scalping_split:]
+    
+    # 波段分割
+    swing_sorted = sorted(swing_opportunities, key=lambda x: x.get('timestamp', '2000-01-01 00:00:00'))
+    swing_split = int(len(swing_sorted) * 0.7)
+    train_swing = swing_sorted[:swing_split]
+    validation_swing = swing_sorted[swing_split:]
+    
+    print(f"     ⚡ 超短线训练集: {len(train_scalping)}个，验证集: {len(validation_scalping)}个")
+    print(f"     🌊 波段训练集: {len(train_swing)}个，验证集: {len(validation_swing)}个")
+    
+    # 【V8.5.2.4.89.23】创建通用参数测试函数
+    def test_strategy_params(opportunities, test_points, strategy_type, best_tp_sl, params_range):
+        """
+        通用参数测试函数：测试不同参数组合的表现
+        
+        Args:
+            opportunities: 机会列表
+            test_points: 参数组合列表
+            strategy_type: 'scalping' 或 'swing'
+            best_tp_sl: 最优TP/SL字典 {'tp': float, 'sl': float}
+            params_range: 参数范围字典
+        
+        Returns:
+            test_results: 测试结果列表
+        """
+        from calculate_actual_profit import calculate_single_actual_profit
+        
+        test_results = []
+        strategy_label = '⚡超短线' if strategy_type == 'scalping' else '🌊波段'
+        
+        for i, test_params in enumerate(test_points):
+            config_variant = {
+                'min_risk_reward': test_params['min_risk_reward'],
+                'min_indicator_consensus': test_params['min_indicator_consensus'],
+                'atr_stop_multiplier': test_params.get('atr_stop_multiplier'),
+                'atr_tp_multiplier': test_params.get('atr_tp_multiplier'),
+                'max_holding_hours': test_params.get('max_holding_hours'),
+                'min_signal_score': test_params.get('min_signal_score', 50)
+            }
+            
+            # 筛选满足参数条件的机会
+            captured_opps = [
+                opp for opp in opportunities
+                if (opp.get('signal_score', 0) >= config_variant.get('min_signal_score', 50) and
+                    opp.get('consensus', 0) >= config_variant.get('min_indicator_consensus', 2))
+            ]
+            
+            if captured_opps:
+                # 使用最优TP/SL或默认值
+                if best_tp_sl:
+                    default_tp = best_tp_sl['tp']
+                    default_sl = best_tp_sl['sl']
+                else:
+                    default_tp = params_range['atr_tp'][1]
+                    default_sl = params_range['atr_sl'][1]
+                default_holding = params_range['max_holding'][1]
+                
+                # 计算每个机会的实际利润
+                for opp in captured_opps:
+                    strategy_params = {
+                        **config_variant,
+                        'atr_tp_multiplier': config_variant.get('atr_tp_multiplier') or default_tp,
+                        'atr_stop_multiplier': config_variant.get('atr_stop_multiplier') or default_sl,
+                        'max_holding_hours': config_variant.get('max_holding_hours') or default_holding
+                    }
+                    
+                    actual_profit = calculate_single_actual_profit(
+                        opp,
+                        strategy_params=strategy_params,
+                        use_dynamic_atr=False
+                    )
+                    opp['_test_actual_profit'] = actual_profit
+                
+                # 统计结果
+                avg_profit = sum([o.get('_test_actual_profit', 0) for o in captured_opps]) / len(captured_opps)
+                capture_rate = len(captured_opps) / len(opportunities) if opportunities else 0
+                
+                # 综合得分
+                composite_score = len(captured_opps) * avg_profit
+                
+                test_results.append({
+                    'params': test_params,
+                    'captured_count': len(captured_opps),
+                    'capture_rate': capture_rate,
+                    'avg_profit': avg_profit,
+                    'composite_score': composite_score,
+                    'name': test_params.get('name', f'组合{i+1}')
+                })
+        
+        return test_results
+    
+    # 【V8.5.2.4.89.23】分别测试超短线和波段
+    print(f"\n  🔍 【分离测试】分别为超短线和波段寻找最优参数...")
+    
+    # 测试超短线
+    print(f"\n  ⚡ 【超短线参数测试】测试{len(scalping_test_points)}组参数...")
+    scalping_results = test_strategy_params(
+        opportunities=train_scalping,
+        test_points=scalping_test_points,
+        strategy_type='scalping',
+        best_tp_sl=best_scalping_tp_sl,
+        params_range=scalping_params_range
     )
-    print(f"     ✓ 真实盈利机会: {len(all_opportunities)}个（超短线{len(confirmed_opportunities['scalping']['opportunities'])} + 波段{len(confirmed_opportunities['swing']['opportunities'])}）")
     
-    # 【V8.5.2.4.18】前向验证：分割训练集和验证集
-    print(f"\n  📊 【前向验证】数据分割（70%训练/30%验证）...")
-    
-    # 按时间排序（确保前向测试，而非随机分割）
-    all_opportunities_sorted = sorted(
-        all_opportunities,
-        key=lambda x: x.get('timestamp', '2000-01-01 00:00:00')
+    # 测试波段
+    print(f"\n  🌊 【波段参数测试】测试{len(swing_test_points)}组参数...")
+    swing_results = test_strategy_params(
+        opportunities=train_swing,
+        test_points=swing_test_points,
+        strategy_type='swing',
+        best_tp_sl=best_swing_tp_sl,
+        params_range=swing_params_range
     )
     
-    split_point = int(len(all_opportunities_sorted) * 0.7)
-    train_opportunities = all_opportunities_sorted[:split_point]
-    validation_opportunities = all_opportunities_sorted[split_point:]
+    # 合并结果用于兼容性
+    all_test_results = scalping_results + swing_results
     
-    print(f"     训练集: {len(train_opportunities)}个机会（前70%，用于参数优化）")
-    print(f"     验证集: {len(validation_opportunities)}个机会（后30%，用于过拟合检测）")
+    # 分别找最优参数
+    if scalping_results:
+        best_scalping_result = max(scalping_results, key=lambda x: x['composite_score'])
+        print(f"\n  🏆 【超短线最优参数】{best_scalping_result['name']}")
+        print(f"     捕获率: {best_scalping_result['capture_rate']*100:.1f}% ({best_scalping_result['captured_count']}个)")
+        print(f"     平均利润: {best_scalping_result['avg_profit']:.2f}%")
+        print(f"     综合得分: {best_scalping_result['composite_score']:.0f}")
+    else:
+        best_scalping_result = None
+        print(f"\n  ⚠️  【超短线】未找到有效参数组合")
     
-    # 【V8.5.2.4.18】在训练集上进行参数搜索
-    all_opportunities = train_opportunities  # 暂时使用训练集
+    if swing_results:
+        best_swing_result = max(swing_results, key=lambda x: x['composite_score'])
+        print(f"\n  🏆 【波段最优参数】{best_swing_result['name']}")
+        print(f"     捕获率: {best_swing_result['capture_rate']*100:.1f}% ({best_swing_result['captured_count']}个)")
+        print(f"     平均利润: {best_swing_result['avg_profit']:.2f}%")
+        print(f"     综合得分: {best_swing_result['composite_score']:.0f}")
+    else:
+        best_swing_result = None
+        print(f"\n  ⚠️  【波段】未找到有效参数组合")
     
-    # 【V8.5.2.4.38】收集所有测试结果，用于选择top5
-    all_test_results = []
-    
-    print(f"\n  🔍 测试{len(test_points)}组战略采样（含signal_score优化）...")
-    
-    for i, test_params in enumerate(test_points):
+    # 【V8.5.2.4.89.23】以下旧代码已废弃，通过if False禁用
+    if False:
+        for i, test_params in enumerate([]):
         # 【V8.5.2.4.54】test_points不再包含TP/SL，使用.get()避免KeyError
         # TP/SL将由后续逻辑从best_scalping_tp_sl/best_swing_tp_sl获取
         config_variant = {
@@ -7630,134 +7733,153 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         print(f"     ⚠️ 无有效测试结果")
         top5_results = []
     
-    print(f"\n  ✅ 快速探索完成:")
-    # V8.5.2.4.59: 修复KeyError，atr_stop_multiplier可能不存在
-    atr_info = f", ATR={best_params['atr_stop_multiplier']:.2f}" if 'atr_stop_multiplier' in best_params else ""
-    print(f"     最优参数: R:R={best_params['min_risk_reward']}, 共识={best_params['min_indicator_consensus']}{atr_info}")
-    print(f"     盈利状态: {'✅ 找到盈利' if found_profitable else '⚠️ 未找到盈利（使用最优亏损点）'}")
+    print(f"\n  ✅ 快速探索完成（分离优化）:")
+    if best_scalping_result:
+        print(f"     ⚡ 超短线最优: 信号分≥{best_scalping_result['params']['min_signal_score']}, 捕获{best_scalping_result['captured_count']}个")
+    if best_swing_result:
+        print(f"     🌊 波段最优: 信号分≥{best_swing_result['params']['min_signal_score']}, 捕获{best_swing_result['captured_count']}个")
     
-    # 【V8.5.2.4.10】计算Phase 2 baseline（供Phase 3使用）
-    # 【V8.5.2.4.20】修复：使用全部数据而非训练集计算baseline
-    # 【V8.5.2.4.22】修复：确保phase2_baseline总是生成，避免Phase 3被跳过
+    # 【V8.5.2.4.89.23】兼容性：构建best_params和found_profitable（使用波段参数作为默认）
+    found_profitable = (best_scalping_result is not None) or (best_swing_result is not None)
+    if best_swing_result:
+        best_params = best_swing_result['params'].copy()
+    elif best_scalping_result:
+        best_params = best_scalping_result['params'].copy()
+    else:
+        best_params = {
+            'min_risk_reward': current_config['global'].get('min_risk_reward', 1.5),
+            'min_indicator_consensus': current_config['global'].get('min_indicator_consensus', 2),
+            'min_signal_score': 70
+        }
+    
+    # 【V8.5.2.4.89.23】计算Phase 2 baseline（分离结构，供Phase 3使用）
     phase2_baseline = None
     
-    print(f"\n  🔍 【调试】Phase 2 baseline生成条件检查:")
-    print(f"     phase1_baseline: {'✓' if phase1_baseline else '✗'}")
-    print(f"     use_confirmed_opps: {'✓' if use_confirmed_opps else '✗'}")
-    print(f"     all_opportunities_sorted: {len(all_opportunities_sorted) if all_opportunities_sorted else 0}个")
+    print(f"\n  🔍 【Phase 2 Baseline生成】分离计算超短线和波段...")
     
-    if phase1_baseline and use_confirmed_opps and all_opportunities_sorted:
-        # 使用最优参数过滤机会，计算baseline（使用全部数据）
-        best_captured_opps = [
-            opp for opp in all_opportunities_sorted
-            if (opp.get('signal_score', 0) >= best_params.get('min_signal_score', 50) and
-                opp.get('consensus', 0) >= best_params.get('min_indicator_consensus', 2))
-        ]
+    if phase1_baseline and use_confirmed_opps and (best_scalping_result or best_swing_result):
+        # 【V8.5.2.4.89.23】分别计算超短线和波段的baseline
         
-        print(f"     过滤后机会: {len(best_captured_opps)}个（信号分>{best_params.get('min_signal_score', 50)}, 共识>{best_params.get('min_indicator_consensus', 2)}）")
-        
-        if best_captured_opps:
-            # 重新计算actual_profit（使用best_params的TP/SL）
-            from calculate_actual_profit import calculate_single_actual_profit
+        # 超短线baseline
+        scalping_baseline_data = None
+        if best_scalping_result and scalping_sorted:
+            scalping_params = best_scalping_result['params']
+            scalping_captured = [
+                opp for opp in scalping_sorted
+                if (opp.get('signal_score', 0) >= scalping_params.get('min_signal_score', 80) and
+                    opp.get('consensus', 0) >= scalping_params.get('min_indicator_consensus', 1))
+            ]
             
-            for opp in best_captured_opps:
-                # 【V8.5.2.4.36】根据signal_type使用差异化参数
-                # 【V8.5.2.4.60】优先使用TP/SL测试找到的最优值
-                signal_type = opp.get('signal_type', 'swing')
+            if scalping_captured:
+                # 重新计算actual_profit
+                from calculate_actual_profit import calculate_single_actual_profit
                 
-                # 根据signal_type使用最优TP/SL（优先）或参数范围中位数（降级）
-                if signal_type == 'scalping':
-                    # 优先使用TP/SL测试的最优值
+                for opp in scalping_captured:
                     if best_scalping_tp_sl:
                         default_tp = best_scalping_tp_sl['tp']
                         default_sl = best_scalping_tp_sl['sl']
                     else:
-                        default_tp = scalping_params_range['atr_tp'][1]  # 降级：2.0
-                        default_sl = scalping_params_range['atr_sl'][2]  # 降级：1.5
-                    default_holding = scalping_params_range['max_holding'][1]  # 12
-                else:
-                    # 优先使用TP/SL测试的最优值
+                        default_tp = scalping_params_range['atr_tp'][1]
+                        default_sl = scalping_params_range['atr_sl'][1]
+                    default_holding = scalping_params_range['max_holding'][1]
+                    
+                    strategy_params = {
+                        **scalping_params,
+                        'atr_tp_multiplier': scalping_params.get('atr_tp_multiplier', default_tp),
+                        'atr_stop_multiplier': scalping_params.get('atr_stop_multiplier', default_sl),
+                        'max_holding_hours': scalping_params.get('max_holding_hours', default_holding)
+                    }
+                    
+                    actual_profit = calculate_single_actual_profit(opp, strategy_params=strategy_params, use_dynamic_atr=False)
+                    opp['_phase2_actual_profit'] = actual_profit
+                
+                scalping_phase1_count = phase1_baseline.get('scalping', {}).get('count', 0)
+                scalping_baseline_data = {
+                    'captured_count': len(scalping_captured),
+                    'capture_rate': len(scalping_captured) / scalping_phase1_count if scalping_phase1_count > 0 else 0,
+                    'avg_profit': sum(o.get('_phase2_actual_profit', 0) for o in scalping_captured) / len(scalping_captured),
+                    'params': scalping_params.copy()
+                }
+                print(f"     ⚡ 超短线: 捕获{len(scalping_captured)}个 ({scalping_baseline_data['capture_rate']*100:.1f}%), 平均利润{scalping_baseline_data['avg_profit']:.2f}%")
+        
+        # 波段baseline
+        swing_baseline_data = None
+        if best_swing_result and swing_sorted:
+            swing_params = best_swing_result['params']
+            swing_captured = [
+                opp for opp in swing_sorted
+                if (opp.get('signal_score', 0) >= swing_params.get('min_signal_score', 70) and
+                    opp.get('consensus', 0) >= swing_params.get('min_indicator_consensus', 1))
+            ]
+            
+            if swing_captured:
+                from calculate_actual_profit import calculate_single_actual_profit
+                
+                for opp in swing_captured:
                     if best_swing_tp_sl:
                         default_tp = best_swing_tp_sl['tp']
                         default_sl = best_swing_tp_sl['sl']
                     else:
-                        default_tp = swing_params_range['atr_tp'][2]  # 降级：6.0
-                        default_sl = swing_params_range['atr_sl'][1]  # 降级：2.5
-                    default_holding = swing_params_range['max_holding'][2]  # 72
+                        default_tp = swing_params_range['atr_tp'][2]
+                        default_sl = swing_params_range['atr_sl'][1]
+                    default_holding = swing_params_range['max_holding'][2]
+                    
+                    strategy_params = {
+                        **swing_params,
+                        'atr_tp_multiplier': swing_params.get('atr_tp_multiplier', default_tp),
+                        'atr_stop_multiplier': swing_params.get('atr_stop_multiplier', default_sl),
+                        'max_holding_hours': swing_params.get('max_holding_hours', default_holding)
+                    }
+                    
+                    actual_profit = calculate_single_actual_profit(opp, strategy_params=strategy_params, use_dynamic_atr=False)
+                    opp['_phase2_actual_profit'] = actual_profit
                 
-                strategy_params = {
-                    **best_params,
-                    'atr_tp_multiplier': best_params.get('atr_tp_multiplier', default_tp),
-                    'atr_stop_multiplier': best_params.get('atr_stop_multiplier', default_sl),
-                    'max_holding_hours': best_params.get('max_holding_hours', default_holding)
+                swing_phase1_count = phase1_baseline.get('swing', {}).get('count', 0)
+                swing_baseline_data = {
+                    'captured_count': len(swing_captured),
+                    'capture_rate': len(swing_captured) / swing_phase1_count if swing_phase1_count > 0 else 0,
+                    'avg_profit': sum(o.get('_phase2_actual_profit', 0) for o in swing_captured) / len(swing_captured),
+                    'params': swing_params.copy()
                 }
-                
-                actual_profit = calculate_single_actual_profit(
-                    opp,
-                    strategy_params=strategy_params,
-                    use_dynamic_atr=False
-                )
-                opp['_phase2_actual_profit'] = actual_profit
-            
-            phase1_total = phase1_baseline.get('scalping', {}).get('count', 0) + phase1_baseline.get('swing', {}).get('count', 0)
-            phase2_capture_rate = len(best_captured_opps) / phase1_total if phase1_total > 0 else 0
-            phase2_avg_profit = sum(o.get('_phase2_actual_profit', 0) for o in best_captured_opps) / len(best_captured_opps)
-            
-            # 【V8.5.2.4.38】Phase 2 baseline扩展：保存学到的基础参数 + top5参数组合
-            # 【V8.5.2.4.69】修复：best_params需要包含optimal_tp_sl参数，供Phase 4回退使用
-            phase2_params_with_tp_sl = best_params.copy()
-            optimal_tp_sl = test_points_meta.get('optimal_tp_sl', {})
-            if optimal_tp_sl:
-                # 合并超短线和波段的TP/SL参数（取平均值作为全局默认值）
-                scalping_tp = optimal_tp_sl.get('scalping', {}).get('atr_tp_multiplier', 12.0)
-                scalping_sl = optimal_tp_sl.get('scalping', {}).get('atr_stop_multiplier', 2.0)
-                swing_tp = optimal_tp_sl.get('swing', {}).get('atr_tp_multiplier', 15.0)
-                swing_sl = optimal_tp_sl.get('swing', {}).get('atr_stop_multiplier', 2.5)
-                # 使用波段参数作为默认值（更保守）
-                phase2_params_with_tp_sl['atr_tp_multiplier'] = swing_tp
-                phase2_params_with_tp_sl['atr_stop_multiplier'] = swing_sl
-                # 保存分离的参数供Phase 3使用
-                phase2_params_with_tp_sl['scalping_tp_sl'] = {'tp': scalping_tp, 'sl': scalping_sl}
-                phase2_params_with_tp_sl['swing_tp_sl'] = {'tp': swing_tp, 'sl': swing_sl}
-            
+                print(f"     🌊 波段: 捕获{len(swing_captured)}个 ({swing_baseline_data['capture_rate']*100:.1f}%), 平均利润{swing_baseline_data['avg_profit']:.2f}%")
+        
+        # 构建分离的phase2_baseline
+        if scalping_baseline_data or swing_baseline_data:
+            # 【V8.5.2.4.89.23】新的分离结构
             phase2_baseline = {
-                'captured_count': len(best_captured_opps),
-                'capture_rate': phase2_capture_rate,
-                'avg_profit': phase2_avg_profit,
-                'params': phase2_params_with_tp_sl,
-                # 【V8.5.2.4.38】从Phase 1学到的真实特征 + 最优参数组合
+                'scalping': scalping_baseline_data,
+                'swing': swing_baseline_data,
+                # 保留全局learned_features用于兼容性
                 'learned_features': {
-                    # 持仓时长
                     'scalping_real_holding_hours': scalping_real_holding,
                     'swing_real_holding_hours': swing_real_holding,
-                    # 【V8.5.2.4.83】密度信息
                     'scalping_avg_density': scalping_avg_density,
                     'swing_avg_density': swing_avg_density,
                     'high_density_threshold': phase1_baseline.get('high_density_threshold', 7.1) if phase1_baseline else 7.1,
-                    # 【V8.5.2.4.83】利润信息
                     'scalping_avg_profit': scalping_avg_profit,
                     'swing_avg_profit': swing_avg_profit,
-                    # 参数范围
                     'scalping_params_range': scalping_params_range,
                     'swing_params_range': swing_params_range,
                     'scalping_weight_candidates': scalping_weight_candidates,
                     'swing_weight_candidates': swing_weight_candidates,
-                    'best_scalping_weights': best_scalping_weights,  # 【V8.5.2.4.38】最优权重
-                    'best_swing_weights': best_swing_weights,        # 【V8.5.2.4.38】最优权重
-                    'top5_param_combos': top5_results,               # 【V8.5.2.4.38】top5参数组合
-                    'phase1_baseline': phase1_baseline,              # 完整的Phase 1数据
-                    'optimal_tp_sl': test_points_meta.get('optimal_tp_sl', {})  # 【V8.5.2.4.60】最优TP/SL
+                    'best_scalping_weights': best_scalping_weights,
+                    'best_swing_weights': best_swing_weights,
+                    'top5_param_combos': all_test_results[:5] if len(all_test_results) > 5 else all_test_results,
+                    'phase1_baseline': phase1_baseline,
+                    'optimal_tp_sl': test_points_meta.get('optimal_tp_sl', {})
                 }
             }
             
-            print(f"\n  📊 Phase 2 baseline（供Phase 3使用）:")
-            print(f"     捕获: {len(best_captured_opps)}个 ({phase2_capture_rate*100:.1f}%)")
-            print(f"     平均利润: {phase2_avg_profit:.2f}%")
+            print(f"\n  📊 Phase 2 baseline（分离结构，供Phase 3使用）:")
+            if scalping_baseline_data:
+                print(f"     ⚡ 超短线: 捕获{scalping_baseline_data['captured_count']}个 ({scalping_baseline_data['capture_rate']*100:.1f}%), 利润{scalping_baseline_data['avg_profit']:.2f}%")
+            if swing_baseline_data:
+                print(f"     🌊 波段: 捕获{swing_baseline_data['captured_count']}个 ({swing_baseline_data['capture_rate']*100:.1f}%), 利润{swing_baseline_data['avg_profit']:.2f}%")
             print(f"\n  💾 【Phase 2学习成果】")
             print(f"     ⚡ 超短线: 持仓{scalping_real_holding:.1f}h | 密度{scalping_avg_density:.1f} | 利润{scalping_avg_profit:.1f}%")
             print(f"     🌊 波段: 持仓{swing_real_holding:.1f}h | 密度{swing_avg_density:.1f} | 利润{swing_avg_profit:.1f}%")
             print(f"     🎯 高密度阈值: {phase1_baseline.get('high_density_threshold', 7.1) if phase1_baseline else 7.1:.1f}")
-            print(f"     🏆 Top5参数组合已保存（供Phase 3使用）")
+            print(f"     🏆 测试组合已保存（供Phase 3使用）")
             
             # 【V8.5.2.4.80】保存Phase 2学习成果到config
             # 目的：保留learned_features供下次回测参考，但不保存完整参数
@@ -11021,62 +11143,31 @@ def analyze_and_adjust_params():
                     'swing_total_profit': swing_bl.get('count', 0) * swing_bl.get('avg_objective_profit', 0)
                 }
             
-            # Phase 2数据（参数探索）
+            # Phase 2数据（参数探索）【V8.5.2.4.89.23】现在直接使用分离结构
             phase2_data = {}
             if phase2_baseline:
-                # 从phase2_baseline中提取分离的数据
-                # 注意：Phase 2可能没有完全分离，需要从learned_features中提取
-                learned_features = phase2_baseline.get('learned_features', {})
-                phase1_from_p2 = learned_features.get('phase1_baseline', {})
+                scalping_p2 = phase2_baseline.get('scalping', {})
+                swing_p2 = phase2_baseline.get('swing', {})
                 
-                # 尝试从Phase 2的捕获结果中分离超短线和波段
-                # 如果没有分离数据，使用整体数据作为估算
-                total_capture_rate = phase2_baseline.get('capture_rate', 0) * 100
-                total_avg_profit = phase2_baseline.get('avg_profit', 0)
-                total_captured = phase2_baseline.get('captured_count', 0)
-                
-                # 【V8.5.2.4.89.22修复】根据Phase 1的实际比例和利润率来估算Phase 2的分离数据
-                # Phase 2是全局优化，没有分离，但为了邮件显示我们基于Phase 1估算
-                if phase1_data:
-                    p1_scalping_count = phase1_data.get('scalping_count', 0)
-                    p1_swing_count = phase1_data.get('swing_count', 0)
-                    p1_scalping_profit = phase1_data.get('scalping_profit', total_avg_profit)
-                    p1_swing_profit = phase1_data.get('swing_profit', total_avg_profit)
-                    p1_total = p1_scalping_count + p1_swing_count
-                    
-                    if p1_total > 0:
-                        # 按Phase 1的比例分配Phase 2的捕获数量
-                        scalping_ratio = p1_scalping_count / p1_total
-                        swing_ratio = p1_swing_count / p1_total
-                        
-                        estimated_scalping_count = int(total_captured * scalping_ratio)
-                        estimated_swing_count = total_captured - estimated_scalping_count
-                        
-                        # 【V8.5.2.4.89.22】使用Phase 1的利润率来估算分离利润
-                        phase2_data = {
-                            'scalping_capture': total_capture_rate * scalping_ratio,  # 按比例分配捕获率
-                            'scalping_profit': p1_scalping_profit if p1_scalping_profit > 0 else total_avg_profit,
-                            'scalping_count': estimated_scalping_count,
-                            'swing_capture': total_capture_rate * swing_ratio,
-                            'swing_profit': p1_swing_profit if p1_swing_profit > 0 else total_avg_profit,
-                            'swing_count': estimated_swing_count,
-                            # 总利润：使用Phase 1的利润率
-                            'scalping_total_profit': estimated_scalping_count * (p1_scalping_profit if p1_scalping_profit > 0 else total_avg_profit),
-                            'swing_total_profit': estimated_swing_count * (p1_swing_profit if p1_swing_profit > 0 else total_avg_profit)
-                        }
-                    else:
-                        # 降级方案：各占一半
-                        phase2_data = {
-                            'scalping_capture': total_capture_rate / 2,
-                            'scalping_profit': total_avg_profit,
-                            'scalping_count': total_captured // 2,
-                            'swing_capture': total_capture_rate / 2,
-                            'swing_profit': total_avg_profit,
-                            'swing_count': total_captured - (total_captured // 2),
-                            'scalping_total_profit': (total_captured // 2) * total_avg_profit,
-                            'swing_total_profit': (total_captured - (total_captured // 2)) * total_avg_profit
-                        }
+                # 如果有分离数据，直接使用
+                if scalping_p2 or swing_p2:
+                    phase2_data = {
+                        'scalping_capture': scalping_p2.get('capture_rate', 0) * 100 if scalping_p2 else 0,
+                        'scalping_profit': scalping_p2.get('avg_profit', 0) if scalping_p2 else 0,
+                        'scalping_count': scalping_p2.get('captured_count', 0) if scalping_p2 else 0,
+                        'swing_capture': swing_p2.get('capture_rate', 0) * 100 if swing_p2 else 0,
+                        'swing_profit': swing_p2.get('avg_profit', 0) if swing_p2 else 0,
+                        'swing_count': swing_p2.get('captured_count', 0) if swing_p2 else 0,
+                        # 总利润
+                        'scalping_total_profit': scalping_p2.get('captured_count', 0) * scalping_p2.get('avg_profit', 0) if scalping_p2 else 0,
+                        'swing_total_profit': swing_p2.get('captured_count', 0) * swing_p2.get('avg_profit', 0) if swing_p2 else 0
+                    }
                 else:
+                    # 兼容旧格式（如果phase2_baseline没有分离结构）
+                    total_capture_rate = phase2_baseline.get('capture_rate', 0) * 100
+                    total_avg_profit = phase2_baseline.get('avg_profit', 0)
+                    total_captured = phase2_baseline.get('captured_count', 0)
+                    
                     # 降级方案：各占一半
                     phase2_data = {
                         'scalping_capture': total_capture_rate / 2,
