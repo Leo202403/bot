@@ -11214,21 +11214,21 @@ def analyze_and_adjust_params():
                     }
                 else:
                     # 兼容旧格式（如果phase2_baseline没有分离结构）
-                total_capture_rate = phase2_baseline.get('capture_rate', 0) * 100
-                total_avg_profit = phase2_baseline.get('avg_profit', 0)
-                total_captured = phase2_baseline.get('captured_count', 0)
-                
+                    total_capture_rate = phase2_baseline.get('capture_rate', 0) * 100
+                    total_avg_profit = phase2_baseline.get('avg_profit', 0)
+                    total_captured = phase2_baseline.get('captured_count', 0)
+                    
                     # 降级方案：各占一半
-                phase2_data = {
+                    phase2_data = {
                         'scalping_capture': total_capture_rate / 2,
-                    'scalping_profit': total_avg_profit,
-                    'scalping_count': total_captured // 2,
+                        'scalping_profit': total_avg_profit,
+                        'scalping_count': total_captured // 2,
                         'swing_capture': total_capture_rate / 2,
-                    'swing_profit': total_avg_profit,
-                    'swing_count': total_captured - (total_captured // 2),
-                    'scalping_total_profit': (total_captured // 2) * total_avg_profit,
-                    'swing_total_profit': (total_captured - (total_captured // 2)) * total_avg_profit
-                }
+                        'swing_profit': total_avg_profit,
+                        'swing_count': total_captured - (total_captured // 2),
+                        'scalping_total_profit': (total_captured // 2) * total_avg_profit,
+                        'swing_total_profit': (total_captured - (total_captured // 2)) * total_avg_profit
+                    }
             
             # Phase 3数据（分离优化）
             phase3_data = {}
