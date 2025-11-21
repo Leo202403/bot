@@ -9898,7 +9898,8 @@ def analyze_and_adjust_params():
                 yesterday_closed_trades,  # 🔧 V8.3.25.12: 改用yesterday_closed_trades
                 kline_snapshots,
                 ai_decisions_for_entry,  # 🔧 V8.3.25.12: 传入加载的AI决策
-                yesterday_date_formatted
+                yesterday_date_formatted,
+                confirmed_opportunities  # 🔧 恢复3517ec1: 传入Phase 1确认的机会
             )
             # V2会自动打印统计信息和改进建议
         except Exception as e:
