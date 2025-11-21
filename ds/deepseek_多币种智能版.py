@@ -6793,23 +6793,35 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     opp['_weight_test_score'] = new_score
                     recalc_count += 1
             
-            # 【V8.5.2.4.47】降低信号分阈值，从75降至60，避免过度过滤
-            # （因为客观机会本身已经是盈利的，不需要太严格的信号分过滤）
+            # 【V8.5.2.4.89.62】新的评估标准：让黄金机会尽量得高分
+            # 目标：Phase 1筛选的高利润机会（黄金标准）应该得高分（接近100）
+            
+            # 1. 计算所有黄金机会的平均信号分（越高越好）
+            golden_scores = [o.get('_weight_test_score', 0) for o in scalping_opps if o.get('_weight_test_score', 0) > 0]
+            avg_golden_score = sum(golden_scores) / len(golden_scores) if golden_scores else 0
+            
+            # 2. 计算高利润机会（top 30%）的平均分（重点优化高质量机会）
+            sorted_opps = sorted(scalping_opps, key=lambda x: x.get('objective_profit', 0), reverse=True)
+            top30_count = max(1, int(len(sorted_opps) * 0.3))
+            top30_scores = [o.get('_weight_test_score', 0) for o in sorted_opps[:top30_count] if o.get('_weight_test_score', 0) > 0]
+            avg_top30_score = sum(top30_scores) / len(top30_scores) if top30_scores else 0
+            
+            # 3. 计算评分区分度（标准差）- 希望保持适度区分，不要所有机会都一样分
+            import statistics
+            score_std = statistics.stdev(golden_scores) if len(golden_scores) > 1 else 0
+            
+            # 4. 综合评分：主要看黄金机会的平均分，额外奖励top30%的高分
+            # avg_golden_score: 60-100分 → 归一化到0.6-1.0
+            # avg_top30_score: 60-100分 → 归一化到0.6-1.0
+            # score_std: 希望在10-20之间，过高或过低都惩罚
+            score = (avg_golden_score / 100) * 0.5 + (avg_top30_score / 100) * 0.4 + (1 - abs(score_std - 15) / 15) * 0.1
+            
+            # 旧的捕获率评估（用于输出对比）
             captured = [o for o in scalping_opps if o.get('_weight_test_score', 0) >= 60]
             capture_rate = len(captured) / phase1_scalping_count if phase1_scalping_count > 0 else 0
+            avg_profit = sum(o.get('objective_profit', 0) for o in captured) / len(captured) if captured else 0
             
-            # 计算平均利润
-            if captured:
-                avg_profit = sum(o.get('objective_profit', 0) for o in captured) / len(captured)
-            else:
-                avg_profit = 0
-            
-            # 综合得分：捕获率60% + 利润40%（与Phase 2评分一致）
-            phase1_avg = phase1_baseline.get('scalping', {}).get('avg_objective_profit', 1.0)
-            profit_ratio = avg_profit / phase1_avg if phase1_avg > 0 else 0
-            score = capture_rate * 0.6 + profit_ratio * 0.4
-            
-            print(f"     #{idx} {weight_config['name']:12s}: 捕获{len(captured)}/{phase1_scalping_count}({capture_rate*100:5.1f}%) | 利润{avg_profit:.2f}% | 得分{score:.3f}")
+            print(f"     #{idx} {weight_config['name']:12s}: 平均分{avg_golden_score:.1f} | Top30%:{avg_top30_score:.1f} | 区分度{score_std:.1f} | 综合{score:.3f}")
             
             if score > best_scalping_score:
                 best_scalping_score = score
@@ -6848,22 +6860,32 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     opp['_weight_test_score'] = new_score
                     recalc_count += 1
             
-            # 【V8.5.2.4.47】降低信号分阈值，从75降至60
+            # 【V8.5.2.4.89.62】新的评估标准：让黄金机会尽量得高分
+            # 目标：Phase 1筛选的高利润机会（黄金标准）应该得高分（接近100）
+            
+            # 1. 计算所有黄金机会的平均信号分（越高越好）
+            golden_scores = [o.get('_weight_test_score', 0) for o in swing_opps if o.get('_weight_test_score', 0) > 0]
+            avg_golden_score = sum(golden_scores) / len(golden_scores) if golden_scores else 0
+            
+            # 2. 计算高利润机会（top 30%）的平均分（重点优化高质量机会）
+            sorted_opps = sorted(swing_opps, key=lambda x: x.get('objective_profit', 0), reverse=True)
+            top30_count = max(1, int(len(sorted_opps) * 0.3))
+            top30_scores = [o.get('_weight_test_score', 0) for o in sorted_opps[:top30_count] if o.get('_weight_test_score', 0) > 0]
+            avg_top30_score = sum(top30_scores) / len(top30_scores) if top30_scores else 0
+            
+            # 3. 计算评分区分度（标准差）
+            import statistics
+            score_std = statistics.stdev(golden_scores) if len(golden_scores) > 1 else 0
+            
+            # 4. 综合评分：主要看黄金机会的平均分，额外奖励top30%的高分
+            score = (avg_golden_score / 100) * 0.5 + (avg_top30_score / 100) * 0.4 + (1 - abs(score_std - 15) / 15) * 0.1
+            
+            # 旧的捕获率评估（用于输出对比）
             captured = [o for o in swing_opps if o.get('_weight_test_score', 0) >= 60]
             capture_rate = len(captured) / phase1_swing_count if phase1_swing_count > 0 else 0
+            avg_profit = sum(o.get('objective_profit', 0) for o in captured) / len(captured) if captured else 0
             
-            # 计算平均利润
-            if captured:
-                avg_profit = sum(o.get('objective_profit', 0) for o in captured) / len(captured)
-            else:
-                avg_profit = 0
-            
-            # 综合得分
-            phase1_avg = phase1_baseline.get('swing', {}).get('avg_objective_profit', 1.0)
-            profit_ratio = avg_profit / phase1_avg if phase1_avg > 0 else 0
-            score = capture_rate * 0.6 + profit_ratio * 0.4
-            
-            print(f"     #{idx} {weight_config['name']:12s}: 捕获{len(captured)}/{phase1_swing_count}({capture_rate*100:5.1f}%) | 利润{avg_profit:.2f}% | 得分{score:.3f}")
+            print(f"     #{idx} {weight_config['name']:12s}: 平均分{avg_golden_score:.1f} | Top30%:{avg_top30_score:.1f} | 区分度{score_std:.1f} | 综合{score:.3f}")
             
             if score > best_swing_score:
                 best_swing_score = score
