@@ -6630,25 +6630,33 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         scalping_avg_profit = phase1_baseline.get('scalping', {}).get('avg_objective_profit', 15.0)
         swing_avg_profit = phase1_baseline.get('swing', {}).get('avg_objective_profit', 16.0)
         
+        # 【V8.5.2.4.89.22】优先从phase1_baseline获取密度（Phase 1.4的最新统计）
+        scalping_avg_density = phase1_baseline.get('scalping', {}).get('avg_density', 10.0)
+        swing_avg_density = phase1_baseline.get('swing', {}).get('avg_density', 1.0)
+        
         # 从confirmed_opportunities提取ATR中位数
         scalping_opps = confirmed_opportunities.get('scalping', {}).get('opportunities', [])
         swing_opps = confirmed_opportunities.get('swing', {}).get('opportunities', [])
         
         if scalping_opps:
             scalping_atrs = [o.get('atr', 0) for o in scalping_opps if o.get('atr', 0) > 0]
-            scalping_densities = [o.get('profit_density', 0) for o in scalping_opps if o.get('profit_density', 0) > 0]
+            # 【V8.5.2.4.89.22】如果phase1_baseline没有密度，再从机会数据计算
+            if scalping_avg_density == 10.0:  # 默认值说明phase1_baseline没提供
+                scalping_densities = [o.get('profit_density', 0) for o in scalping_opps if o.get('profit_density', 0) > 0]
+                if scalping_densities:
+                    scalping_avg_density = np.mean(scalping_densities)
             if scalping_atrs:
                 scalping_median_atr = np.median(scalping_atrs)
-            if scalping_densities:
-                scalping_avg_density = np.mean(scalping_densities)
         
         if swing_opps:
             swing_atrs = [o.get('atr', 0) for o in swing_opps if o.get('atr', 0) > 0]
-            swing_densities = [o.get('profit_density', 0) for o in swing_opps if o.get('profit_density', 0) > 0]
+            # 【V8.5.2.4.89.22】如果phase1_baseline没有密度，再从机会数据计算
+            if swing_avg_density == 1.0:  # 默认值说明phase1_baseline没提供
+                swing_densities = [o.get('profit_density', 0) for o in swing_opps if o.get('profit_density', 0) > 0]
+                if swing_densities:
+                    swing_avg_density = np.mean(swing_densities)
             if swing_atrs:
                 swing_median_atr = np.median(swing_atrs)
-            if swing_densities:
-                swing_avg_density = np.mean(swing_densities)
     
     # 计算required_tp_multiplier（需要多少倍ATR才能捕获Phase 1的利润）
     scalping_required_tp = scalping_avg_profit / scalping_median_atr if scalping_median_atr > 0 else 10.0
@@ -11026,11 +11034,13 @@ def analyze_and_adjust_params():
                 total_avg_profit = phase2_baseline.get('avg_profit', 0)
                 total_captured = phase2_baseline.get('captured_count', 0)
                 
-                # 【修复】根据Phase 1的实际比例来估算Phase 2的分离数据
-                # 而不是简单的各占一半
+                # 【V8.5.2.4.89.22修复】根据Phase 1的实际比例和利润率来估算Phase 2的分离数据
+                # Phase 2是全局优化，没有分离，但为了邮件显示我们基于Phase 1估算
                 if phase1_data:
                     p1_scalping_count = phase1_data.get('scalping_count', 0)
                     p1_swing_count = phase1_data.get('swing_count', 0)
+                    p1_scalping_profit = phase1_data.get('scalping_profit', total_avg_profit)
+                    p1_swing_profit = phase1_data.get('swing_profit', total_avg_profit)
                     p1_total = p1_scalping_count + p1_swing_count
                     
                     if p1_total > 0:
@@ -11041,24 +11051,25 @@ def analyze_and_adjust_params():
                         estimated_scalping_count = int(total_captured * scalping_ratio)
                         estimated_swing_count = total_captured - estimated_scalping_count
                         
+                        # 【V8.5.2.4.89.22】使用Phase 1的利润率来估算分离利润
                         phase2_data = {
-                            'scalping_capture': total_capture_rate,  # 整体捕获率
-                            'scalping_profit': total_avg_profit,
+                            'scalping_capture': total_capture_rate * scalping_ratio,  # 按比例分配捕获率
+                            'scalping_profit': p1_scalping_profit if p1_scalping_profit > 0 else total_avg_profit,
                             'scalping_count': estimated_scalping_count,
-                            'swing_capture': total_capture_rate,
-                            'swing_profit': total_avg_profit,
+                            'swing_capture': total_capture_rate * swing_ratio,
+                            'swing_profit': p1_swing_profit if p1_swing_profit > 0 else total_avg_profit,
                             'swing_count': estimated_swing_count,
-                            # 总利润
-                            'scalping_total_profit': estimated_scalping_count * total_avg_profit,
-                            'swing_total_profit': estimated_swing_count * total_avg_profit
+                            # 总利润：使用Phase 1的利润率
+                            'scalping_total_profit': estimated_scalping_count * (p1_scalping_profit if p1_scalping_profit > 0 else total_avg_profit),
+                            'swing_total_profit': estimated_swing_count * (p1_swing_profit if p1_swing_profit > 0 else total_avg_profit)
                         }
                     else:
                         # 降级方案：各占一半
                         phase2_data = {
-                            'scalping_capture': total_capture_rate,
+                            'scalping_capture': total_capture_rate / 2,
                             'scalping_profit': total_avg_profit,
                             'scalping_count': total_captured // 2,
-                            'swing_capture': total_capture_rate,
+                            'swing_capture': total_capture_rate / 2,
                             'swing_profit': total_avg_profit,
                             'swing_count': total_captured - (total_captured // 2),
                             'scalping_total_profit': (total_captured // 2) * total_avg_profit,
@@ -11067,10 +11078,10 @@ def analyze_and_adjust_params():
                 else:
                     # 降级方案：各占一半
                     phase2_data = {
-                        'scalping_capture': total_capture_rate,
+                        'scalping_capture': total_capture_rate / 2,
                         'scalping_profit': total_avg_profit,
                         'scalping_count': total_captured // 2,
-                        'swing_capture': total_capture_rate,
+                        'swing_capture': total_capture_rate / 2,
                         'swing_profit': total_avg_profit,
                         'swing_count': total_captured - (total_captured // 2),
                         'scalping_total_profit': (total_captured // 2) * total_avg_profit,
@@ -23632,18 +23643,21 @@ def analyze_separated_opportunities(market_snapshots, old_config):
         }
         
         # 【V8.5.2.4.48】Phase 1 baseline统计（供Phase 2使用）
+        # 【V8.5.2.4.89.22】添加密度统计
         phase1_baseline = {
             'scalping': {
                 'count': len(scalping_opps),
                 'avg_objective_profit': np.mean([o.get('objective_profit', 0) for o in scalping_opps]) if scalping_opps else 0,
                 'avg_holding_hours': np.mean([o.get('holding_hours', 0) for o in scalping_opps if o.get('holding_hours')]) if scalping_opps else 0,
-                'median_holding_hours': np.median([o.get('holding_hours', 0) for o in scalping_opps if o.get('holding_hours')]) if scalping_opps else 0
+                'median_holding_hours': np.median([o.get('holding_hours', 0) for o in scalping_opps if o.get('holding_hours')]) if scalping_opps else 0,
+                'avg_density': np.mean([o.get('profit_density', 0) for o in scalping_opps]) if scalping_opps else 0
             },
             'swing': {
                 'count': len(swing_opps),
                 'avg_objective_profit': np.mean([o.get('objective_profit', 0) for o in swing_opps]) if swing_opps else 0,
                 'avg_holding_hours': np.mean([o.get('holding_hours', 0) for o in swing_opps if o.get('holding_hours')]) if swing_opps else 0,
-                'median_holding_hours': np.median([o.get('holding_hours', 0) for o in swing_opps if o.get('holding_hours')]) if swing_opps else 0
+                'median_holding_hours': np.median([o.get('holding_hours', 0) for o in swing_opps if o.get('holding_hours')]) if swing_opps else 0,
+                'avg_density': np.mean([o.get('profit_density', 0) for o in swing_opps]) if swing_opps else 0
             }
         }
         
