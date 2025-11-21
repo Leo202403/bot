@@ -20318,14 +20318,35 @@ def _execute_single_open_action_v55(
                 needs_adjustment = True
                 adjustment_reason = "名义价值不足（考虑精度舍入）"
                 
-                # 计算满足要求的最小amount
-                # 添加1.2倍安全边际，确保舍入后仍满足要求
-                target_notional = min_notional_required * 1.2
+                # 【V8.5.2.4.89.31】修复：确保舍入后名义价值仍满足要求
+                # 策略：逐步增加amount直到舍入后名义价值≥min_notional_required
+                target_notional = min_notional_required * 1.05  # 降低安全边际到1.05
                 min_amount_needed = target_notional / entry_price
+                
+                # 获取精度信息
+                try:
+                    market_info = exchange.market(symbol)
+                    amount_precision = market_info['precision']['amount']
+                    # 计算精度单位（比如precision=3 -> step=0.001）
+                    if isinstance(amount_precision, int):
+                        precision_step = 10 ** (-amount_precision)
+                    else:
+                        precision_step = amount_precision
+                except:
+                    precision_step = 0.001  # 默认精度
+                
+                # 先舍入
                 try:
                     suggested_amount = float(exchange.amount_to_precision(symbol, min_amount_needed))
                 except:
-                    suggested_amount = math.ceil(min_amount_needed * 1000) / 1000
+                    suggested_amount = math.ceil(min_amount_needed / precision_step) * precision_step
+                
+                # 检查舍入后名义价值，不够就加一个精度单位
+                max_attempts = 10
+                attempts = 0
+                while suggested_amount * entry_price < min_notional_required and attempts < max_attempts:
+                    suggested_amount += precision_step
+                    attempts += 1
                 
                 # 根据建议的amount计算仓位
                 suggested_position = (suggested_amount * entry_price) / leverage
@@ -20334,7 +20355,7 @@ def _execute_single_open_action_v55(
                 print(f"计算数量: {calculated_amount:.6f} → 舍入后: {rounded_amount:.6f}")
                 print(f"舍入后名义价值: ${actual_notional:.2f}")
                 print(f"最小要求(ccxt): >${min_notional_required:.2f}")
-                print(f"建议数量: {suggested_amount:.6f} (名义价值: ${suggested_amount * entry_price:.2f})")
+                print(f"建议数量: {suggested_amount:.6f} (名义价值: ${suggested_amount * entry_price:.2f}) [精度步长: {precision_step}]")
                 print(f"建议仓位: ${suggested_position:.2f}U")
             
             elif min_amount and amount < min_amount:
