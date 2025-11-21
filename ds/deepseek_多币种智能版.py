@@ -16625,8 +16625,8 @@ Final leverage = min(sum, 5)
             "reason": "[Must be complete] 【V7.9必须】Signal Mode (Scalping/Swing) + Rationale + YTC Signal Type + Trapped Traders Psychology + S/R Strength/Context + Leverage Rationale",
             "signal_mode": "scalping|swing",  // 【V7.9新增必填】Scalping (15-45min快速进出) or Swing (2-24h波段持有)
             "expected_holding_hours": 0.5,  // 【V7.9新增】预期持仓时间（小时）
-            "stop_loss_price": 108375.00,
-            "take_profit_price": 110125.00,
+            "stop_loss_price": 108375.00,  // ⚠️ MUST BE A CALCULATED NUMBER, NOT A FORMULA (e.g. 108375.00, NOT 100000 + 8375)
+            "take_profit_price": 110125.00,  // ⚠️ MUST BE A CALCULATED NUMBER, NOT A FORMULA
             "exit_plan": {{
                 "stop_loss_condition": "[Hard SL] 1H Strong Support/Resistance - ATR Buffer (Premise Invalidation Point)",
                 "take_profit_condition": "[Hard TP] 1H Strong Resistance/Support - ATR Buffer (Before Opposite Order Flow)",
@@ -16673,7 +16673,8 @@ While code executes as single position, AI should plan multi-part management:
 7. Stop/TP based on optimized ATR multipliers (see【V8.5】section above)
 8. Available capital: {max_total_position:.0f}U
 9. Current parameters auto-optimized from history, strictly follow EXIT RULES to maintain R:R
-10. **V5.5 Smart Position Sizing**:
+10. **🚨 CRITICAL JSON Format Requirement**: stop_loss_price and take_profit_price MUST be calculated numeric values (e.g. 108375.00), NEVER use mathematical expressions (e.g. 100000 + 8375 or 823.42 + (17.2 * 2.5))
+11. **V5.5 Smart Position Sizing**:
     - position_size_usd can be 0, system auto-allocates 15-50% based on signal
     - leverage can be suggested (1-5), system also suggests based on score
     - Strong signal (🚀🚀🚀) → System auto 50% position + 5x leverage
@@ -16771,6 +16772,40 @@ The regime recommendation is advisory - final decision depends on specific coin 
             import re
             # 移除无效的控制字符（保留 \n \r \t）
             json_str = re.sub(r'[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f]', '', json_str)
+            
+            # 🔧 【V8.5.2.4.89.26】修复AI返回数学表达式的问题
+            # 检测并计算 "stop_loss_price": 数值 + (数值 * 数值) 这样的模式
+            def fix_math_expressions(json_text):
+                """将JSON中的数学表达式替换为计算结果"""
+                # 匹配类似 "stop_loss_price": 823.42 + (17.2 * 2.5), 的模式
+                pattern = r'("(?:stop_loss_price|take_profit_price)":\s*)([0-9.]+)\s*([+\-*/])\s*\(([0-9.]+)\s*\*\s*([0-9.]+)\)\s*,'
+                
+                def calculate_expression(match):
+                    field = match.group(1)  # "stop_loss_price": 
+                    base = float(match.group(2))  # 823.42
+                    operator = match.group(3)  # +
+                    val1 = float(match.group(4))  # 17.2
+                    val2 = float(match.group(5))  # 2.5
+                    
+                    # 计算括号内的乘法
+                    inner_result = val1 * val2
+                    
+                    # 计算最终结果
+                    if operator == '+':
+                        result = base + inner_result
+                    elif operator == '-':
+                        result = base - inner_result
+                    elif operator == '*':
+                        result = base * inner_result
+                    elif operator == '/':
+                        result = base / inner_result if inner_result != 0 else base
+                    
+                    print(f"🔧 修复表达式: {base} {operator} ({val1} * {val2}) = {result:.2f}")
+                    return f'{field}{result:.2f},'
+                
+                return re.sub(pattern, calculate_expression, json_text)
+            
+            json_str = fix_math_expressions(json_str)
             
             # 🔧 尝试修复被截断的JSON
             if finish_reason == 'length':
