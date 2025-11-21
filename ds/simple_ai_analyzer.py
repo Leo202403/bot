@@ -81,11 +81,23 @@ def generate_simple_ai_reflection(entry_analysis, exit_analysis, ai_decisions):
         # 解析结果
         result_text = response.choices[0].message.content.strip()
         
+        # 【修复】检查是否为空
+        if not result_text:
+            raise ValueError("AI返回空内容，可能是模型限制或网络问题")
+        
+        # 打印调试信息（前200字符）
+        if len(result_text) < 50:  # 如果内容太短，打印完整内容
+            print(f"[调试] AI响应: {result_text}")
+        
         # 提取JSON
         if "```json" in result_text:
             result_text = result_text.split("```json")[1].split("```")[0].strip()
         elif "```" in result_text:
             result_text = result_text.split("```")[1].split("```")[0].strip()
+        
+        # 再次检查提取后的内容
+        if not result_text:
+            raise ValueError("提取JSON后为空，AI可能未返回有效JSON")
         
         ai_insights = json.loads(result_text)
         

@@ -95,7 +95,7 @@ def analyze_entry_timing_v2(
     ].copy()
     
     if yesterday_snapshots.empty:
-        # print(f"ℹ️ 昨日市场快照数据不足（跳过开仓时机分析）")  # 精简日志
+        print(f"ℹ️ 昨日市场快照数据不足，跳过开仓时机对比分析")
         return {
             'entry_stats': entry_stats,
             'correct_entries': [],

@@ -54,8 +54,9 @@ def sample_opportunities_for_phase3(opportunities: List[Dict], max_size: int = 8
     swing_quota = max_size - scalping_quota
     
     # 确保至少各有一些样本（如果存在的话）
-    if len(scalping_opps) > 0 and scalping_quota < 100:
-        scalping_quota = min(100, len(scalping_opps))
+    # 【修复】scalping机会少，至少保留200个避免过度过滤
+    if len(scalping_opps) > 0 and scalping_quota < 200:
+        scalping_quota = min(200, len(scalping_opps))
         swing_quota = max_size - scalping_quota
     if len(swing_opps) > 0 and swing_quota < 100:
         swing_quota = min(100, len(swing_opps))
@@ -561,8 +562,8 @@ def request_ai_analysis(
     except Exception as e:
         # 【V8.5.2.4.89.2】更友好的错误提示
         if "API key not found" in str(e):
-            print(f"     ℹ️  AI辅助决策已跳过（未配置API密钥，使用数据驱动的最优参数）")
-            # print(f"     💡 此功能可选，不影响回测完成")  # 精简日志
+            print(f"     ℹ️  AI辅助决策已跳过（未配置API密钥）")
+            print(f"     💡 已使用Phase 2+3数据驱动的最优参数，效果等同或更好")
         else:
             print(f"     ⚠️  AI Call Failed: {e}")
         return {}
@@ -622,8 +623,8 @@ def call_ai_unified(prompt: str, model_name: str) -> str:
         "max_tokens": max_tokens
     }
     
-    # 发送请求
-    response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+    # 发送请求（Phase3数据量大，需要更长超时）
+    response = requests.post(api_url, headers=headers, json=payload, timeout=60)
     response.raise_for_status()
     
     # 解析响应
@@ -1070,7 +1071,9 @@ def optimize_for_signal_type(
         gc.collect()  # 立即释放内存
     
     if not all_results:
-        print(f"     ⚠️  未找到有效结果")
+        print(f"     ⚠️  未找到有效结果（所有参数组合筛选后机会数=0）")
+        print(f"     💡 可能原因：筛选条件过严或机会数太少（当前{len(opportunities)}个）")
+        print(f"     💡 建议：增加机会采样数量或放宽筛选条件")
         return {
             'best_params': {},
             'capture_rate': 0,

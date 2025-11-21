@@ -467,12 +467,13 @@ def generate_optimized_bark_content(yesterday_data, phase2_data, phase4_data):
     # 1️⃣ 前一天情况总结
     yesterday_winrate = yesterday_data.get('winrate', 0) * 100
     yesterday_profit = yesterday_data.get('profit', 0)
-    lines.append(f"📊 昨日: 胜率{yesterday_winrate:.0f}% 利润{yesterday_profit:+.1f}U")
+    # 【修复】移除冒号避免Bark URL解析错误
+    lines.append(f"📊 昨日-胜率{yesterday_winrate:.0f}% 利润{yesterday_profit:+.1f}U")
     
     # 2️⃣ 当前重点信息（Phase 4最终结果）
-    lines.append(f"\n🎯 Phase 4最终:")
-    lines.append(f"⚡超短线: {phase4_data.get('scalping_capture', 0):.0f}% / {phase4_data.get('scalping_profit', 0):.1f}%")
-    lines.append(f"🌊波段: {phase4_data.get('swing_capture', 0):.0f}% / {phase4_data.get('swing_profit', 0):.1f}%")
+    lines.append(f"\n🎯 Phase 4最终-")
+    lines.append(f"⚡超短线-{phase4_data.get('scalping_capture', 0):.0f}% / {phase4_data.get('scalping_profit', 0):.1f}%")
+    lines.append(f"🌊波段-{phase4_data.get('swing_capture', 0):.0f}% / {phase4_data.get('swing_profit', 0):.1f}%")
     
     # 3️⃣ 对比信息（Phase 2 → Phase 4）
     scalping_capture_change = phase4_data.get('scalping_capture', 0) - phase2_data.get('scalping_capture', 0)
@@ -480,7 +481,7 @@ def generate_optimized_bark_content(yesterday_data, phase2_data, phase4_data):
     swing_capture_change = phase4_data.get('swing_capture', 0) - phase2_data.get('swing_capture', 0)
     swing_profit_change = phase4_data.get('swing_profit', 0) - phase2_data.get('swing_profit', 0)
     
-    lines.append(f"\n📈 优化效果:")
+    lines.append(f"\n📈 优化效果-")
     
     # 超短线变化
     scalping_capture_sign = "+" if scalping_capture_change > 0 else ""
