@@ -6,13 +6,11 @@ import pytz
 import json
 import os
 import random
-# from PIL import Image  # 临时注释，架构不匹配
-from io import BytesIO, StringIO
+from PIL import Image  # type: ignore[import-untyped]
+from io import BytesIO
 # import numpy as np  # 临时注释
-import base64
-import traceback
 import re
-from datetime import datetime, timedelta
+from datetime import timedelta
 import csv
 import time  # 【V8.5.2.4.88优化】添加时间模块用于缓存
 
@@ -21,7 +19,7 @@ app = Flask(__name__)
 
 # 【V8.5.2.4.88优化】数据缓存配置
 # 缓存summary数据，减少频繁读取CSV文件的内存和CPU开销
-SUMMARY_CACHE = {}
+SUMMARY_CACHE: dict[str, dict] = {}
 CACHE_DURATION = 30  # 缓存有效期（秒）
 
 # ==================== 时区转换辅助函数 ====================
@@ -295,14 +293,14 @@ def filter_data_by_time_range(data_list, time_field, range_type='all', start_dat
                 if fmt == '%m-%d %H:%M':
                     item_time = item_time.replace(year=now_beijing.year)
                 break
-            except:
+            except ValueError:
                 continue
         
         # 如果还是解析失败，尝试去掉毫秒
         if item_time is None:
             try:
                 item_time = datetime.strptime(time_str.split('.')[0].strip(), '%Y-%m-%d %H:%M:%S')
-            except:
+            except ValueError:
                 parse_errors += 1
                 continue
         
@@ -516,9 +514,9 @@ if not os.path.exists(DATA_FILE):
         writer.writerow(['会员ID', '有效期至', '下载次数', '图文下载关键词', '图文下载总次数', '搜索数据关键词', '搜索数据总下载次数', '养号关键词', '养号总次数'])
 
 # 全局数据字典，用于存储会员信息和关键词记录
-membership_data = {}
-keywords_data = {}          # 图文下载关键词记录
-data_keywords_data = {}      # 搜索数据关键词记录
+membership_data: dict = {}
+keywords_data: dict = {}          # 图文下载关键词记录
+data_keywords_data: dict = {}      # 搜索数据关键词记录
 养号_keywords_data = {}       # 养号关键词记录
 total_downloads = 0         # 图文下载总次数
 data_total_downloads = 0    # 搜索数据总下载次数
@@ -652,8 +650,6 @@ def load_data():
     data_keywords_data = {}
     养号_keywords_data = {}
     total_downloads = 0
-    data_total_downloads = 0
-    养号_total_downloads = 0
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, mode='r', newline='') as file:
             reader = csv.DictReader(file)
@@ -899,8 +895,7 @@ def download_and_compress_image(image_url, quality=70, resize_scale=0.7):
         except Exception as pil_e:
             logging.warning(f"PIL无法打开图片，尝试用imageio兜底: {pil_e}")
             try:
-                import imageio.v3 as iio
-                import numpy as np
+                import imageio.v3 as iio  # type: ignore[import-not-found]
                 arr = iio.imread(response.content, extension=".webp")
                 image = Image.fromarray(arr)
                 logging.info("imageio成功读取webp图片")
@@ -1041,7 +1036,7 @@ def upload_images():
     data = request.get_json()
     logging.info(f"接收到的上传图片请求: {data}")  # 打印接收到的数据进行调试
     
-    member_id = str(data.get('card_id')) if data.get('card_id') is not None else None
+    str(data.get('card_id')) if data.get('card_id') is not None else None
     image_urls = list(dict.fromkeys(data.get('image_urls', [])))  # 去重并保持顺序
     if image_urls:
         # 将第一张图片放到最后
@@ -1169,7 +1164,7 @@ def get_visitor_count():
             with open(VISITOR_LOG_FILE, 'r') as f:
                 return len([line for line in f if line.strip()])
         return 0
-    except:
+    except (OSError, IOError):
         return 0
 
 @app.route('/trading-visitor-count', methods=['GET'])
@@ -1342,7 +1337,7 @@ def trading_pnl():
                         row['时间'] = beijing_time.strftime('%Y-%m-%d %H:%M:%S')
                         if 'timestamp' in row:
                             row['timestamp'] = beijing_time.strftime('%Y-%m-%d %H:%M:%S')
-                    except:
+                    except (ValueError, KeyError):
                         continue
                     
                     # 按范围类型筛选（使用北京时间）
@@ -1686,7 +1681,7 @@ def trading_summary():
                         summary['test_mode'] = False
                     else:
                         summary['test_mode'] = None
-        except:
+        except (OSError, IOError):
             summary['test_mode'] = None
         
         # 🆕 读取冷却期状态（从learning_config.json）
@@ -1871,7 +1866,7 @@ def trading_combined():
                             trade_time = datetime.strptime(open_time_str, '%Y-%m-%d %H:%M:%S')
                             if earliest_time is None or trade_time < earliest_time:
                                 earliest_time = trade_time
-                        except:
+                        except ValueError:
                             pass
         
         # 基于最早交易时间计算年化收益（使用复利公式）
@@ -2242,7 +2237,7 @@ def get_model_summary(model, range_type='all', start_date='', end_date=''):
                         summary['test_mode'] = None
             else:
                 summary['test_mode'] = None
-        except:
+        except (OSError, IOError):
             summary['test_mode'] = None
         
         # 🆕 读取冷却期状态（从learning_config.json）
@@ -2479,10 +2474,8 @@ def trading_ai_status():
         # 根据模型选择进程名
         if model == 'qwen':
             process_name = 'qwen_多币种智能版.py'
-            screen_name = 'ai-qwen'
         else:
             process_name = 'deepseek_多币种智能版.py'
-            screen_name = 'ai-deepseek'
         
         # 1. 检查进程是否在运行
         is_running = False
@@ -2490,7 +2483,7 @@ def trading_ai_status():
             import subprocess
             result = subprocess.run(['pgrep', '-f', process_name], capture_output=True, text=True, timeout=5)
             is_running = len(result.stdout.strip()) > 0
-        except:
+        except (OSError, Exception):
             pass
         
         # 2. 检查最近更新时间（判断是否僵死）
@@ -2524,7 +2517,7 @@ def trading_ai_status():
                     pause_until = market_regime.get('pause_until', None)
                     is_paused = pause_level > 0
                     pause_reason = get_pause_reason(pause_level)
-        except:
+        except (OSError, IOError, json.JSONDecodeError):
             pass
         
         # 4. 检查运行模式
@@ -2538,7 +2531,7 @@ def trading_ai_status():
                         test_mode = True
                     elif 'TEST_MODE=False' in content or 'TEST_MODE=false' in content:
                         test_mode = False
-        except:
+        except (OSError, IOError):
             pass
         
         # 综合判断状态
@@ -2880,7 +2873,7 @@ def trading_price_data():
                                                     hold_time_str = f"{hours}小时{minutes}分钟"
                                                 else:
                                                     hold_time_str = f"{minutes}分钟"
-                                            except:
+                                            except (ValueError, KeyError):
                                                 hold_time_str = ''
                                         trade_markers.append({
                                             'type': 'close',
@@ -2948,7 +2941,7 @@ def trading_price_data():
             last_time = kline_data[-1]['timestamp']
             logging.info(f"[价格数据] ✅ 返回K线{len(kline_data)}条: {first_time} ~ {last_time}")
         else:
-            logging.info(f"[价格数据] ⚠️ 无K线数据")
+            logging.info("[价格数据] ⚠️ 无K线数据")
         
         logging.info(f"[价格数据] 订单标注{len(trade_markers)}个, 总盈亏{total_pnl:.2f}U")
         

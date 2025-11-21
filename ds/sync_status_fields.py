@@ -15,7 +15,7 @@ FIELD_MAPPING = {
     '总仓位价值': 'position_margin'
 }
 
-def sync_status_file(file_path, model_name):
+def sync_status_file(file_path: str, model_name: str) -> bool:
     """同步单个 system_status.json 文件的字段"""
     print(f"\n{'='*50}")
     print(f"同步 {model_name} 配置文件")
@@ -63,10 +63,10 @@ def sync_status_file(file_path, model_name):
     for field, default_value in required_en_fields.items():
         if field not in data:
             # 尝试从中文字段获取
-            cn_field = {v: k for k, v in FIELD_MAPPING.items()}.get(field)
-            if cn_field and cn_field in data:
-                data[field] = data[cn_field]
-                print(f"✓ 从 {cn_field} 获取: {field} = {data[field]}")
+            corresponding_cn_field: str | None = {v: k for k, v in FIELD_MAPPING.items()}.get(field)
+            if corresponding_cn_field is not None and corresponding_cn_field in data:
+                data[field] = data[corresponding_cn_field]
+                print(f"✓ 从 {corresponding_cn_field} 获取: {field} = {data[field]}")
             else:
                 data[field] = default_value
                 print(f"⚠️  缺少字段 '{field}'，设为默认值: {default_value}")
@@ -84,13 +84,13 @@ def sync_status_file(file_path, model_name):
         # 保存更新
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
-        print(f"✓ 已保存更新")
+        print("✓ 已保存更新")
         return True
     else:
-        print(f"\n✓ 字段已同步，无需更新")
+        print("\n✓ 字段已同步，无需更新")
         return True
 
-def main():
+def main() -> None:
     print("="*50)
     print("🔄 同步 system_status.json 中英文字段")
     print("="*50)

@@ -12,10 +12,8 @@
 """
 
 import os
-import sys
-import json
 import csv
-import ccxt
+import ccxt  # type: ignore[import-untyped]
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
@@ -132,7 +130,7 @@ def match_order(local_trade, binance_orders, tolerance_price=0.01, tolerance_qty
     try:
         local_price = float(local_trade.get('开仓价格', 0) or 0)
         local_qty = float(local_trade.get('数量', 0) or 0)
-    except:
+    except (ValueError, TypeError):
         return None
     
     if not coin or not direction or local_price == 0:
@@ -187,7 +185,7 @@ def merge_trades_for_model(model_name, dry_run=False):
         return False
     
     # 2. 获取币安订单
-    print(f"\n📡 从币安API获取订单...")
+    print("\n📡 从币安API获取订单...")
     binance_orders_raw = fetch_all_orders(exchange, days=30)
     binance_orders = [parse_binance_order(o) for o in binance_orders_raw]
     
@@ -217,7 +215,6 @@ def merge_trades_for_model(model_name, dry_run=False):
     # 4. 分析和修复
     fixed_count = 0
     missing_time_count = 0
-    added_count = 0
     
     # 统计缺失开仓时间的记录
     for trade in local_trades:
@@ -227,7 +224,7 @@ def merge_trades_for_model(model_name, dry_run=False):
     print(f"⚠️  缺失开仓时间: {missing_time_count} 条")
     
     # 5. 补充开仓时间
-    print(f"\n🔧 开始补充和修复...")
+    print("\n🔧 开始补充和修复...")
     
     for i, trade in enumerate(local_trades):
         open_time = trade.get('开仓时间', '').strip()
@@ -245,7 +242,7 @@ def merge_trades_for_model(model_name, dry_run=False):
     
     # 6. 保存结果
     if dry_run:
-        print(f"\n🔍 试运行模式 - 未写入文件")
+        print("\n🔍 试运行模式 - 未写入文件")
         print(f"   将修复: {fixed_count} 条记录")
     else:
         with open(trades_file, 'w', encoding='utf-8', newline='') as f:

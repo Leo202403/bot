@@ -68,7 +68,7 @@ class MemoryMonitor:
             'timestamp': time.time()
         }
     
-    def _format_size(self, bytes_size: int) -> str:
+    def _format_size(self, bytes_size: float) -> str:
         """格式化字节大小"""
         for unit in ['B', 'KB', 'MB', 'GB']:
             if bytes_size < 1024.0:

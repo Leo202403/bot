@@ -8011,154 +8011,22 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
             }
         }
     
-    # 【V8.5.2.4.18】前向验证：在验证集上测试参数
-    print(f"\n  🔍 【前向验证】在验证集上测试参数...")
+    # 【V8.5.2.4.18】前向验证：在验证集上测试参数（分离版本）
+    print(f"\n  🔍 【前向验证】分别测试超短线和波段参数...")
     
     validation_passed = True
     validation_warning = ""
     
-    if validation_opportunities and best_params:
-        # 在验证集上过滤机会
-        val_captured_opps = [
-            opp for opp in validation_opportunities
-            if (opp.get('signal_score', 0) >= best_params.get('min_signal_score', 50) and
-                opp.get('consensus', 0) >= best_params.get('min_indicator_consensus', 2))
-        ]
-        
-        if val_captured_opps:
-            # 计算验证集表现
-            from calculate_actual_profit import calculate_single_actual_profit
-            
-            for opp in val_captured_opps:
-                # 【V8.5.2.4.36】根据signal_type使用差异化参数
-                # 【V8.5.2.4.60】优先使用TP/SL测试找到的最优值
-                signal_type = opp.get('signal_type', 'swing')
-                
-                # 根据signal_type使用最优TP/SL（优先）或参数范围中位数（降级）
-                if signal_type == 'scalping':
-                    # 优先使用TP/SL测试的最优值
-                    if best_scalping_tp_sl:
-                        default_tp = best_scalping_tp_sl['tp']
-                        default_sl = best_scalping_tp_sl['sl']
-                    else:
-                        default_tp = scalping_params_range['atr_tp'][1]  # 降级：2.0
-                        default_sl = scalping_params_range['atr_sl'][2]  # 降级：1.5
-                    default_holding = scalping_params_range['max_holding'][1]  # 12
-                else:
-                    # 优先使用TP/SL测试的最优值
-                    if best_swing_tp_sl:
-                        default_tp = best_swing_tp_sl['tp']
-                        default_sl = best_swing_tp_sl['sl']
-                    else:
-                        default_tp = swing_params_range['atr_tp'][2]  # 降级：6.0
-                        default_sl = swing_params_range['atr_sl'][1]  # 降级：2.5
-                    default_holding = swing_params_range['max_holding'][2]  # 72
-                
-                strategy_params = {
-                    **best_params,
-                    'atr_tp_multiplier': best_params.get('atr_tp_multiplier', default_tp),
-                    'atr_stop_multiplier': best_params.get('atr_stop_multiplier', default_sl),
-                    'max_holding_hours': best_params.get('max_holding_hours', default_holding)
-                }
-                
-                actual_profit = calculate_single_actual_profit(
-                    opp,
-                    strategy_params=strategy_params,
-                    use_dynamic_atr=False
-                )
-                opp['_val_actual_profit'] = actual_profit
-            
-            val_avg_profit = sum(o.get('_val_actual_profit', 0) for o in val_captured_opps) / len(val_captured_opps)
-            val_capture_rate = len(val_captured_opps) / len(validation_opportunities)
-            
-            # 与训练集对比（检测过拟合）
-            train_captured_opps = [
-                opp for opp in train_opportunities
-                if (opp.get('signal_score', 0) >= best_params.get('min_signal_score', 50) and
-                    opp.get('consensus', 0) >= best_params.get('min_indicator_consensus', 2))
-            ]
-            
-            if train_captured_opps:
-                # 【V8.5.2.4.22】修复：重新计算训练集actual_profit（确保使用相同的参数和方法）
-                for opp in train_captured_opps:
-                    # 【V8.5.2.4.36】根据signal_type使用差异化参数
-                    # 【V8.5.2.4.60】优先使用TP/SL测试找到的最优值
-                    signal_type = opp.get('signal_type', 'swing')
-                    
-                    # 根据signal_type使用最优TP/SL（优先）或参数范围中位数（降级）
-                    if signal_type == 'scalping':
-                        # 优先使用TP/SL测试的最优值
-                        if best_scalping_tp_sl:
-                            default_tp = best_scalping_tp_sl['tp']
-                            default_sl = best_scalping_tp_sl['sl']
-                        else:
-                            default_tp = scalping_params_range['atr_tp'][1]  # 降级：2.0
-                            default_sl = scalping_params_range['atr_sl'][2]  # 降级：1.5
-                        default_holding = scalping_params_range['max_holding'][1]  # 12
-                    else:
-                        # 优先使用TP/SL测试的最优值
-                        if best_swing_tp_sl:
-                            default_tp = best_swing_tp_sl['tp']
-                            default_sl = best_swing_tp_sl['sl']
-                        else:
-                            default_tp = swing_params_range['atr_tp'][2]  # 降级：6.0
-                            default_sl = swing_params_range['atr_sl'][1]  # 降级：2.5
-                        default_holding = swing_params_range['max_holding'][2]  # 72
-                    
-                    strategy_params = {
-                        **best_params,
-                        'atr_tp_multiplier': best_params.get('atr_tp_multiplier', default_tp),
-                        'atr_stop_multiplier': best_params.get('atr_stop_multiplier', default_sl),
-                        'max_holding_hours': best_params.get('max_holding_hours', default_holding)
-                    }
-                    
-                    actual_profit = calculate_single_actual_profit(
-                        opp,
-                        strategy_params=strategy_params,
-                        use_dynamic_atr=False
-                    )
-                    opp['_train_actual_profit'] = actual_profit
-                
-                train_avg_profit = sum(o.get('_train_actual_profit', 0) for o in train_captured_opps) / len(train_captured_opps)
-                
-                profit_degradation = (train_avg_profit - val_avg_profit) / train_avg_profit if train_avg_profit > 0 else 0
-                
-                print(f"     训练集表现: 平均利润 {train_avg_profit:.2f}%")
-                print(f"     验证集表现: 平均利润 {val_avg_profit:.2f}%")
-                print(f"     性能衰减: {profit_degradation*100:+.1f}%")
-                
-                # 【V8.5.2.4.18】过拟合判定
-                if profit_degradation > 0.3:
-                    # 验证集利润下降超过30% → 严重过拟合
-                    print(f"     ⚠️  严重过拟合！验证集利润下降{profit_degradation*100:.0f}%")
-                    validation_passed = False
-                    validation_warning = f"验证集利润下降{profit_degradation*100:.0f}%，参数泛化能力差"
-                    
-                    # 建议：使用更保守的参数
-                    print(f"     💡 建议：回退到更保守的参数或增加正则化")
-                    best_params['_overfitting_detected'] = True
-                    best_params['_profit_degradation'] = profit_degradation
-                    
-                elif profit_degradation > 0.15:
-                    # 验证集利润下降15-30% → 轻微过拟合
-                    print(f"     ⚠️  轻微过拟合，验证集利润下降{profit_degradation*100:.1f}%")
-                    validation_warning = f"验证集利润下降{profit_degradation*100:.1f}%，建议监控"
-                    best_params['_overfitting_warning'] = True
-                    best_params['_profit_degradation'] = profit_degradation
-                    
-                elif profit_degradation < -0.1:
-                    # 验证集利润反而提升 → 参数良好
-                    print(f"     ✅ 优秀！验证集利润甚至更好（+{-profit_degradation*100:.1f}%）")
-                    best_params['_validation_bonus'] = True
-                    
-                else:
-                    # 验证集利润下降<15% → 正常范围
-                    print(f"     ✅ 通过前向验证（性能衰减在正常范围）")
-        else:
-            print(f"     ⚠️  验证集无捕获机会（参数可能过严）")
-            validation_warning = "验证集无捕获"
+    # 【V8.5.2.4.89.36】简化版本：分离优化后Phase 3会进一步验证，此处跳过详细验证
+    if validation_scalping:
+        print(f"     ⚡ 超短线验证集: {len(validation_scalping)}个机会")
+    if validation_swing:
+        print(f"     🌊 波段验证集: {len(validation_swing)}个机会")
+    
+    if not validation_scalping and not validation_swing:
+        print(f"     ℹ️  跳过验证（无验证数据）")
     else:
-        print(f"     ℹ️  跳过验证（无验证数据或无参数）")
+        print(f"     ✅ 验证数据已准备，将由Phase 3进一步优化和验证")
     
     # 【V8.5.2.4.42】Phase 3：分离优化（超短线+波段）
     phase3_result = None

@@ -12,14 +12,14 @@
 6. 分别验证超短线和波段参数
 """
 
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Optional, Tuple
 from trailing_stop_calculator import batch_calculate_profits
 
 
 def phase4_validation_and_overfitting_detection(
     phase3_result: Dict,
     all_opportunities: List[Dict],
-    phase1_baseline: Dict = None
+    phase1_baseline: Optional[Dict] = None
 ) -> Dict:
     """
     【V8.5.2.4.42】Phase 4：参数验证与过拟合检测
@@ -39,10 +39,10 @@ def phase4_validation_and_overfitting_detection(
         }
     """
     print(f"\n{'='*70}")
-    print(f"✅ Phase 4：参数验证与过拟合检测")
+    print("✅ Phase 4：参数验证与过拟合检测")
     print(f"{'='*70}")
-    print(f"  数据范围: Phase 1全量数据（14天）")
-    print(f"  验证方法: 分段测试 + 移动止损计算")
+    print("  数据范围: Phase 1全量数据（14天）")
+    print("  验证方法: 分段测试 + 移动止损计算")
     print(f"{'='*70}")
     
     # 提取Phase 3的参数
@@ -53,7 +53,7 @@ def phase4_validation_and_overfitting_detection(
     scalping_opps = [o for o in all_opportunities if o.get('signal_type') == 'scalping']
     swing_opps = [o for o in all_opportunities if o.get('signal_type') == 'swing']
     
-    print(f"\n  📊 数据分布:")
+    print("\n  📊 数据分布:")
     print(f"     总机会数: {len(all_opportunities)}个")
     print(f"     超短线: {len(scalping_opps)}个")
     print(f"     波段: {len(swing_opps)}个")
@@ -78,7 +78,7 @@ def phase4_validation_and_overfitting_detection(
     overall_status = determine_overall_status(scalping_validation, swing_validation)
     
     print(f"\n{'='*70}")
-    print(f"🎉 Phase 4验证完成！")
+    print("🎉 Phase 4验证完成！")
     print(f"   超短线: {scalping_validation['status']}")
     print(f"   波段: {swing_validation['status']}")
     print(f"   综合判定: {overall_status}")
@@ -95,7 +95,7 @@ def validate_signal_type(
     opportunities: List[Dict],
     params: Dict,
     signal_type: str,
-    phase1_stats: Dict = None
+    phase1_stats: Optional[Dict] = None
 ) -> Dict:
     """
     验证特定信号类型的参数
@@ -144,7 +144,7 @@ def validate_signal_type(
     stability_score = calculate_stability_score(full_test, overfitting)
     
     # 5️⃣ 最终判定（传入Phase 1的baseline利润）
-    phase2_baseline = phase1_stats.get('avg_profit', 0)
+    phase2_baseline = phase1_stats.get('avg_profit', 0) if phase1_stats else 0
     status = determine_status(full_test, overfitting, stability_score, phase2_baseline)
     
     return {
@@ -240,7 +240,7 @@ def split_and_test(
     early_opps = sorted_opps[:split_point]
     late_opps = sorted_opps[split_point:]
     
-    print(f"\n  2️⃣ 分段测试:")
+    print("\n  2️⃣ 分段测试:")
     print(f"     前期样本: {len(early_opps)}个")
     print(f"     后期样本: {len(late_opps)}个")
     
@@ -301,7 +301,7 @@ def detect_overfitting(
     
     is_overfitted = overfitting_score >= 2
     
-    print(f"\n  3️⃣ 过拟合检测:")
+    print("\n  3️⃣ 过拟合检测:")
     if profit_degradation < 0.30:
         print(f"     利润差异: {profit_degradation*100:.1f}% ✅ （<30%）")
     else:

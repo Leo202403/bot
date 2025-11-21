@@ -135,7 +135,7 @@ def generate_simple_ai_reflection(entry_analysis, exit_analysis, ai_decisions):
         ai_insights['tokens_used'] = response.usage.total_tokens
         ai_insights['cost_usd'] = response.usage.total_tokens * 0.001 / 1000  # DeepSeek定价
         
-        print(f"[AI Self-Reflection] ✓ 生成完成")
+        print("[AI Self-Reflection] ✓ 生成完成")
         print(f"  Entry Lessons: {len(ai_insights.get('entry_lessons', []))}")
         print(f"  Exit Lessons: {len(ai_insights.get('exit_lessons', []))}")
         print(f"  Missed Lessons: {len(ai_insights.get('missed_lessons', []))}")
@@ -250,7 +250,7 @@ def find_trade_result_in_entry(decision, entry_analysis):
         return {'classification': 'unknown', 'pnl': 0}
     
     coin = decision.get('coin', '')
-    timestamp = decision.get('timestamp', '')
+    _timestamp = decision.get('timestamp', '')  # 预留用于未来的时间窗口匹配
     
     # 在各个分类列表中查找
     for category in ['correct_entries', 'timing_issues', 'false_entries']:
@@ -292,7 +292,7 @@ def find_opportunity_in_missed(decision, entry_analysis):
         return None
     
     coin = decision.get('coin', '')
-    timestamp = decision.get('timestamp', '')
+    _timestamp = decision.get('timestamp', '')  # 预留用于未来的时间窗口匹配
     
     missed_opps = entry_analysis.get('missed_opportunities', [])
     for opp in missed_opps:

@@ -16,7 +16,7 @@ def print_phase1_summary(scalping_opps, swing_opps, phase1_baseline):
         phase1_baseline: Phase 1基准数据
     """
     print(f"\n{'='*70}")
-    print(f"✅ Phase 1 完成：客观机会识别")
+    print("✅ Phase 1 完成：客观机会识别")
     print(f"{'='*70}")
     
     # 超短线统计
@@ -44,7 +44,7 @@ def print_phase1_summary(scalping_opps, swing_opps, phase1_baseline):
         scalping_avg_holding = 0
         scalping_median_holding = 0
     
-    print(f"\n📊 超短线机会:")
+    print("\n📊 超短线机会:")
     print(f"   - 总数: {scalping_count}个")
     print(f"   - 平均最大利润: {scalping_avg_profit:.2f}%")
     print(f"   - 平均持仓时间: {scalping_avg_holding:.1f}小时（中位数: {scalping_median_holding:.1f}h）")
@@ -75,7 +75,7 @@ def print_phase1_summary(scalping_opps, swing_opps, phase1_baseline):
         swing_avg_holding = 0
         swing_median_holding = 0
     
-    print(f"\n📊 波段机会:")
+    print("\n📊 波段机会:")
     print(f"   - 总数: {swing_count}个")
     print(f"   - 平均最大利润: {swing_avg_profit:.2f}%")
     print(f"   - 平均持仓时间: {swing_avg_holding:.1f}小时（中位数: {swing_median_holding:.1f}h）")
@@ -83,7 +83,7 @@ def print_phase1_summary(scalping_opps, swing_opps, phase1_baseline):
     
     # 总计
     total_count = scalping_count + swing_count
-    print(f"\n💡 关键发现:")
+    print("\n💡 关键发现:")
     print(f"   - 总机会数: {total_count}个")
     print(f"   - 平均最大利润: {(scalping_avg_profit + swing_avg_profit) / 2:.2f}%")
     print(f"   - 超短线/波段比例: {scalping_count}:{swing_count}")
@@ -117,11 +117,11 @@ def print_phase2_summary(best_params, phase2_baseline, validation_result=None):
         validation_result: 前向验证结果（可选）
     """
     print(f"\n{'='*70}")
-    print(f"✅ Phase 2 完成：参数优化（捕获最大化）")
+    print("✅ Phase 2 完成：参数优化（捕获最大化）")
     print(f"{'='*70}")
     
     # 最优参数
-    print(f"\n🎯 最优参数配置:")
+    print("\n🎯 最优参数配置:")
     print(f"   - min_risk_reward: {best_params.get('min_risk_reward', 0)}")
     print(f"   - min_indicator_consensus: {best_params.get('min_indicator_consensus', 0)}")
     print(f"   - atr_stop_multiplier: {best_params.get('atr_stop_multiplier', 0):.2f}")
@@ -135,7 +135,7 @@ def print_phase2_summary(best_params, phase2_baseline, validation_result=None):
         capture_rate = phase2_baseline.get('capture_rate', 0)
         avg_profit = phase2_baseline.get('avg_profit', 0)
         
-        print(f"\n📊 捕获表现:")
+        print("\n📊 捕获表现:")
         print(f"   - 捕获机会: {captured_count}个")
         print(f"   - 捕获率: {capture_rate*100:.1f}%")
         print(f"   - 平均利润: {avg_profit:.2f}%（已扣除0.14%交易成本）")
@@ -146,19 +146,19 @@ def print_phase2_summary(best_params, phase2_baseline, validation_result=None):
         val_profit = validation_result.get('val_profit', 0)
         degradation = validation_result.get('degradation', 0)
         
-        print(f"\n🔍 前向验证:")
+        print("\n🔍 前向验证:")
         print(f"   - 训练集表现: {train_profit:.2f}%")
         print(f"   - 验证集表现: {val_profit:.2f}%")
         print(f"   - 性能衰减: {degradation*100:+.1f}%")
         
         if abs(degradation) < 0.15:
-            print(f"   - 判定: ✅ 通过（衰减<15%）")
+            print("   - 判定: ✅ 通过（衰减<15%）")
         elif abs(degradation) < 0.30:
-            print(f"   - 判定: ⚠️ 轻微过拟合（衰减15-30%）")
+            print("   - 判定: ⚠️ 轻微过拟合（衰减15-30%）")
         else:
-            print(f"   - 判定: ❌ 严重过拟合（衰减>30%）")
+            print("   - 判定: ❌ 严重过拟合（衰减>30%）")
     
-    print(f"\n💡 Phase 2 → Phase 3: 将在此基础上进行风险控制优化")
+    print("\n💡 Phase 2 → Phase 3: 将在此基础上进行风险控制优化")
     print(f"{'='*70}\n")
 
 
@@ -172,11 +172,11 @@ def print_phase3_summary(phase2_params, phase3_params, comparison_data):
         comparison_data: 对比数据
     """
     print(f"\n{'='*70}")
-    print(f"✅ Phase 3 完成：风险控制优化")
+    print("✅ Phase 3 完成：风险控制优化")
     print(f"{'='*70}")
     
     # 参数对比
-    print(f"\n🎯 优化后参数（vs Phase 2）:")
+    print("\n🎯 优化后参数（vs Phase 2）:")
     for key in ['min_risk_reward', 'min_indicator_consensus', 'atr_stop_multiplier', 'min_signal_score']:
         old_val = phase2_params.get(key, 0)
         new_val = phase3_params.get(key, 0)
@@ -189,9 +189,9 @@ def print_phase3_summary(phase2_params, phase3_params, comparison_data):
     # 超短线对比
     if 'scalping' in comparison_data:
         scalp = comparison_data['scalping']
-        print(f"\n⚡ 超短线:")
-        print(f"   指标           Phase 2    Phase 3    变化")
-        print(f"   ────────────────────────────────────────")
+        print("\n⚡ 超短线:")
+        print("   指标           Phase 2    Phase 3    变化")
+        print("   ────────────────────────────────────────")
         print(f"   捕获率         {scalp.get('phase2_capture_rate', 0)*100:.1f}%      {scalp.get('phase3_capture_rate', 0)*100:.1f}%      {(scalp.get('phase3_capture_rate', 0)-scalp.get('phase2_capture_rate', 0))*100:+.1f}%")
         print(f"   平均利润       {scalp.get('phase2_profit', 0):.2f}%      {scalp.get('phase3_profit', 0):.2f}%      {(scalp.get('phase3_profit', 0)-scalp.get('phase2_profit', 0)):.2f}%")
         print(f"   胜率           {scalp.get('phase2_winrate', 0)*100:.1f}%      {scalp.get('phase3_winrate', 0)*100:.1f}%      {(scalp.get('phase3_winrate', 0)-scalp.get('phase2_winrate', 0))*100:+.1f}%")
@@ -199,15 +199,15 @@ def print_phase3_summary(phase2_params, phase3_params, comparison_data):
     # 波段对比
     if 'swing' in comparison_data:
         swing = comparison_data['swing']
-        print(f"\n🌊 波段:")
-        print(f"   指标           Phase 2    Phase 3    变化")
-        print(f"   ────────────────────────────────────────")
+        print("\n🌊 波段:")
+        print("   指标           Phase 2    Phase 3    变化")
+        print("   ────────────────────────────────────────")
         print(f"   捕获率         {swing.get('phase2_capture_rate', 0)*100:.1f}%      {swing.get('phase3_capture_rate', 0)*100:.1f}%      {(swing.get('phase3_capture_rate', 0)-swing.get('phase2_capture_rate', 0))*100:+.1f}%")
         print(f"   平均利润       {swing.get('phase2_profit', 0):.2f}%      {swing.get('phase3_profit', 0):.2f}%      {(swing.get('phase3_profit', 0)-swing.get('phase2_profit', 0)):.2f}%")
         print(f"   胜率           {swing.get('phase2_winrate', 0)*100:.1f}%      {swing.get('phase3_winrate', 0)*100:.1f}%      {(swing.get('phase3_winrate', 0)-swing.get('phase2_winrate', 0))*100:+.1f}%")
     
     # 决策判断
-    print(f"\n💡 Phase 3判定:")
+    print("\n💡 Phase 3判定:")
     capture_change = comparison_data.get('capture_rate_change', 0)
     profit_change = comparison_data.get('profit_change', 0)
     
@@ -223,11 +223,11 @@ def print_phase3_summary(phase2_params, phase3_params, comparison_data):
     
     use_phase3 = capture_change >= -0.10 and profit_change >= 0
     if use_phase3:
-        print(f"   - 最终决策: ✅ 采用Phase 3参数")
+        print("   - 最终决策: ✅ 采用Phase 3参数")
     else:
-        print(f"   - 最终决策: ⚠️ 保留Phase 2参数")
+        print("   - 最终决策: ⚠️ 保留Phase 2参数")
     
-    print(f"\n💡 Phase 3 → Phase 4: 将进行全量历史数据验证")
+    print("\n💡 Phase 3 → Phase 4: 将进行全量历史数据验证")
     print(f"{'='*70}\n")
 
 
@@ -240,12 +240,12 @@ def print_phase4_summary(validation_result, final_params):
         final_params: 最终参数配置
     """
     print(f"\n{'='*70}")
-    print(f"✅ Phase 4 完成：参数验证与过拟合检测")
+    print("✅ Phase 4 完成：参数验证与过拟合检测")
     print(f"{'='*70}")
     
     # 全量数据测试
     full_test = validation_result.get('full_test', {})
-    print(f"\n📊 1️⃣ 全量数据测试（14天）:")
+    print("\n📊 1️⃣ 全量数据测试（14天）:")
     print(f"   - 捕获: {full_test.get('captured_count', 0)}个 ({full_test.get('capture_rate', 0)*100:.1f}%)")
     print(f"   - 平均利润: {full_test.get('avg_profit', 0):.2f}%")
     print(f"   - 胜率: {full_test.get('win_rate', 0)*100:.1f}%")
@@ -253,15 +253,15 @@ def print_phase4_summary(validation_result, final_params):
     # 分段测试
     early = validation_result.get('early_period', {})
     late = validation_result.get('late_period', {})
-    print(f"\n📊 2️⃣ 分段测试:")
+    print("\n📊 2️⃣ 分段测试:")
     print(f"   前期（{early.get('sample_count', 0)}个样本）:")
     print(f"   - 捕获: {early.get('captured', 0)}个，利润: {early.get('avg_profit', 0):.2f}%，胜率: {early.get('win_rate', 0)*100:.1f}%")
-    print(f"   ")
+    print("   ")
     print(f"   后期（{late.get('sample_count', 0)}个样本）:")
     print(f"   - 捕获: {late.get('captured', 0)}个，利润: {late.get('avg_profit', 0):.2f}%，胜率: {late.get('win_rate', 0)*100:.1f}%")
     
     # 过拟合检测
-    print(f"\n🔍 3️⃣ 过拟合检测:")
+    print("\n🔍 3️⃣ 过拟合检测:")
     profit_diff = validation_result.get('profit_degradation', 0)
     winrate_ratio = validation_result.get('winrate_ratio', 1.0)
     
@@ -282,12 +282,12 @@ def print_phase4_summary(validation_result, final_params):
     stability = validation_result.get('stability', {})
     if stability:
         score = stability.get('score', 0)
-        print(f"\n📈 4️⃣ 稳定性评分:")
+        print("\n📈 4️⃣ 稳定性评分:")
         print(f"   - 最终稳定性得分: {score:.1f}/100")
     
     # 最终参数
-    print(f"\n🎯 最终可用参数:")
-    print(f"\n⚡ 超短线参数:")
+    print("\n🎯 最终可用参数:")
+    print("\n⚡ 超短线参数:")
     scalping_params = final_params.get('scalping', {})
     for key in ['min_risk_reward', 'min_indicator_consensus', 'atr_stop_multiplier', 
                 'atr_tp_multiplier', 'max_holding_hours', 'min_signal_score']:
@@ -297,7 +297,7 @@ def print_phase4_summary(validation_result, final_params):
         else:
             print(f"   {key}: {val}")
     
-    print(f"\n🌊 波段参数:")
+    print("\n🌊 波段参数:")
     swing_params = final_params.get('swing', {})
     for key in ['min_risk_reward', 'min_indicator_consensus', 'atr_stop_multiplier', 
                 'atr_tp_multiplier', 'max_holding_hours', 'min_signal_score']:
@@ -308,12 +308,12 @@ def print_phase4_summary(validation_result, final_params):
             print(f"   {key}: {val}")
     
     # 最终判定
-    print(f"\n🎯 5️⃣ 最终判定:")
+    print("\n🎯 5️⃣ 最终判定:")
     print(f"   - 状态: {status}")
     print(f"   - 建议: {validation_result.get('recommendation', '使用优化后的参数')}")
     print(f"   - 预期表现: 捕获率{full_test.get('capture_rate', 0)*100:.1f}%，利润{full_test.get('avg_profit', 0):.2f}%，胜率{full_test.get('win_rate', 0)*100:.1f}%")
     
-    print(f"\n💡 参数优化完成，可应用于实盘交易！")
+    print("\n💡 参数优化完成，可应用于实盘交易！")
     print(f"{'='*70}\n")
 
 

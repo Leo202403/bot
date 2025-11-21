@@ -6,7 +6,6 @@ import tracemalloc
 import sys
 import time
 import threading
-import os
 
 # 启动内存跟踪
 tracemalloc.start()

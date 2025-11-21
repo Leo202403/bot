@@ -15,7 +15,7 @@
 
 import json
 from pathlib import Path
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List
 import sys
 
 
@@ -35,7 +35,6 @@ def sample_opportunities_for_phase3(opportunities: List[Dict], max_size: int = 8
     Returns:
         采样后的机会列表
     """
-    import random
     
     # 【V8.5.2.4.89.4】先按类型分类（关键修复）
     scalping_opps = [o for o in opportunities if o.get('signal_type') == 'scalping']
@@ -138,15 +137,15 @@ def phase3_enhanced_optimization(
         phase3_result: Phase 3优化结果
     """
     print(f"\n{'='*70}")
-    print(f"⚖️  【Phase 3】风险控制与利润最大化")
+    print("⚖️  【Phase 3】风险控制与利润最大化")
     print(f"{'='*70}")
-    print(f"  策略：叠加Phase 2成果 + 多起点搜索 + AI辅助决策")
-    print(f"  特色：使用优化权重 + consensus筛选 + 信号分矩阵")
-    print(f"  【V8.5.2.4.88】内存优化：智能采样 + 分批测试")
+    print("  策略：叠加Phase 2成果 + 多起点搜索 + AI辅助决策")
+    print("  特色：使用优化权重 + consensus筛选 + 信号分矩阵")
+    print("  【V8.5.2.4.88】内存优化：智能采样 + 分批测试")
     print(f"{'='*70}")
     
     # 【V8.5.2.4.88】内存优化：采样机会
-    print(f"\n  💾 【内存优化】机会采样")
+    print("\n  💾 【内存优化】机会采样")
     print(f"     原始机会数: {len(all_opportunities)}")
     all_opportunities = sample_opportunities_for_phase3(all_opportunities, max_size=800)
     print(f"     采样后机会数: {len(all_opportunities)}")
@@ -157,14 +156,14 @@ def phase3_enhanced_optimization(
     best_swing_weights = learned_features.get('best_swing_weights', {})
     top5_param_combos = learned_features.get('top5_param_combos', [])
     
-    print(f"\n  📚 【Phase 2学习成果加载】")
+    print("\n  📚 【Phase 2学习成果加载】")
     print(f"     ⚡ 超短线最优权重: {best_scalping_weights.get('name', 'N/A')}")
     print(f"     🌊 波段最优权重: {best_swing_weights.get('name', 'N/A')}")
     print(f"     🎯 Top5参数组合: {len(top5_param_combos)}个")
     
     # 【步骤2】使用优化权重重新计算signal_score
-    print(f"\n  🔄 【重新计算signal_score】")
-    print(f"     使用Phase 2优化的权重配置...")
+    print("\n  🔄 【重新计算signal_score】")
+    print("     使用Phase 2优化的权重配置...")
     
     # 导入重新计算函数
     sys.path.insert(0, str(Path(__file__).parent))
@@ -202,9 +201,9 @@ def phase3_enhanced_optimization(
     print(f"     ✓ 重新计算: {recalc_count}/{len(all_opportunities)}个机会")
     
     # 【步骤3】两阶段多起点搜索（方案C）
-    print(f"\n  🎯 【两阶段多起点搜索】")
-    print(f"     策略：先粗筛找Top2起点 → 再精选最优参数")
-    print(f"     【V8.5.2.4.89方案C】分层测试，内存峰值更低，精度损失<5%")
+    print("\n  🎯 【两阶段多起点搜索】")
+    print("     策略：先粗筛找Top2起点 → 再精选最优参数")
+    print("     【V8.5.2.4.89方案C】分层测试，内存峰值更低，精度损失<5%")
     
     # 准备候选起点（4个）
     candidate_starting_points = []
@@ -274,15 +273,15 @@ def phase3_enhanced_optimization(
     if len(coarse_results) >= 2:
         coarse_results_sorted = sorted(coarse_results, key=lambda x: x.get('total_profit', 0), reverse=True)
         top2_starting_points = coarse_results_sorted[:2]
-        print(f"\n     🏆 粗筛Top2起点:")
+        print("\n     🏆 粗筛Top2起点:")
         for rank, sp in enumerate(top2_starting_points, 1):
             print(f"        {rank}. {sp['starting_point']} (利润: {sp.get('total_profit', 0):.1f}%)")
     elif len(coarse_results) == 1:
         top2_starting_points = coarse_results
-        print(f"\n     ⚠️  只有1个有效起点，将只对其进行精选")
+        print("\n     ⚠️  只有1个有效起点，将只对其进行精选")
     else:
         top2_starting_points = []
-        print(f"\n     ❌ 粗筛未找到有效起点")
+        print("\n     ❌ 粗筛未找到有效起点")
     
     # ========== 第二阶段：精选（在Top2起点上精细测试）==========
     print(f"\n     🔬 【第二阶段：精选】精细测试8组×{len(top2_starting_points)}起点")
@@ -328,13 +327,13 @@ def phase3_enhanced_optimization(
         print(f"\n     ⚠️  精选失败，使用粗筛最佳结果: {best_search_result.get('starting_point')}")
     else:
         best_search_result = None
-        print(f"\n     ⚠️  未找到有效结果，使用Phase 2参数")
+        print("\n     ⚠️  未找到有效结果，使用Phase 2参数")
     
-    print(f"\n     💾 内存优化: 分两批执行，峰值降低50%")
+    print("\n     💾 内存优化: 分两批执行，峰值降低50%")
     
     # 【步骤4】组合筛选矩阵测试
-    print(f"\n  📊 【组合筛选矩阵】")
-    print(f"     测试不同的consensus × signal_score组合")
+    print("\n  📊 【组合筛选矩阵】")
+    print("     测试不同的consensus × signal_score组合")
     
     filter_combinations = [
         {'min_consensus': 1, 'min_signal_score': 75, 'name': '极宽松（最大召回）'},
@@ -422,7 +421,7 @@ def phase3_enhanced_optimization(
     # 排序并显示Top 3
     matrix_results_sorted = sorted(matrix_results, key=lambda x: x['score'], reverse=True)
     
-    print(f"\n     组合筛选Top 3:")
+    print("\n     组合筛选Top 3:")
     for i, result in enumerate(matrix_results_sorted[:3], 1):
         print(f"       #{i} [{result['name']}]")
         print(f"          consensus>={result['min_consensus']}, signal_score>={result['min_signal_score']}")
@@ -433,8 +432,8 @@ def phase3_enhanced_optimization(
     best_matrix_combo = matrix_results_sorted[0] if matrix_results_sorted else None
     
     # 【步骤5】AI辅助决策
-    print(f"\n  🤖 【AI辅助决策】")
-    print(f"     请求AI分析数据并推荐最优参数...")
+    print("\n  🤖 【AI辅助决策】")
+    print("     请求AI分析数据并推荐最优参数...")
     
     ai_recommendation = request_ai_analysis(
         all_opportunities=all_opportunities,
@@ -446,8 +445,8 @@ def phase3_enhanced_optimization(
     )
     
     # 【步骤6】分离优化超短线和波段
-    print(f"\n  📊 【分离优化】")
-    print(f"     分别为超短线和波段寻找最大利润参数...")
+    print("\n  📊 【分离优化】")
+    print("     分别为超短线和波段寻找最大利润参数...")
     
     # 分离机会
     scalping_opps = [o for o in all_opportunities if o.get('signal_type') == 'scalping']
@@ -461,7 +460,7 @@ def phase3_enhanced_optimization(
     best_starting_point_params = best_search_result.get('params') if best_search_result else (candidate_starting_points[0]['params'] if candidate_starting_points else phase2_baseline.get('params'))
     best_starting_point_list = [{'name': 'Phase3最佳', 'params': best_starting_point_params, 'source': 'phase3_best'}]
     
-    print(f"\n     💡 【内存优化】分离优化只使用Phase 3找到的最佳起点（4→1起点，节省75%内存）")
+    print("\n     💡 【内存优化】分离优化只使用Phase 3找到的最佳起点（4→1起点，节省75%内存）")
     
     # 优化超短线参数
     scalping_result = optimize_for_signal_type(
@@ -476,7 +475,7 @@ def phase3_enhanced_optimization(
     import gc
     del scalping_opps  # 删除已用完的超短线机会列表
     gc.collect()
-    print(f"     💾 超短线优化完成，已释放内存")
+    print("     💾 超短线优化完成，已释放内存")
     
     # 优化波段参数
     swing_result = optimize_for_signal_type(
@@ -487,7 +486,7 @@ def phase3_enhanced_optimization(
         kline_snapshots=kline_snapshots
     )
     
-    print(f"\n  ✅ Phase 3优化完成")
+    print("\n  ✅ Phase 3优化完成")
     print(f"     超短线: 捕获率{scalping_result['capture_rate']*100:.1f}%, 平均利润{scalping_result['avg_profit']:.2f}%")
     print(f"     波段: 捕获率{swing_result['capture_rate']*100:.1f}%, 平均利润{swing_result['avg_profit']:.2f}%")
     
@@ -562,7 +561,7 @@ def request_ai_analysis(
         # 解析AI响应
         recommendation = parse_ai_recommendation(ai_response)
         
-        print(f"     ✓ AI Analysis Completed")
+        print("     ✓ AI Analysis Completed")
         print(f"     Recommended Strategy: {recommendation.get('strategy', 'N/A')}")
         print(f"     Reason: {recommendation.get('reason', 'N/A')[:80]}...")
         
@@ -571,8 +570,8 @@ def request_ai_analysis(
     except Exception as e:
         # 【V8.5.2.4.89.2】更友好的错误提示
         if "API key not found" in str(e):
-            print(f"     ℹ️  AI辅助决策已跳过（未配置API密钥）")
-            print(f"     💡 已使用Phase 2+3数据驱动的最优参数，效果等同或更好")
+            print("     ℹ️  AI辅助决策已跳过（未配置API密钥）")
+            print("     💡 已使用Phase 2+3数据驱动的最优参数，效果等同或更好")
         else:
             print(f"     ⚠️  AI Call Failed: {e}")
         return {}
@@ -593,7 +592,6 @@ def call_ai_unified(prompt: str, model_name: str) -> str:
     """
     import os
     import requests
-    import json
     
     # 根据模型选择API配置
     if model_name == "deepseek":
@@ -662,7 +660,7 @@ def build_ai_analysis_prompt(
     swing_count = total_opps - scalping_count
     
     # Consensus distribution
-    consensus_dist = {}
+    consensus_dist: Dict[int, int] = {}
     for opp in all_opportunities:
         c = opp.get('consensus', 0)  # 【V8.5.2.4.47修复】字段名统一
         consensus_dist[c] = consensus_dist.get(c, 0) + 1
@@ -710,7 +708,7 @@ Signal Score Distribution: {signal_score_ranges}
            signal_score>={result.get('params', {}).get('min_signal_score', 'N/A')}
 """
     
-    prompt += f"""
+    prompt += """
 【Filter Matrix Results】(Top 3)
 """
     
@@ -869,7 +867,7 @@ def optimize_for_signal_type(
                 'trailing_stop_activation': [1.0, 2.0],  # 提高激活阈值（0.5→2.0）
                 'trailing_stop_distance': [1.5, 2.0],    # 提高跟踪距离（1.0→1.5）
             })
-            print(f"     🎨 【V8.5.2.4.76】高级筛选已启用（8维度探索+移动止损）")
+            print("     🎨 【V8.5.2.4.76】高级筛选已启用（8维度探索+移动止损）")
         else:
             param_grid.update({
                 'require_strong_pattern': [False],
@@ -879,7 +877,7 @@ def optimize_for_signal_type(
                 'trailing_stop_activation': [2.0],  # 提高激活阈值（盈利2倍ATR时启动）
                 'trailing_stop_distance': [1.5],    # 提高跟踪距离（回撤1.5倍ATR触发）
             })
-            print(f"     🎯 【V8.5.2.4.76】使用标准筛选+移动止损（5维度：基础+质量+TP）")
+            print("     🎯 【V8.5.2.4.76】使用标准筛选+移动止损（5维度：基础+质量+TP）")
         
         print(f"     📐 基础条件: score≥{param_grid['min_signal_score']}, consensus≥{param_grid['min_indicator_consensus']}")
         print(f"     💡 质量控制: R:R≥{param_grid['min_risk_reward']}, 密度≥{param_grid['min_profit_density']}")
@@ -926,7 +924,7 @@ def optimize_for_signal_type(
                 'trailing_stop_activation': [1.0, 2.0],  # 提高激活阈值（0.5→2.0）
                 'trailing_stop_distance': [1.5, 2.0],    # 提高跟踪距离（1.0→1.5）
             })
-            print(f"     🎨 【V8.5.2.4.76】高级筛选已启用（8维度探索+移动止损）")
+            print("     🎨 【V8.5.2.4.76】高级筛选已启用（8维度探索+移动止损）")
         else:
             param_grid.update({
                 'require_strong_pattern': [False],
@@ -936,7 +934,7 @@ def optimize_for_signal_type(
                 'trailing_stop_activation': [2.0],  # 提高激活阈值（盈利2倍ATR时启动）
                 'trailing_stop_distance': [1.5],    # 提高跟踪距离（回撤1.5倍ATR触发）
             })
-            print(f"     🎯 【V8.5.2.4.76】使用标准筛选+移动止损（5维度：基础+质量+TP）")
+            print("     🎯 【V8.5.2.4.76】使用标准筛选+移动止损（5维度：基础+质量+TP）")
         
         print(f"     📐 基础条件: score≥{param_grid['min_signal_score']}, consensus≥{param_grid['min_indicator_consensus']}")
         print(f"     💡 质量控制: R:R≥{param_grid['min_risk_reward']}, 密度≥{param_grid['min_profit_density']}")
@@ -954,17 +952,17 @@ def optimize_for_signal_type(
         test_combinations = []
         
         # 【V8.5.2.4.75】测试所有筛选条件组合（8维度+移动止损）
-        for consensus in param_grid['min_indicator_consensus']:
-            for signal_score in param_grid['min_signal_score']:
-                for risk_reward in param_grid['min_risk_reward']:
-                    for profit_density in param_grid['min_profit_density']:
-                        for require_pattern in param_grid['require_strong_pattern']:
-                            for trend_strength in param_grid['min_trend_strength']:
-                                for require_sr in param_grid['require_near_sr']:
-                                    for tp_multiplier in param_grid['atr_tp_multiplier']:
-                                        for trailing_stop in param_grid['trailing_stop_enabled']:
-                                            for ts_activation in param_grid['trailing_stop_activation']:
-                                                for ts_distance in param_grid['trailing_stop_distance']:
+        for consensus in param_grid['min_indicator_consensus']:  # type: ignore[attr-defined]
+            for signal_score in param_grid['min_signal_score']:  # type: ignore[attr-defined]
+                for risk_reward in param_grid['min_risk_reward']:  # type: ignore[attr-defined]
+                    for profit_density in param_grid['min_profit_density']:  # type: ignore[attr-defined]
+                        for require_pattern in param_grid['require_strong_pattern']:  # type: ignore[attr-defined]
+                            for trend_strength in param_grid['min_trend_strength']:  # type: ignore[attr-defined]
+                                for require_sr in param_grid['require_near_sr']:  # type: ignore[attr-defined]
+                                    for tp_multiplier in param_grid['atr_tp_multiplier']:  # type: ignore[attr-defined]
+                                        for trailing_stop in param_grid['trailing_stop_enabled']:  # type: ignore[attr-defined]
+                                            for ts_activation in param_grid['trailing_stop_activation']:  # type: ignore[attr-defined]
+                                                for ts_distance in param_grid['trailing_stop_distance']:  # type: ignore[attr-defined]
                                                     test_params = {
                                                         'min_indicator_consensus': consensus,
                                                         'min_signal_score': signal_score,
@@ -974,8 +972,8 @@ def optimize_for_signal_type(
                                                         'min_trend_strength': trend_strength,
                                                         'require_near_sr': require_sr,
                                                         'atr_tp_multiplier': tp_multiplier,
-                                                        'atr_stop_multiplier': param_grid['atr_stop_multiplier'][0],
-                                                        'max_holding_hours': param_grid['max_holding_hours'][0],
+                                                        'atr_stop_multiplier': param_grid['atr_stop_multiplier'][0],  # type: ignore[index]
+                                                        'max_holding_hours': param_grid['max_holding_hours'][0],  # type: ignore[index]
                                                         'trailing_stop_enabled': trailing_stop,
                                                         'trailing_stop_activation': ts_activation,  # 【V8.5.2.4.75】新增
                                                         'trailing_stop_distance': ts_distance       # 【V8.5.2.4.75】新增
@@ -1080,9 +1078,9 @@ def optimize_for_signal_type(
         gc.collect()  # 立即释放内存
     
     if not all_results:
-        print(f"     ⚠️  未找到有效结果（所有参数组合筛选后机会数=0）")
+        print("     ⚠️  未找到有效结果（所有参数组合筛选后机会数=0）")
         print(f"     💡 可能原因：筛选条件过严或机会数太少（当前{len(opportunities)}个）")
-        print(f"     💡 建议：增加机会采样数量或放宽筛选条件")
+        print("     💡 建议：增加机会采样数量或放宽筛选条件")
         return {
             'best_params': {},
             'capture_rate': 0,
@@ -1094,7 +1092,7 @@ def optimize_for_signal_type(
     # 选择总利润最高的组合
     best_result = max(all_results, key=lambda x: x['total_profit'])
     
-    print(f"     ✓ 最优参数找到！")
+    print("     ✓ 最优参数找到！")
     print(f"        起点: {best_result['starting_point']}")
     print(f"        捕获率: {best_result['capture_rate']*100:.1f}% ({best_result['captured_count']}/{len(opportunities)})")
     print(f"        平均利润: {best_result['avg_profit']:.2f}%")

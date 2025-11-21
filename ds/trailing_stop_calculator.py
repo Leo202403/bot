@@ -9,14 +9,14 @@
 3. 提供详细的退出原因分析
 """
 
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Optional, Tuple
 import pandas as pd
 
 
 def calculate_profit_with_trailing_stop(
     opportunity: Dict,
     params: Dict,
-    future_data: pd.DataFrame = None
+    future_data: Optional[pd.DataFrame] = None
 ) -> Tuple[float, str, Dict]:
     """
     【V8.5.2.4.42】计算带移动止损的实际利润
@@ -214,7 +214,7 @@ def _calculate_with_max_profit(
 def batch_calculate_profits(
     opportunities: List[Dict],
     params: Dict,
-    future_data_dict: Dict[str, pd.DataFrame] = None
+    future_data_dict: Optional[Dict[str, pd.DataFrame]] = None
 ) -> List[Dict]:
     """
     批量计算多个机会的利润
@@ -253,7 +253,7 @@ def batch_calculate_profits(
 def compare_static_vs_trailing(
     opportunities: List[Dict],
     base_params: Dict,
-    future_data_dict: Dict[str, pd.DataFrame] = None
+    future_data_dict: Optional[Dict[str, pd.DataFrame]] = None
 ) -> Dict:
     """
     对比静态止损和移动止损的效果

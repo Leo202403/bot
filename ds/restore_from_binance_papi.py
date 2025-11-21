@@ -14,16 +14,16 @@
 """
 
 import os
-import sys
 import json
 import csv
 import ccxt
 from pathlib import Path
 from datetime import datetime
+from typing import Any, Dict
 from dotenv import load_dotenv
 
 # 全局变量存储两个交易所实例
-exchanges = {}
+exchanges: Dict[str, Any] = {}
 
 
 def init_exchange(model_name):
@@ -112,7 +112,7 @@ def get_account_balance(exchange, model_name):
                 # 备用方案：使用USDT余额
                 total_assets = balance.get('total', {}).get('USDT', 0)
             
-            print(f"\n💰 总资产详情:")
+            print("\n💰 总资产详情:")
             print(f"  钱包余额: {total_wallet_balance:.2f} USDT")
             print(f"  未实现盈亏: {total_unrealized_profit:+.2f} USDT")
             print(f"  总资产: {total_assets:.2f} USDT")

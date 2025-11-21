@@ -58,7 +58,7 @@ def fix_status_file(file_path, model_name):
     # 特殊处理：如果 total_assets 为 0，尝试从其他字段计算
     if data['total_assets'] == 0 and (data['total_realized_pnl'] != 0 or data['unrealized_pnl'] != 0):
         calculated_assets = data['initial_capital'] + data['total_realized_pnl'] + data['unrealized_pnl']
-        print(f"\n⚠️  total_assets 为 0，根据其他字段计算:")
+        print("\n⚠️  total_assets 为 0，根据其他字段计算:")
         print(f"   初始资金: {data['initial_capital']}")
         print(f"   已实现盈亏: {data['total_realized_pnl']}")
         print(f"   未实现盈亏: {data['unrealized_pnl']}")
@@ -73,10 +73,10 @@ def fix_status_file(file_path, model_name):
         # 保存修复后的数据
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
-        print(f"\n✓ 已保存修复后的文件")
+        print("\n✓ 已保存修复后的文件")
         return True
     else:
-        print(f"\n✓ 文件无需修复")
+        print("\n✓ 文件无需修复")
         return True
 
 def main():
