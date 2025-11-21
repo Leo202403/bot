@@ -197,21 +197,27 @@ def generate_params_comparison_table(
     # 【DEBUG】输出learned_features内容用于调试
     print(f"  📊 【DEBUG】learned_features: {learned_features}")
     
-    scalping_density_raw = safe_get(learned_features, 'scalping_avg_density', 'N/A')
-    swing_density_raw = safe_get(learned_features, 'swing_avg_density', 'N/A')
+    # 直接获取原始数值进行判断，而不是使用safe_get转换后的字符串
+    scalping_density_val = learned_features.get('scalping_avg_density')
+    swing_density_val = learned_features.get('swing_avg_density')
     high_density_threshold = safe_get(learned_features, 'high_density_threshold', 'N/A')
     
-    # 【修复】如果密度值异常（< 2），标记为数据异常，提示用户检查Phase 1统计
-    # 正常情况下，超短线密度应该 > 5，波段密度应该 > 0.5
-    if isinstance(scalping_density_raw, (int, float)) and scalping_density_raw < 2:
-        scalping_density = f"⚠️ {scalping_density_raw:.2f} (异常低，请检查Phase 1统计)"
+    # 【修复】格式化逻辑
+    if isinstance(scalping_density_val, (int, float)):
+        if scalping_density_val < 2:
+            scalping_density = f"⚠️ {scalping_density_val:.2f} (异常低，请检查Phase 1统计)"
+        else:
+            scalping_density = f"{scalping_density_val:.2f}"
     else:
-        scalping_density = scalping_density_raw if scalping_density_raw == 'N/A' else f"{scalping_density_raw:.2f}"
+        scalping_density = str(scalping_density_val) if scalping_density_val is not None else 'N/A'
     
-    if isinstance(swing_density_raw, (int, float)) and swing_density_raw < 0.5:
-        swing_density = f"⚠️ {swing_density_raw:.2f} (异常低，请检查Phase 1统计)"
+    if isinstance(swing_density_val, (int, float)):
+        if swing_density_val < 0.5:
+            swing_density = f"⚠️ {swing_density_val:.2f} (异常低，请检查Phase 1统计)"
+        else:
+            swing_density = f"{swing_density_val:.2f}"
     else:
-        swing_density = swing_density_raw if swing_density_raw == 'N/A' else f"{swing_density_raw:.2f}"
+        swing_density = str(swing_density_val) if swing_density_val is not None else 'N/A'
     
     html = f"""
 <div class="summary-box" style="background: #fff3e0; border: 2px solid #ff9800; margin: 20px 0; padding: 20px; border-radius: 8px;">

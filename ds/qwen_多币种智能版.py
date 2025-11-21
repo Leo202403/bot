@@ -12057,6 +12057,7 @@ def analyze_and_adjust_params():
                 phase_summary_html = ""
                 params_comparison_html = ""
                 profit_comparison_html = ""
+                weights_comparison_html = ""  # 【修复】提前初始化变量，防止后续引用报错
                 
                 try:
                     from email_bark_formatter import (
@@ -12080,7 +12081,6 @@ def analyze_and_adjust_params():
                     profit_comparison_html = generate_profit_comparison_table(all_phase_data)
                     
                     # 【V8.5.2.4.89.29】生成信号分权重对比表
-                    weights_comparison_html = ""
                     try:
                         best_scalping_weights = learned_features.get('best_scalping_weights', {})
                         best_swing_weights = learned_features.get('best_swing_weights', {})
@@ -20312,6 +20312,7 @@ def _execute_single_open_action_v55(
             needs_adjustment = False
             adjustment_reason = ""
             suggested_position = planned_position
+            suggested_amount = None  # 【V8.5.2.4.89.30】保存建议的amount，避免反向计算损失精度
             
             if actual_notional <= min_notional_required:
                 needs_adjustment = True
@@ -20333,12 +20334,13 @@ def _execute_single_open_action_v55(
                 print(f"计算数量: {calculated_amount:.6f} → 舍入后: {rounded_amount:.6f}")
                 print(f"舍入后名义价值: ${actual_notional:.2f}")
                 print(f"最小要求(ccxt): >${min_notional_required:.2f}")
-                print(f"建议数量: {suggested_amount:.6f}")
+                print(f"建议数量: {suggested_amount:.6f} (名义价值: ${suggested_amount * entry_price:.2f})")
                 print(f"建议仓位: ${suggested_position:.2f}U")
             
             elif min_amount and amount < min_amount:
                 needs_adjustment = True
                 adjustment_reason = "交易数量不足"
+                suggested_amount = min_amount  # 【V8.5.2.4.89.30】保存min_amount
                 suggested_position = min_amount * entry_price / leverage
                 
                 adjustment_pct = (suggested_position - planned_position) / planned_position * 100
@@ -20372,9 +20374,15 @@ def _execute_single_open_action_v55(
                     print(f"置信度: {ai_decision['confidence']}")
                     print(f"理由: {ai_decision['reason']}")
                     
-                    # 使用调整后的仓位
+                    # 【V8.5.2.4.89.30】使用调整后的仓位和数量
                     planned_position = suggested_position
-                    amount = (planned_position * leverage) / entry_price
+                    # 如果有直接建议的amount，使用它；否则反向计算
+                    if suggested_amount is not None:
+                        amount = suggested_amount
+                        print(f"   → 使用建议数量: {amount:.6f} (名义价值: ${amount * entry_price:.2f})")
+                    else:
+                        amount = (planned_position * leverage) / entry_price
+                        print(f"   → 反向计算数量: {amount:.6f}")
                     
                     # 🔧 V7.7.0.15: 截断理由避免URL过长
                     ai_reason = ai_decision['reason']
