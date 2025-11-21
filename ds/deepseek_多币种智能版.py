@@ -11371,24 +11371,24 @@ def analyze_and_adjust_params():
             </div>
 """
                         
-                        # 【V8.5.2.4.89.65】去掉综合总利润，只保留分类显示
-                        # if total_data:
-                        #     t_old = total_data['old']
-                        #     t_new = total_data['new']
-                        #     t_diff = total_data['diff']
-                        #     t_diff_pct = total_data['diff_pct']
-                        #     t_emoji = '🚀' if t_diff > 5 else ('📈' if t_diff > 0 else ('📉' if t_diff < 0 else '➡️'))
-                        #     opportunity_stats_html += f"""
-                        # <div style="margin: 15px 0 0 0; padding: 12px; background: rgba(255,255,255,0.2); border-radius: 6px; text-align: center;">
-                        #     <h4 style="margin: 0 0 8px 0; color: white;">📊 综合总利润</h4>
-                        #     <div style="font-size: 2em; font-weight: bold; margin: 8px 0;">
-                        #         {t_old:+.1f}U → {t_new:+.1f}U
-                        #     </div>
-                        #     <div style="font-size: 1.8em; font-weight: bold; color: #ffd700;">
-                        #         {t_diff:+.1f}U ({t_diff_pct:+.1f}%) {t_emoji}
-                        #     </div>
-                        # </div>
-                        # """
+                        # 综合总利润
+                        if total_data:
+                            t_old = total_data['old']
+                            t_new = total_data['new']
+                            t_diff = total_data['diff']
+                            t_diff_pct = total_data['diff_pct']
+                            t_emoji = '🚀' if t_diff > 5 else ('📈' if t_diff > 0 else ('📉' if t_diff < 0 else '➡️'))
+                            opportunity_stats_html += f"""
+            <div style="margin: 15px 0 0 0; padding: 12px; background: rgba(255,255,255,0.2); border-radius: 6px; text-align: center;">
+                <h4 style="margin: 0 0 8px 0; color: white;">📊 综合总利润</h4>
+                <div style="font-size: 2em; font-weight: bold; margin: 8px 0;">
+                    {t_old:+.1f}U → {t_new:+.1f}U
+                </div>
+                <div style="font-size: 1.8em; font-weight: bold; color: #ffd700;">
+                    {t_diff:+.1f}U ({t_diff_pct:+.1f}%) {t_emoji}
+                </div>
+            </div>
+"""
                         
                         opportunity_stats_html += f"""
             <div style="margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.15); border-radius: 4px; font-size: 0.85em;">
