@@ -419,7 +419,7 @@ def generate_profit_comparison_table(phase_data):
 
 def generate_optimized_bark_content(yesterday_data, phase2_data, phase4_data):
     """
-    【V8.5.2.4.89.5】生成优化后的Bark推送内容（增强容错+调试）
+    【V8.5.2.4.89.10】生成优化后的Bark推送内容（单行精简版）
     
     Args:
         yesterday_data: {
@@ -440,58 +440,35 @@ def generate_optimized_bark_content(yesterday_data, phase2_data, phase4_data):
         }
     
     Returns:
-        str: Bark内容
+        str: Bark内容（单行，无换行符）
     """
-    # 【V8.5.2.4.89.5】调试：打印参数类型
-    print(f"[Bark Debug] yesterday_data type: {type(yesterday_data)}")
-    print(f"[Bark Debug] phase2_data type: {type(phase2_data)}")
-    print(f"[Bark Debug] phase4_data type: {type(phase4_data)}")
-    
-    # 【V8.5.2.4.89.5】确保所有参数都是字典类型（增强版）
+    # 确保所有参数都是字典类型
     if not isinstance(yesterday_data, dict):
-        print(f"[Bark Debug] yesterday_data is not dict: {yesterday_data}")
         yesterday_data = {}
     if not isinstance(phase2_data, dict):
-        print(f"[Bark Debug] phase2_data is not dict: {phase2_data}")
         phase2_data = {}
     if not isinstance(phase4_data, dict):
-        print(f"[Bark Debug] phase4_data is not dict: {phase4_data}")
         phase4_data = {}
     
     yesterday_data = yesterday_data or {}
     phase2_data = phase2_data or {}
     phase4_data = phase4_data or {}
     
-    lines = []
-    
-    # 1️⃣ 前一天情况总结
+    # 【修复】极度精简，单行显示，避免换行符导致Bark URL解析错误
     yesterday_winrate = yesterday_data.get('winrate', 0) * 100
     yesterday_profit = yesterday_data.get('profit', 0)
-    # 【修复】移除冒号避免Bark URL解析错误
-    lines.append(f"📊 昨日-胜率{yesterday_winrate:.0f}% 利润{yesterday_profit:+.1f}U")
     
-    # 2️⃣ 当前重点信息（Phase 4最终结果）
-    lines.append(f"\n🎯 Phase 4最终-")
-    lines.append(f"⚡超短线-{phase4_data.get('scalping_capture', 0):.0f}% / {phase4_data.get('scalping_profit', 0):.1f}%")
-    lines.append(f"🌊波段-{phase4_data.get('swing_capture', 0):.0f}% / {phase4_data.get('swing_profit', 0):.1f}%")
-    
-    # 3️⃣ 对比信息（Phase 2 → Phase 4）
-    scalping_capture_change = phase4_data.get('scalping_capture', 0) - phase2_data.get('scalping_capture', 0)
-    scalping_profit_change = phase4_data.get('scalping_profit', 0) - phase2_data.get('scalping_profit', 0)
+    # 优化效果
     swing_capture_change = phase4_data.get('swing_capture', 0) - phase2_data.get('swing_capture', 0)
     swing_profit_change = phase4_data.get('swing_profit', 0) - phase2_data.get('swing_profit', 0)
     
-    lines.append(f"\n📈 优化效果-")
+    # 单行格式：昨日胜率X% 利润Y | P4波段捕获Z% 利润W% | 优化+A%捕获 +B%利润
+    content = (
+        f"昨日{yesterday_winrate:.0f}% {yesterday_profit:+.1f}U | "
+        f"P4波段{phase4_data.get('swing_capture', 0):.0f}%捕获 {phase4_data.get('swing_profit', 0):.1f}%利 | "
+        f"优化{swing_capture_change:+.0f}%捕 {swing_profit_change:+.1f}%利"
+    )
     
-    # 超短线变化
-    scalping_capture_sign = "+" if scalping_capture_change > 0 else ""
-    scalping_profit_sign = "+" if scalping_profit_change > 0 else ""
-    lines.append(f"⚡捕获率{scalping_capture_sign}{scalping_capture_change:.1f}% 利润{scalping_profit_sign}{scalping_profit_change:.1f}%")
-    
-    # 波段变化
-    swing_capture_sign = "+" if swing_capture_change > 0 else ""
-    swing_profit_sign = "+" if swing_profit_change > 0 else ""
-    lines.append(f"🌊捕获率{swing_capture_sign}{swing_capture_change:.1f}% 利润{swing_profit_sign}{swing_profit_change:.1f}%")
-    
-    return "\n".join(lines)
+    print(f"[Bark] 内容长度: {len(content)}字符")
+    return content
 
