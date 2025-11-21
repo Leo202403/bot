@@ -15876,6 +15876,9 @@ def ai_portfolio_decision(
         "空头吞没（看跌）": "Bear Engulf",
     }
 
+    # 【V8.5.2.4.89.63】导入市场状态分析模块
+    from market_regime_analyzer import analyze_market_regime, format_market_regime_for_ai
+    
     # 加载学习参数
     learning_config = load_learning_config()
     
@@ -16152,6 +16155,10 @@ Price: ${price:,.2f} ({data['price_change']:+.2f}%)
 🔹PA: {', '.join(pa_signals_en)} {pos_status_en}
 
 """
+    
+    # 【V8.5.2.4.89.63】分析市场状态并生成AI可读描述
+    market_regime = analyze_market_regime(market_data_list)
+    market_regime_text = format_market_regime_for_ai(market_regime)
     
     # 🔧 V7.7.0.14: 持仓信息英文化
     position_info = "\n【ACCOUNT STATUS】\n"
