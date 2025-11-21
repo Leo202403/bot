@@ -16296,6 +16296,8 @@ You are a professional cryptocurrency trading AI using a 3-layer trend alignment
 
 {market_overview}
 
+{market_regime_text}
+
 === ACCOUNT STATUS ===
 
 {position_info}
@@ -16647,7 +16649,7 @@ While code executes as single position, AI should plan multi-part management:
         }
     
     try:
-        # 🔧 优化System Prompt结构（利于DeepSeek后端缓存）
+        # 【V8.5.2.4.89.63】优化System Prompt（添加市场状态感知）
         optimized_system_prompt = """You are a professional quantitative portfolio manager AI specializing in multi-asset analysis and capital allocation.
 
 Your core principles:
@@ -16655,7 +16657,14 @@ Your core principles:
 - Equally consider LONG and SHORT directions based on 4H trend
 - In bearish trends, actively seek SHORT opportunities, not just longs
 - Dynamically adjust positions to ensure total risk is controlled
-- Always respond in Chinese (中文)"""
+- Always respond in Chinese (中文)
+
+MARKET REGIME AWARENESS:
+Adapt your strategy based on the Market Regime Analysis provided:
+• SCALPING MODE (choppy/high-vol): 15m-1H setups, tight SL (ATR×1.0-1.5), quick TP (R:R 1:1 ok), high turnover
+• SWING MODE (trending/strong): 4H alignment, wide SL (ATR×1.5-2.5), patient TP (R:R≥2:1), multi-day holds
+• HOLD MODE (low-vol/neutral): Raise thresholds (consensus≥4/5), reduce exposure, wait for clarity
+The regime recommendation is advisory - final decision depends on specific coin technicals."""
         
         response = deepseek_client.chat.completions.create(
             model="deepseek-reasoner",  # DeepSeek模型（思考模式，提升复杂策略分析能力）

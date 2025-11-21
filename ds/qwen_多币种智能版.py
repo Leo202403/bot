@@ -15815,6 +15815,9 @@ def ai_portfolio_decision(
         "空头吞没（看跌）": "Bear Engulf",
     }
 
+    # 【V8.5.2.4.89.63】导入市场状态分析模块
+    from market_regime_analyzer import analyze_market_regime, format_market_regime_for_ai
+    
     # 加载学习参数
     learning_config = load_learning_config()
     
@@ -16092,6 +16095,10 @@ Price: ${price:,.2f} ({data['price_change']:+.2f}%)
 
 """
     
+    # 【V8.5.2.4.89.63】分析市场状态并生成AI可读描述
+    market_regime = analyze_market_regime(market_data_list)
+    market_regime_text = format_market_regime_for_ai(market_regime)
+    
     # 🔧 V7.7.0.14: 持仓信息英文化
     position_info = "\n【ACCOUNT STATUS】\n"
     position_info += f"Total Assets: {total_assets:.2f}U (Balance {current_balance:.2f}U + UnrealizedPnL {total_unrealized_pnl:+.2f}U)\n"
@@ -16227,6 +16234,8 @@ You are a professional cryptocurrency trading AI using a 3-layer trend alignment
 === MARKET DATA (3-Layer Analysis) ===
 
 {market_overview}
+
+{market_regime_text}
 
 === ACCOUNT STATUS ===
 
@@ -16579,7 +16588,7 @@ While code executes as single position, AI should plan multi-part management:
         }
     
     try:
-        # 🔧 优化System Prompt结构（利于Qwen后端缓存）
+        # 【V8.5.2.4.89.63】优化System Prompt（添加市场状态感知）
         optimized_system_prompt = """You are a professional quantitative portfolio manager AI specializing in multi-asset analysis and capital allocation.
 
 Your core principles:
@@ -16587,7 +16596,14 @@ Your core principles:
 - Equally consider LONG and SHORT directions based on 4H trend
 - In bearish trends, actively seek SHORT opportunities, not just longs
 - Dynamically adjust positions to ensure total risk is controlled
-- Always respond in Chinese (中文)"""
+- Always respond in Chinese (中文)
+
+MARKET REGIME AWARENESS:
+Adapt your strategy based on the Market Regime Analysis provided:
+• SCALPING MODE (choppy/high-vol): 15m-1H setups, tight SL (ATR×1.0-1.5), quick TP (R:R 1:1 ok), high turnover
+• SWING MODE (trending/strong): 4H alignment, wide SL (ATR×1.5-2.5), patient TP (R:R≥2:1), multi-day holds
+• HOLD MODE (low-vol/neutral): Raise thresholds (consensus≥4/5), reduce exposure, wait for clarity
+The regime recommendation is advisory - final decision depends on specific coin technicals."""
         
         response = qwen_client.chat.completions.create(
             model="qwen3-max",  # Qwen模型（思考模式，提升复杂策略分析能力）
