@@ -209,15 +209,24 @@ def phase3_enhanced_optimization(
     # 准备候选起点（4个）
     candidate_starting_points = []
     
-    # 起点1: Phase 2最优参数
-    if phase2_baseline.get('params'):
+    # 【V8.5.2.4.89.24】修复：Phase 2现在是分离结构
+    # 起点1: Phase 2超短线最优参数
+    if phase2_baseline.get('scalping', {}).get('params'):
         candidate_starting_points.append({
-            'name': 'Phase2最优',
-            'params': phase2_baseline['params'].copy(),
-            'source': 'phase2_best'
+            'name': 'Phase2超短线',
+            'params': phase2_baseline['scalping']['params'].copy(),
+            'source': 'phase2_scalping'
         })
     
-    # 起点2-4: Top3组合
+    # 起点2: Phase 2波段最优参数
+    if phase2_baseline.get('swing', {}).get('params'):
+        candidate_starting_points.append({
+            'name': 'Phase2波段',
+            'params': phase2_baseline['swing']['params'].copy(),
+            'source': 'phase2_swing'
+        })
+    
+    # 起点3-5: Top3组合
     for i, combo in enumerate(top5_param_combos[:3], 1):
         if combo.get('params'):
             candidate_starting_points.append({
