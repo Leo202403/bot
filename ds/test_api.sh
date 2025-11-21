@@ -14,9 +14,9 @@ echo "【步骤1】检查后端进程..."
 echo ""
 
 # 检测方法1: 通过端口检查（最可靠）
-if netstat -tlnp 2>/dev/null | grep ":5000" | grep -q "LISTEN" || \
-   ss -tlnp 2>/dev/null | grep ":5000" | grep -q "LISTEN"; then
-    echo "✓ 后端服务运行中（监听端口5000）"
+if netstat -tlnp 2>/dev/null | grep ":5001" | grep -q "LISTEN" || \
+   ss -tlnp 2>/dev/null | grep ":5001" | grep -q "LISTEN"; then
+    echo "✓ 后端服务运行中（监听端口5001）"
     
     # 尝试显示进程信息
     if ps aux | grep -E "python.*my_project" | grep -v grep > /dev/null; then
@@ -41,14 +41,14 @@ echo ""
 
 # 2. 测试DeepSeek API
 echo "2.1 测试 DeepSeek API:"
-echo "    URL: http://localhost:5000/trading-summary?model=deepseek&range=week"
+echo "    URL: http://localhost:5001/trading-summary?model=deepseek&range=week"
 echo ""
 
 # 使用 curl 测试，添加超时和重试机制
 RESPONSE=$(curl -s -o /tmp/deepseek_response.json -w "%{http_code}" \
     --max-time 10 \
     --connect-timeout 5 \
-    http://localhost:5000/trading-summary?model=deepseek\&range=week 2>&1)
+    http://localhost:5001/trading-summary?model=deepseek\&range=week 2>&1)
 
 # 检查 curl 是否成功执行
 if [ $? -ne 0 ]; then
@@ -92,14 +92,14 @@ echo ""
 
 # 3. 测试Qwen API
 echo "2.2 测试 Qwen API:"
-echo "    URL: http://localhost:5000/trading-summary?model=qwen&range=week"
+echo "    URL: http://localhost:5001/trading-summary?model=qwen&range=week"
 echo ""
 
 # 使用 curl 测试，添加超时和重试机制
 RESPONSE=$(curl -s -o /tmp/qwen_response.json -w "%{http_code}" \
     --max-time 10 \
     --connect-timeout 5 \
-    http://localhost:5000/trading-summary?model=qwen\&range=week 2>&1)
+    http://localhost:5001/trading-summary?model=qwen\&range=week 2>&1)
 
 # 检查 curl 是否成功执行
 if [ $? -ne 0 ]; then
