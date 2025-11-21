@@ -7330,7 +7330,7 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                 
                 # 🔧 V8.5.2.4.61 调试：启用前3个机会的调试模式
                 debug_count = 0
-                debug_enabled = len(captured_opps) > 0  # 如果有捕获机会，启用调试
+                debug_enabled = False  # 关闭调试以避免大量重复输出
                 
                 for idx, opp in enumerate(captured_opps):
                     # 【V8.5.2.4.36】根据signal_type使用差异化参数（从参数范围取中位数）
@@ -11108,7 +11108,7 @@ def analyze_and_adjust_params():
                 # 准备昨日数据
                 yesterday_data = {
                     'winrate': win_rate,  # 已经是0-1的小数
-                    'profit': sum([t.get('profit_loss', 0) for t in recent_20 if t.get('profit_loss', 0) > 0])  # 昨日总利润
+                    'profit': recent_20[recent_20["盈亏(U)"] > 0]["盈亏(U)"].sum() if len(recent_20) > 0 else 0.0  # 昨日总利润
                 }
                 
                 # 使用Phase 2和Phase 4数据
