@@ -118,8 +118,7 @@ def validate_signal_type(
             print(f"     ⚠️  无{signal_type}机会数据，跳过验证")
             print(f"     💡 可能原因: 当前数据量较小或市场条件不符合{signal_type}特征")
         elif not params:
-            print(f"     ⚠️  Phase 3未生成{signal_type}参数，跳过验证")
-            print(f"     💡 可能原因: Phase 3优化时{signal_type}机会数为0或未找到有效参数组合")
+            print(f"     ℹ️  {signal_type}参数已跳过（机会数不足，使用全局参数）")
         else:
             print(f"     ⚠️  跳过{signal_type}验证（原因未知）")
         return {

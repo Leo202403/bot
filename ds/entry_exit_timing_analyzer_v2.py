@@ -88,14 +88,14 @@ def analyze_entry_timing_v2(
         }
     
     # 筛选昨日的市场快照
-    market_snapshots_df['date'] = pd.to_datetime(market_snapshots_df['time']).dt.date
+    market_snapshots_df['date'] = pd.to_datetime(market_snapshots_df['time'], format='mixed', errors='coerce').dt.date
     yesterday_date_obj = datetime.strptime(yesterday_date_str, '%Y-%m-%d').date()
     yesterday_snapshots = market_snapshots_df[
         market_snapshots_df['date'] == yesterday_date_obj
     ].copy()
     
     if yesterday_snapshots.empty:
-        print(f"⚠️ 昨日无市场快照数据")
+        # print(f"ℹ️ 昨日市场快照数据不足（跳过开仓时机分析）")  # 精简日志
         return {
             'entry_stats': entry_stats,
             'correct_entries': [],
@@ -355,7 +355,7 @@ def analyze_exit_timing_v2(
         if kline_snapshots_df is not None and not kline_snapshots_df.empty:
             coin_klines = kline_snapshots_df[kline_snapshots_df['coin'] == coin].copy()
             if not coin_klines.empty:
-                coin_klines['time'] = pd.to_datetime(coin_klines['time'])
+                coin_klines['time'] = pd.to_datetime(coin_klines['time'], format='mixed', errors='coerce')
                 coin_klines = coin_klines.sort_values('time')
                 
                 future_klines = coin_klines[
