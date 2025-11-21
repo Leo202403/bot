@@ -7235,9 +7235,11 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         raise ValueError("【V8.5.2.3】quick_global_search_v8316必须提供confirmed_opportunities，不再支持降级使用market_snapshots")
     
     # 【V8.5.2.4.89.23】修复：分别处理超短线和波段机会
-        print("  ✅ 使用confirmed_opportunities（真实盈利机会）")
-    scalping_opportunities = confirmed_opportunities['scalping']['opportunities']
-    swing_opportunities = confirmed_opportunities['swing']['opportunities']
+    # 【V8.5.2.4.89.56】修复：深拷贝数据，避免后续修改影响原始缓存
+    import copy
+    print("  ✅ 使用confirmed_opportunities（真实盈利机会）")
+    scalping_opportunities = copy.deepcopy(confirmed_opportunities['scalping']['opportunities'])
+    swing_opportunities = copy.deepcopy(confirmed_opportunities['swing']['opportunities'])
     print(f"     ✓ 真实盈利机会: 超短线{len(scalping_opportunities)}个 + 波段{len(swing_opportunities)}个 = {len(scalping_opportunities) + len(swing_opportunities)}个")
     
     # 【V8.5.2.4.89.23】前向验证：超短线和波段分别分割

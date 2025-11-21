@@ -7259,9 +7259,11 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         raise ValueError("【V8.5.2.3】quick_global_search_v8316必须提供confirmed_opportunities，不再支持降级使用market_snapshots")
     
     # 【V8.5.2.4.89.23】修复：分别处理超短线和波段机会
+    # 【V8.5.2.4.89.56】修复：深拷贝数据，避免后续修改影响原始缓存
+    import copy
     print("  ✅ 使用confirmed_opportunities（真实盈利机会）")
-    scalping_opportunities = confirmed_opportunities['scalping']['opportunities']
-    swing_opportunities = confirmed_opportunities['swing']['opportunities']
+    scalping_opportunities = copy.deepcopy(confirmed_opportunities['scalping']['opportunities'])
+    swing_opportunities = copy.deepcopy(confirmed_opportunities['swing']['opportunities'])
     print(f"     ✓ 真实盈利机会: 超短线{len(scalping_opportunities)}个 + 波段{len(swing_opportunities)}个 = {len(scalping_opportunities) + len(swing_opportunities)}个")
     
     # 【V8.5.2.4.89.23】前向验证：超短线和波段分别分割
@@ -9749,13 +9751,15 @@ def analyze_and_adjust_params():
                     print(f"     ✓ 波段机会: {len(quick_search_opportunities['swing']['opportunities'])}个")
                     
                     # 【V8.5.2.4.86】缓存Phase 1结果（供后续使用）
+                    # 【V8.5.2.4.89.55】修复：深拷贝数据，避免Phase 2/3修改影响缓存
+                    import copy
                     config['_phase1_cache'] = {
-                        'opportunities': quick_search_opportunities,
-                        'baseline': quick_search_baseline,
+                        'opportunities': copy.deepcopy(quick_search_opportunities),
+                        'baseline': quick_search_baseline,  # baseline是基础数据，无需深拷贝
                         'date': datetime.now().strftime('%Y-%m-%d'),
                         'timestamp': datetime.now().isoformat()
                     }
-                    print("     ✅ Phase 1结果已缓存（供第4.5步使用）")
+                    print("     ✅ Phase 1结果已缓存（深拷贝保护，供后续使用）")
                     
                     # 【V8.5.2.4.21】Phase 1阶段总结输出
                     try:
