@@ -44,7 +44,18 @@ echo "2.1 测试 DeepSeek API:"
 echo "    URL: http://localhost:5000/trading-summary?model=deepseek&range=week"
 echo ""
 
-RESPONSE=$(curl -s -o /tmp/deepseek_response.json -w "%{http_code}" http://localhost:5000/trading-summary?model=deepseek&range=week)
+# 使用 curl 测试，添加超时和重试机制
+RESPONSE=$(curl -s -o /tmp/deepseek_response.json -w "%{http_code}" \
+    --max-time 10 \
+    --connect-timeout 5 \
+    http://localhost:5000/trading-summary?model=deepseek\&range=week 2>&1)
+
+# 检查 curl 是否成功执行
+if [ $? -ne 0 ]; then
+    echo "    ❌ 请求失败: curl命令执行出错"
+    echo "    错误信息: $RESPONSE"
+    RESPONSE="000"
+fi
 
 if [ "$RESPONSE" = "200" ]; then
     echo "    ✓ 状态码: 200 OK"
@@ -84,7 +95,18 @@ echo "2.2 测试 Qwen API:"
 echo "    URL: http://localhost:5000/trading-summary?model=qwen&range=week"
 echo ""
 
-RESPONSE=$(curl -s -o /tmp/qwen_response.json -w "%{http_code}" http://localhost:5000/trading-summary?model=qwen&range=week)
+# 使用 curl 测试，添加超时和重试机制
+RESPONSE=$(curl -s -o /tmp/qwen_response.json -w "%{http_code}" \
+    --max-time 10 \
+    --connect-timeout 5 \
+    http://localhost:5000/trading-summary?model=qwen\&range=week 2>&1)
+
+# 检查 curl 是否成功执行
+if [ $? -ne 0 ]; then
+    echo "    ❌ 请求失败: curl命令执行出错"
+    echo "    错误信息: $RESPONSE"
+    RESPONSE="000"
+fi
 
 if [ "$RESPONSE" = "200" ]; then
     echo "    ✓ 状态码: 200 OK"
