@@ -423,6 +423,151 @@ def generate_profit_comparison_table(phase_data: Dict[str, Any]) -> str:
     return html
 
 
+def generate_signal_weights_comparison_table(
+    scalping_weights: Optional[Dict[str, Any]],
+    swing_weights: Optional[Dict[str, Any]],
+    old_scalping_weights: Optional[Dict[str, Any]] = None,
+    old_swing_weights: Optional[Dict[str, Any]] = None
+) -> str:
+    """
+    生成信号分权重对比表HTML
+    
+    Args:
+        scalping_weights: dict, 超短线最优权重 {'name': str, 'weights': {...}}
+        swing_weights: dict, 波段最优权重
+        old_scalping_weights: dict, 旧超短线权重（可选，用于对比）
+        old_swing_weights: dict, 旧波段权重（可选）
+    
+    Returns:
+        str: HTML表格
+    """
+    # 处理None
+    if scalping_weights is None:
+        scalping_weights = {}
+    if swing_weights is None:
+        swing_weights = {}
+    
+    # 提取权重字典
+    scalp_w = scalping_weights.get('weights', {})
+    swing_w = swing_weights.get('weights', {})
+    
+    # 旧权重（用于显示变化）
+    old_scalp_w = old_scalping_weights.get('weights', {}) if old_scalping_weights else {}
+    old_swing_w = old_swing_weights.get('weights', {}) if old_swing_weights else {}
+    
+    # 定义权重项（超短线）
+    scalping_items = [
+        ('momentum', '动量评分', scalp_w.get('momentum', 0)),
+        ('volume', '成交量评分', scalp_w.get('volume', 0)),
+        ('breakout', '突破评分', scalp_w.get('breakout', 0)),
+        ('pattern', '形态评分', scalp_w.get('pattern', 0)),
+        ('trend_align', '趋势对齐', scalp_w.get('trend_align', 0))
+    ]
+    
+    # 定义权重项（波段）
+    swing_items = [
+        ('momentum', '动量评分', swing_w.get('momentum', 0)),
+        ('volume', '成交量评分', swing_w.get('volume', 0)),
+        ('breakout', '突破评分', swing_w.get('breakout', 0)),
+        ('trend_align', '趋势对齐', swing_w.get('trend_align', 0)),
+        ('ema_divergence', 'EMA发散', swing_w.get('ema_divergence', 0)),
+        ('trend_4h_strength', '4h趋势强度', swing_w.get('trend_4h_strength', 0))
+    ]
+    
+    # 生成超短线权重行
+    scalping_rows = ""
+    for key, label, value in scalping_items:
+        old_value = old_scalp_w.get(key, 0)
+        change = value - old_value if old_value > 0 else 0
+        change_html = ""
+        if change != 0 and old_value > 0:
+            change_color = "#28a745" if change > 0 else "#dc3545"
+            change_html = f'<br><small style="color: {change_color};">({change:+.0f})</small>'
+        
+        scalping_rows += f"""
+            <tr>
+                <td style="padding: 10px; border: 1px solid #dee2e6;">{label}</td>
+                <td style="padding: 10px; border: 1px solid #dee2e6; text-align: center; font-size: 1.1em; font-weight: bold;">
+                    {value:.0f}{change_html}
+                </td>
+            </tr>"""
+    
+    # 生成波段权重行
+    swing_rows = ""
+    for key, label, value in swing_items:
+        old_value = old_swing_w.get(key, 0)
+        change = value - old_value if old_value > 0 else 0
+        change_html = ""
+        if change != 0 and old_value > 0:
+            change_color = "#28a745" if change > 0 else "#dc3545"
+            change_html = f'<br><small style="color: {change_color};">({change:+.0f})</small>'
+        
+        swing_rows += f"""
+            <tr>
+                <td style="padding: 10px; border: 1px solid #dee2e6;">{label}</td>
+                <td style="padding: 10px; border: 1px solid #dee2e6; text-align: center; font-size: 1.1em; font-weight: bold;">
+                    {value:.0f}{change_html}
+                </td>
+            </tr>"""
+    
+    # 获取权重名称
+    scalp_name = scalping_weights.get('name', 'N/A')
+    swing_name = swing_weights.get('name', 'N/A')
+    
+    html = f"""
+<div class="summary-box" style="background: #e3f2fd; border: 2px solid #1976d2; margin: 20px 0; padding: 20px; border-radius: 8px;">
+    <h2 style="color: #0d47a1; margin-top: 0;">🎯 信号分权重配置</h2>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 15px 0;">
+        <!-- 超短线权重 -->
+        <div>
+            <h3 style="color: #ff6f00; margin: 0 0 10px 0;">⚡ 超短线权重</h3>
+            <div style="background: #fff3e0; padding: 8px; border-radius: 4px; margin-bottom: 10px;">
+                <strong>权重组合：</strong>{scalp_name}
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                <thead>
+                    <tr style="background: #ff9800; color: white;">
+                        <th style="padding: 8px; border: 1px solid #dee2e6; text-align: left;">维度</th>
+                        <th style="padding: 8px; border: 1px solid #dee2e6; text-align: center;">权重</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {scalping_rows}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- 波段权重 -->
+        <div>
+            <h3 style="color: #0288d1; margin: 0 0 10px 0;">🌊 波段权重</h3>
+            <div style="background: #e1f5fe; padding: 8px; border-radius: 4px; margin-bottom: 10px;">
+                <strong>权重组合：</strong>{swing_name}
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                <thead>
+                    <tr style="background: #0288d1; color: white;">
+                        <th style="padding: 8px; border: 1px solid #dee2e6; text-align: left;">维度</th>
+                        <th style="padding: 8px; border: 1px solid #dee2e6; text-align: center;">权重</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {swing_rows}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div style="margin-top: 15px; padding: 12px; background: white; border-left: 4px solid #1976d2; border-radius: 4px;">
+        <p style="margin: 0; font-size: 13px; color: #0d47a1;">
+            <strong>💡 说明：</strong>权重值越高表示该维度在信号评分中的影响越大。绿色(+)表示相比旧值增加，红色(-)表示减少。
+        </p>
+    </div>
+</div>
+"""
+    return html
+
+
 def generate_optimized_bark_content(
     yesterday_data: Dict[str, Any],
     phase2_data: Dict[str, Any],

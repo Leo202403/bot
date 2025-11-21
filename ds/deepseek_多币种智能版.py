@@ -403,7 +403,7 @@ class AICallOptimizer:
         hours = duration.total_seconds() / 3600
         
         # 按原因分组统计跳过次数
-        skip_by_reason = {}
+        skip_by_reason: dict[str, int] = {}
         for skip in self.daily_details['skip_reasons']:
             reason = skip['reason']
             skip_by_reason[reason] = skip_by_reason.get(reason, 0) + 1
@@ -412,7 +412,7 @@ class AICallOptimizer:
         recent_skips = self.daily_details['skip_reasons'][-10:]
         
         # 按原因分组统计强制调用
-        force_by_reason = {}
+        force_by_reason: dict[str, int] = {}
         for force in self.daily_details['force_reasons']:
             reason = force['reason']
             force_by_reason[reason] = force_by_reason.get(reason, 0) + 1
@@ -752,8 +752,8 @@ CHAT_HISTORY_FILE = DATA_DIR / "chat_history.json"  # 聊天记录
 LEARNING_CONFIG_FILE = DATA_DIR / "learning_config.json"  # 学习参数
 
 # 全局变量
-price_history = {}  # 每个币种的价格历史
-signal_history = {}  # 每个币种的信号历史
+price_history: dict[str, list] = {}  # 每个币种的价格历史
+signal_history: dict[str, list] = {}  # 每个币种的信号历史
 
 
 def send_bark_notification(title, content):
@@ -9755,6 +9755,7 @@ def analyze_and_adjust_params():
             # 检查是否有今日缓存
             if '_phase1_cache' in config and config['_phase1_cache'].get('date') == datetime.now().strftime('%Y-%m-%d'):
                 print("  💾 【使用Phase 1缓存】避免重复计算（节省约2分钟）")
+                # 【V8.5.2.4.89.55】直接使用缓存引用（已在保存时深拷贝）
                 quick_search_opportunities = config['_phase1_cache']['opportunities']
                 quick_search_baseline = config['_phase1_cache']['baseline']
                 print(f"     ✓ 超短线机会: {len(quick_search_opportunities['scalping']['opportunities'])}个")
@@ -9774,13 +9775,15 @@ def analyze_and_adjust_params():
                     print(f"     ✓ 波段机会: {len(quick_search_opportunities['swing']['opportunities'])}个")
                     
                     # 【V8.5.2.4.86】缓存Phase 1结果（供后续使用）
+                    # 【V8.5.2.4.89.55】修复：深拷贝数据，避免Phase 2/3修改影响缓存
+                    import copy
                     config['_phase1_cache'] = {
-                        'opportunities': quick_search_opportunities,
-                        'baseline': quick_search_baseline,
+                        'opportunities': copy.deepcopy(quick_search_opportunities),
+                        'baseline': quick_search_baseline,  # baseline是基础数据，无需深拷贝
                         'date': datetime.now().strftime('%Y-%m-%d'),
                         'timestamp': datetime.now().isoformat()
                     }
-                    print("     ✅ Phase 1结果已缓存（供第4.5步使用）")
+                    print("     ✅ Phase 1结果已缓存（深拷贝保护，供后续使用）")
                     
                     # 【V8.5.2.4.21】Phase 1阶段总结输出
                     try:
@@ -10226,7 +10229,8 @@ def analyze_and_adjust_params():
                     
                     # 判断是否满足参数要求
                     signal_score = opp.get('signal_score', 0)
-                    consensus = opp.get('indicator_consensus', 0)
+                    # 【V8.5.2.4.89.56】修复：Phase 1机会数据使用的字段名是consensus，不是indicator_consensus
+                    consensus = opp.get('consensus', 0)
                     
                     # 【DEBUG】采样前3个机会
                     if debug_sample_count < 3:
@@ -12007,7 +12011,8 @@ def analyze_and_adjust_params():
                     from email_bark_formatter import (
                         generate_phase_summary_table,
                         generate_params_comparison_table,
-                        generate_profit_comparison_table
+                        generate_profit_comparison_table,
+                        generate_signal_weights_comparison_table
                     )
                     
                     # 生成Phase汇总表
@@ -12022,6 +12027,26 @@ def analyze_and_adjust_params():
                     
                     # 生成总利润对比表
                     profit_comparison_html = generate_profit_comparison_table(all_phase_data)
+                    
+                    # 【V8.5.2.4.89.29】生成信号分权重对比表
+                    weights_comparison_html = ""
+                    try:
+                        best_scalping_weights = learned_features.get('best_scalping_weights', {})
+                        best_swing_weights = learned_features.get('best_swing_weights', {})
+                        # 获取旧权重（从历史记录中）
+                        history = config.get('phase2_learning', {}).get('history', [])
+                        old_scalping_weights = history[-1].get('learned_features', {}).get('best_scalping_weights', {}) if len(history) > 0 else {}
+                        old_swing_weights = history[-1].get('learned_features', {}).get('best_swing_weights', {}) if len(history) > 0 else {}
+                        
+                        if best_scalping_weights or best_swing_weights:
+                            weights_comparison_html = generate_signal_weights_comparison_table(
+                                best_scalping_weights,
+                                best_swing_weights,
+                                old_scalping_weights,
+                                old_swing_weights
+                            )
+                    except Exception as e:
+                        print(f"[V8.5.2.4.89.29] 权重对比表生成失败: {e}")
                     
                     print("[V8.5.2.4.81] 邮件新表格生成成功")
                     
@@ -12353,6 +12378,7 @@ def analyze_and_adjust_params():
                     executive_summary_html,  # 🆕 V8.5.5: 执行摘要（5秒看懂，最前）
                     phase_summary_html,  # 【V8.5.2.4.81】Phase 1-4汇总表
                     params_comparison_html,  # 【V8.5.2.4.81】超短线/波段参数对比
+                    weights_comparison_html,  # 【V8.5.2.4.89.29】信号分权重对比
                     profit_comparison_html,  # 【V8.5.2.4.81】总利润对比分析
                     learning_insights_html,  # AI智能洞察（第二重要）
                     type_params_html,  # 参数配置

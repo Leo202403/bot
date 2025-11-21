@@ -109,36 +109,88 @@ def print_phase1_summary(scalping_opps, swing_opps, phase1_baseline):
 
 def print_phase2_summary(best_params, phase2_baseline, validation_result=None):
     """
-    Phase 2：参数优化 - 阶段总结
+    【V8.5.2.4.89.57】Phase 2：参数优化 - 阶段总结（分离版本）
     
     Args:
-        best_params: 最优参数配置
-        phase2_baseline: Phase 2基准数据
+        best_params: 最优参数配置（兼容性保留）
+        phase2_baseline: Phase 2基准数据（分离结构）
         validation_result: 前向验证结果（可选）
     """
     print(f"\n{'='*70}")
     print("✅ Phase 2 完成：参数优化（捕获最大化）")
     print(f"{'='*70}")
     
-    # 最优参数
-    print("\n🎯 最优参数配置:")
-    print(f"   - min_risk_reward: {best_params.get('min_risk_reward', 0)}")
-    print(f"   - min_indicator_consensus: {best_params.get('min_indicator_consensus', 0)}")
-    print(f"   - atr_stop_multiplier: {best_params.get('atr_stop_multiplier', 0):.2f}")
-    print(f"   - atr_tp_multiplier: {best_params.get('atr_tp_multiplier', 0):.2f}")
-    print(f"   - max_holding_hours: {best_params.get('max_holding_hours', 0)}")
-    print(f"   - min_signal_score: {best_params.get('min_signal_score', 0)}")
+    # 【V8.5.2.4.89.57】检查是否为分离结构
+    is_separated = phase2_baseline and ('scalping' in phase2_baseline or 'swing' in phase2_baseline)
     
-    # Phase 2 baseline（如果有）
-    if phase2_baseline:
-        captured_count = phase2_baseline.get('captured_count', 0)
-        capture_rate = phase2_baseline.get('capture_rate', 0)
-        avg_profit = phase2_baseline.get('avg_profit', 0)
+    if is_separated:
+        # 新版：分离输出超短线和波段
+        scalping_data = phase2_baseline.get('scalping', {})
+        swing_data = phase2_baseline.get('swing', {})
+        learned_features = phase2_baseline.get('learned_features', {})
         
-        print("\n📊 捕获表现:")
-        print(f"   - 捕获机会: {captured_count}个")
-        print(f"   - 捕获率: {capture_rate*100:.1f}%")
-        print(f"   - 平均利润: {avg_profit:.2f}%（已扣除0.14%交易成本）")
+        # 输出学习到的特征
+        if learned_features:
+            best_scalping_weights = learned_features.get('best_scalping_weights', {})
+            best_swing_weights = learned_features.get('best_swing_weights', {})
+            optimal_tp_sl = learned_features.get('optimal_tp_sl', {})
+            
+            if best_scalping_weights or best_swing_weights:
+                print("\n🎯 【信号分权重优化】")
+                if best_scalping_weights:
+                    print(f"   ⚡ 超短线最优权重: {best_scalping_weights.get('name', 'N/A')}")
+                if best_swing_weights:
+                    print(f"   🌊 波段最优权重: {best_swing_weights.get('name', 'N/A')}")
+            
+            if optimal_tp_sl:
+                scalping_tp_sl = optimal_tp_sl.get('scalping', {})
+                swing_tp_sl = optimal_tp_sl.get('swing', {})
+                if scalping_tp_sl or swing_tp_sl:
+                    print("\n🎯 【TP/SL优化】")
+                    if scalping_tp_sl:
+                        print(f"   ⚡ 超短线: TP={scalping_tp_sl.get('atr_tp_multiplier', 0):.1f}x, SL={scalping_tp_sl.get('atr_stop_multiplier', 0):.1f}x")
+                    if swing_tp_sl:
+                        print(f"   🌊 波段: TP={swing_tp_sl.get('atr_tp_multiplier', 0):.1f}x, SL={swing_tp_sl.get('atr_stop_multiplier', 0):.1f}x")
+        
+        # 超短线捕获表现
+        if scalping_data:
+            print("\n📊 ⚡ 超短线捕获表现:")
+            print(f"   - 捕获机会: {scalping_data.get('captured_count', 0)}个")
+            print(f"   - 捕获率: {scalping_data.get('capture_rate', 0)*100:.1f}%")
+            print(f"   - 平均利润: {scalping_data.get('avg_profit', 0):.2f}%")
+            params = scalping_data.get('params', {})
+            if params:
+                print(f"   - 参数: 信号分≥{params.get('min_signal_score', 0)}, 共振≥{params.get('min_indicator_consensus', 0)}")
+        
+        # 波段捕获表现
+        if swing_data:
+            print("\n📊 🌊 波段捕获表现:")
+            print(f"   - 捕获机会: {swing_data.get('captured_count', 0)}个")
+            print(f"   - 捕获率: {swing_data.get('capture_rate', 0)*100:.1f}%")
+            print(f"   - 平均利润: {swing_data.get('avg_profit', 0):.2f}%")
+            params = swing_data.get('params', {})
+            if params:
+                print(f"   - 参数: 信号分≥{params.get('min_signal_score', 0)}, 共振≥{params.get('min_indicator_consensus', 0)}")
+    else:
+        # 旧版：合并输出（向后兼容）
+        print("\n🎯 最优参数配置:")
+        print(f"   - min_risk_reward: {best_params.get('min_risk_reward', 0)}")
+        print(f"   - min_indicator_consensus: {best_params.get('min_indicator_consensus', 0)}")
+        print(f"   - atr_stop_multiplier: {best_params.get('atr_stop_multiplier', 0):.2f}")
+        print(f"   - atr_tp_multiplier: {best_params.get('atr_tp_multiplier', 0):.2f}")
+        print(f"   - max_holding_hours: {best_params.get('max_holding_hours', 0)}")
+        print(f"   - min_signal_score: {best_params.get('min_signal_score', 0)}")
+        
+        # Phase 2 baseline（如果有）
+        if phase2_baseline:
+            captured_count = phase2_baseline.get('captured_count', 0)
+            capture_rate = phase2_baseline.get('capture_rate', 0)
+            avg_profit = phase2_baseline.get('avg_profit', 0)
+            
+            print("\n📊 捕获表现:")
+            print(f"   - 捕获机会: {captured_count}个")
+            print(f"   - 捕获率: {capture_rate*100:.1f}%")
+            print(f"   - 平均利润: {avg_profit:.2f}%（已扣除0.14%交易成本）")
     
     # 前向验证（如果有）
     if validation_result:
