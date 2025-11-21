@@ -7842,8 +7842,8 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                         default_tp = swing_params_range['atr_tp'][2]
                         default_sl = swing_params_range['atr_sl'][1]
                     default_holding = swing_params_range['max_holding'][2]
-                
-                strategy_params = {
+                    
+                    strategy_params = {
                         **swing_params,
                         'atr_tp_multiplier': swing_params.get('atr_tp_multiplier', default_tp),
                         'atr_stop_multiplier': swing_params.get('atr_stop_multiplier', default_sl),
@@ -7851,8 +7851,8 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
                     }
                     
                     actual_profit = calculate_single_actual_profit(opp, strategy_params=strategy_params, use_dynamic_atr=False)
-                opp['_phase2_actual_profit'] = actual_profit
-            
+                    opp['_phase2_actual_profit'] = actual_profit
+                
                 swing_phase1_count = phase1_baseline.get('swing', {}).get('count', 0)
                 swing_baseline_data = {
                     'captured_count': len(swing_captured),
