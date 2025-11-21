@@ -10864,6 +10864,13 @@ def analyze_and_adjust_params():
             # 【V8.5.2.4.89】只在必要时加载一次config（获取Phase 2保存的数据）
             config = load_learning_config()
             
+            # 【修复】重新添加_iterative_history（load_learning_config会从文件加载，但_iterative_history可能还没保存到文件）
+            if iterative_result:
+                config['_iterative_history'] = iterative_result
+                if 'baseline_config' not in config['_iterative_history']:
+                    config['_iterative_history']['baseline_config'] = baseline_config_snapshot
+                    print(f"  💾 【修复】重新添加baseline_config到_iterative_history")
+            
             # 【V8.5.2.4.89.1】轻量级old_config - 只复制参数部分，不复制整个config
             # 之前deepcopy整个config会导致内存翻倍（10-20MB → 20-40MB）
             # 现在只复制真正需要的参数字段（<1MB）
@@ -11016,18 +11023,56 @@ def analyze_and_adjust_params():
                 total_avg_profit = phase2_baseline.get('avg_profit', 0)
                 total_captured = phase2_baseline.get('captured_count', 0)
                 
-                # 估算：假设超短线和波段各占一半（如果没有精确数据）
-                phase2_data = {
-                    'scalping_capture': total_capture_rate,  # 整体捕获率
-                    'scalping_profit': total_avg_profit,
-                    'scalping_count': total_captured // 2,
-                    'swing_capture': total_capture_rate,
-                    'swing_profit': total_avg_profit,
-                    'swing_count': total_captured - (total_captured // 2),
-                    # 总利润
-                    'scalping_total_profit': (total_captured // 2) * total_avg_profit,
-                    'swing_total_profit': (total_captured - (total_captured // 2)) * total_avg_profit
-                }
+                # 【修复】根据Phase 1的实际比例来估算Phase 2的分离数据
+                # 而不是简单的各占一半
+                if phase1_data:
+                    p1_scalping_count = phase1_data.get('scalping_count', 0)
+                    p1_swing_count = phase1_data.get('swing_count', 0)
+                    p1_total = p1_scalping_count + p1_swing_count
+                    
+                    if p1_total > 0:
+                        # 按Phase 1的比例分配Phase 2的捕获数量
+                        scalping_ratio = p1_scalping_count / p1_total
+                        swing_ratio = p1_swing_count / p1_total
+                        
+                        estimated_scalping_count = int(total_captured * scalping_ratio)
+                        estimated_swing_count = total_captured - estimated_scalping_count
+                        
+                        phase2_data = {
+                            'scalping_capture': total_capture_rate,  # 整体捕获率
+                            'scalping_profit': total_avg_profit,
+                            'scalping_count': estimated_scalping_count,
+                            'swing_capture': total_capture_rate,
+                            'swing_profit': total_avg_profit,
+                            'swing_count': estimated_swing_count,
+                            # 总利润
+                            'scalping_total_profit': estimated_scalping_count * total_avg_profit,
+                            'swing_total_profit': estimated_swing_count * total_avg_profit
+                        }
+                    else:
+                        # 降级方案：各占一半
+                        phase2_data = {
+                            'scalping_capture': total_capture_rate,
+                            'scalping_profit': total_avg_profit,
+                            'scalping_count': total_captured // 2,
+                            'swing_capture': total_capture_rate,
+                            'swing_profit': total_avg_profit,
+                            'swing_count': total_captured - (total_captured // 2),
+                            'scalping_total_profit': (total_captured // 2) * total_avg_profit,
+                            'swing_total_profit': (total_captured - (total_captured // 2)) * total_avg_profit
+                        }
+                else:
+                    # 降级方案：各占一半
+                    phase2_data = {
+                        'scalping_capture': total_capture_rate,
+                        'scalping_profit': total_avg_profit,
+                        'scalping_count': total_captured // 2,
+                        'swing_capture': total_capture_rate,
+                        'swing_profit': total_avg_profit,
+                        'swing_count': total_captured - (total_captured // 2),
+                        'scalping_total_profit': (total_captured // 2) * total_avg_profit,
+                        'swing_total_profit': (total_captured - (total_captured // 2)) * total_avg_profit
+                    }
             
             # Phase 3数据（分离优化）
             phase3_data = {}
