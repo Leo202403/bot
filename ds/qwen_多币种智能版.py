@@ -17035,7 +17035,7 @@ def calculate_risk_reward_ratio(entry_price, stop_loss, take_profit, side="long"
         return 0
 
 
-def check_tp1_trigger(position, current_price):
+def check_tp1_trigger(position: dict, current_price: float) -> tuple[bool, str]:
     """
     【V8.6.1新增】检查第一目标位（TP1）是否触发
 
@@ -17076,7 +17076,7 @@ def check_tp1_trigger(position, current_price):
         return False, f"检查失败: {e}"
 
 
-def execute_tp1_partial_close(position, current_price, config):
+def execute_tp1_partial_close(position: dict, current_price: float, config: dict) -> tuple[bool, str, dict]:
     """
     【V8.6.1新增】执行TP1分批平仓：平50% + 移动止损到Break-even
 
@@ -17181,7 +17181,7 @@ def execute_tp1_partial_close(position, current_price, config):
         return False, error_msg, {}
 
 
-def update_trailing_stop(position, current_price, atr, config):
+def update_trailing_stop(position: dict, current_price: float, atr: float, config: dict) -> tuple[bool, str]:
     """
     【V8.6.1新增】更新Trailing Stop（仅在TP1触发后）
 
