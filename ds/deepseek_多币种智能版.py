@@ -17582,8 +17582,16 @@ def ai_portfolio_decision(
     total_position_value,
     current_balance,
     available_balance,
+    deterministic_exit_symbols=None,
 ):
-    """AI进行投资组合决策（使用学习参数）"""
+    """
+    AI进行投资组合决策（使用学习参数）
+    
+    Args:
+        deterministic_exit_symbols: 已通过Python确定性EXIT处理的币种列表（V8.9.1.1新增）
+    """
+    if deterministic_exit_symbols is None:
+        deterministic_exit_symbols = []
 
     # 🔧 V7.7.0.14: 中英翻译映射（内部英文，输出中文）
     TREND_TRANSLATION = {
@@ -17632,7 +17640,7 @@ def ai_portfolio_decision(
             for pos in current_positions
         if pos.get("symbol")
             }
-    decision_context = build_decision_context(current_positions_dict)
+    decision_context = build_decision_context(current_positions_dict, deterministic_exit_symbols)
 
     # 构建市场概览（V3.0：增加裸K分析）
     market_overview = ""
@@ -23558,11 +23566,13 @@ def trading_bot():
                 print("✓ 无需主动平仓")
 
         # 🆕 V8.9.1: 确定性EXIT检查（TP/SL/Time Stop）
+        deterministic_exit_symbols = []  # 🆕 V8.9.1.1: 初始化（避免未定义）
         if current_positions:
             print("⏳ [3.7/6] 确定性EXIT检查（Python处理）...")
             from prompt_optimizer import check_deterministic_exit
             
             deterministic_exits = []
+            deterministic_exit_symbols = []  # 🆕 V8.9.1.1: 记录已平仓的币种
             for position in current_positions:
                 symbol = position.get('symbol')
                 coin_name = symbol.split("/")[0] if symbol else "UNKNOWN"
@@ -23590,6 +23600,7 @@ def trading_bot():
                 for exit_action in deterministic_exits:
                     try:
                         _execute_single_close_action(exit_action, current_positions)
+                        deterministic_exit_symbols.append(exit_action['symbol'])  # 🆕 V8.9.1.1: 记录已平仓币种
                     except Exception as e:
                         print(f"   ⚠️ 确定性平仓失败: {e}")
                 
@@ -23602,6 +23613,17 @@ def trading_bot():
                 except Exception as e:
                     print(f"   ⚠️ 刷新持仓失败: {e}")
                 
+                # 🆕 V8.9.1.1: 过滤掉已平仓币种的市场数据，减少Token
+                if deterministic_exit_symbols:
+                    original_count = len(market_data_list)
+                    market_data_list = [
+                        data for data in market_data_list 
+                        if data and data.get('symbol') not in deterministic_exit_symbols
+                    ]
+                    filtered_count = original_count - len(market_data_list)
+                    if filtered_count > 0:
+                        print(f"   💡 已过滤 {filtered_count} 个已平仓币种的市场数据（节省~{filtered_count*150} tokens）")
+                
                 # 如果所有持仓都已平仓，跳过AI调用
                 if not current_positions:
                     print("   ✓ 所有持仓已通过确定性检查平仓，跳过AI调用（节省Token）")
@@ -23612,6 +23634,7 @@ def trading_bot():
                     return
             else:
                 print("   ✓ 无确定性EXIT触发")
+                deterministic_exit_symbols = []  # 🆕 V8.9.1.1: 初始化空列表
 
         print("⏳ [4/6] AI决策分析...")
         # 3. AI决策
@@ -23621,6 +23644,7 @@ def trading_bot():
             total_position_value,
             usdt_balance,
             available_balance,
+            deterministic_exit_symbols=deterministic_exit_symbols if 'deterministic_exit_symbols' in locals() else [],
         )
         if not decision:
             print("❌ AI决策失败")
@@ -29306,7 +29330,7 @@ def merge_historical_insights(config):
     return config
 
 
-def build_decision_context(current_positions=None):
+def build_decision_context(current_positions=None, deterministic_exit_symbols=None):
     """
     Build concise decision context for AI (<150 tokens)
 
@@ -29316,6 +29340,17 @@ def build_decision_context(current_positions=None):
     Returns:
         str, formatted decision context
     """
+    context = ""
+    model_name = os.getenv("MODEL_NAME", "qwen")
+    
+    # 🆕 V8.9.1.1: 告知AI哪些币种已通过Python确定性EXIT处理
+    if deterministic_exit_symbols and len(deterministic_exit_symbols) > 0:
+        coin_names = [s.split("/")[0] for s in deterministic_exit_symbols]
+        context += f"\n## 🤖 Python Deterministic EXIT (Already Processed)\n"
+        context += f"Following positions already closed by Python (TP/SL/Time triggered):\n"
+        context += f"- {', '.join(coin_names)}\n"
+        context += f"**Note**: These symbols have been filtered from market data. Focus on remaining opportunities.\n"
+    
     context = ""
     model_name = os.getenv("MODEL_NAME", "deepseek")
 
