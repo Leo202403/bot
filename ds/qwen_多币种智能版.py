@@ -1298,9 +1298,17 @@ class UnifiedOrderExecutor:
        - 止盈：激进限价单或耐心等待
     """
     
-    def __init__(self, exchange, config: dict = None):
+    def __init__(self, exchange, config: dict = None, use_adaptive_validator: bool = True):
         self.exchange = exchange
-        self.validator = SignalValidator(config)
+        
+        # 🆕 V8.9: 优先使用自适应验证器
+        if use_adaptive_validator and ADAPTIVE_SIGNAL_VALIDATOR_CONFIG.get('enabled', True):
+            self.validator = adaptive_signal_validator  # 使用全局实例
+            print("[UnifiedOrderExecutor] 使用AdaptiveSignalValidator（自适应验证）")
+        else:
+            self.validator = SignalValidator(config)
+            print("[UnifiedOrderExecutor] 使用SignalValidator（标准验证）")
+        
         self.executor = OrderExecutor(exchange, config)
         self.config = config or {}
         
