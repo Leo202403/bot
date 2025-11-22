@@ -1,0 +1,17 @@
+[tool.ruff]
+# Ruff 的配置（越严格越好）
+line-length = 88
+target-version = "py311"
+select = ["ALL"]                     # 开启所有规则
+ignore = ["ANN101", "ANN102", "COM812", "ISC001", "D203", "D213"]  # 只关掉和格式化冲突的几项
+
+[tool.ruff.format]
+preview = true                       # 使用新版 formatter（比 black 快 30 倍）
+
+[tool.basedpyright]
+typeCheckingMode = "strict"          # 严格模式，直接干掉 99% 的类型 bug
+reportMissingImports = true
+reportUndefinedVariable = true
+reportUnknownArgumentType = true
+reportUnknownVariableType = true
+pythonVersion = "3.11"               # 改成你用的版本

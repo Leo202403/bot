@@ -549,6 +549,523 @@ ai_optimizer = AICallOptimizer()
 
 # ==================== AI调用优化器结束 ====================
 
+
+# ==================== 【V8.7】订单执行优化器 ====================
+
+class SignalValidator:
+    """
+    🆕 V8.7: 信号验证器
+    
+    功能：验证AI信号在执行时是否仍然有效
+    核心：解决AI延迟（3-5分钟）导致的价格过时问题
+    """
+    
+    def __init__(self, config: dict = None):
+        self.config = config or {
+            'max_age_seconds': 300,          # 信号最大有效期5分钟
+            'max_price_deviation_pct': 0.8,  # 最大价格偏离0.8%
+            'min_signal_strength': 60,       # 最低信号强度
+        }
+    
+    def validate_signal(self, ai_signal: dict, current_market_data: dict) -> dict:
+        """
+        验证信号有效性
+        
+        Args:
+            ai_signal: AI信号 {
+                'action': 'OPEN_LONG',
+                'reference_price': 90000,
+                'timestamp': 1234567890,
+                'signal_strength': 85,
+                'price_tolerance_pct': 0.5
+            }
+            current_market_data: 当前市场数据 {
+                'price': 90500,
+                'timestamp': 1234567950
+            }
+        
+        Returns:
+            {
+                'valid': True/False,
+                'reason': str,
+                'adjusted_params': dict or None
+            }
+        """
+        try:
+            # 1. 时效性检查
+            signal_timestamp = ai_signal.get('timestamp', time.time())
+            age_seconds = time.time() - signal_timestamp
+            max_age = self.config.get('max_age_seconds', 300)
+            
+            if age_seconds > max_age:
+                return {
+                    'valid': False,
+                    'reason': f'信号超时({age_seconds:.0f}秒 > {max_age}秒)',
+                    'adjusted_params': None
+                }
+            
+            # 2. 价格偏离检查
+            current_price = current_market_data.get('price', 0)
+            reference_price = ai_signal.get('reference_price', current_price)
+            
+            if reference_price <= 0:
+                # 没有参考价格，使用当前价格
+                return {
+                    'valid': True,
+                    'reason': '无参考价格，使用当前价格',
+                    'adjusted_params': {
+                        'execution_price': current_price,
+                        'price_change_pct': 0,
+                        'age_seconds': age_seconds
+                    }
+                }
+            
+            price_change_pct = abs(current_price - reference_price) / reference_price * 100
+            max_tolerance = ai_signal.get('price_tolerance_pct', self.config.get('max_price_deviation_pct', 0.8))
+            
+            if price_change_pct > max_tolerance:
+                return {
+                    'valid': False,
+                    'reason': f'价格偏离过大({price_change_pct:.2f}% > {max_tolerance}%)',
+                    'adjusted_params': None
+                }
+            
+            # 3. 方向一致性检查（防止价格已反转）
+            action = ai_signal.get('action', '')
+            
+            if 'LONG' in action or 'BUY' in action:
+                # 开多：当前价格不应高于参考价格太多（避免追高）
+                if current_price > reference_price * 1.01:  # +1%
+                    return {
+                        'valid': False,
+                        'reason': f'价格已上涨过多({price_change_pct:.2f}%)，避免追高',
+                        'adjusted_params': None
+                    }
+            elif 'SHORT' in action or 'SELL' in action:
+                # 开空：当前价格不应低于参考价格太多（避免追跌）
+                if current_price < reference_price * 0.99:  # -1%
+                    return {
+                        'valid': False,
+                        'reason': f'价格已下跌过多({price_change_pct:.2f}%)，避免追跌',
+                        'adjusted_params': None
+                    }
+            
+            # 4. 信号强度检查
+            signal_strength = ai_signal.get('signal_strength', 70)
+            min_strength = self.config.get('min_signal_strength', 60)
+            
+            if signal_strength < min_strength:
+                return {
+                    'valid': False,
+                    'reason': f'信号强度不足({signal_strength} < {min_strength})',
+                    'adjusted_params': None
+                }
+            
+            # 5. 信号有效，返回调整后的参数
+            return {
+                'valid': True,
+                'reason': '信号有效',
+                'adjusted_params': {
+                    'execution_price': current_price,
+                    'price_change_pct': price_change_pct,
+                    'age_seconds': age_seconds,
+                    'reference_price': reference_price
+                }
+            }
+            
+        except Exception as e:
+            print(f"⚠️ 信号验证异常: {e}")
+            return {
+                'valid': False,
+                'reason': f'验证异常: {str(e)}',
+                'adjusted_params': None
+            }
+
+
+class OrderExecutor:
+    """
+    🆕 V8.7: 订单执行器
+    
+    功能：
+    1. 激进限价单：挂在对手盘最优价，快速成交，享受Maker费率
+    2. 带滑点保护的市价单：使用限价单模拟市价单，有价格上下限
+    3. 动态价格调整：获取实时盘口价格
+    """
+    
+    def __init__(self, exchange, config: dict = None):
+        self.exchange = exchange
+        self.config = config or {
+            'aggressive_limit_slippage': 0.05,   # 激进限价单滑点0.05%
+            'market_order_slippage': 0.2,        # 市价单最大滑点0.2%
+            'order_timeout_seconds': 3,          # 订单等待超时3秒
+        }
+    
+    def aggressive_limit_order(self, symbol: str, side: str, amount: float, current_price: float) -> dict:
+        """
+        激进限价单：挂在对手盘最优价，几乎立即成交
+        
+        优势：
+        - Maker费率（0.02%）
+        - 快速成交
+        - 有滑点保护
+        
+        Args:
+            symbol: 交易对
+            side: 'buy' 或 'sell'
+            amount: 数量
+            current_price: 当前价格（用于滑点保护）
+        
+        Returns:
+            订单对象 or None
+        """
+        try:
+            # 获取实时盘口
+            orderbook = self.exchange.fetch_order_book(symbol, limit=1)
+            
+            if side == 'buy':
+                # 买入：挂在卖一价（吃对手盘的挂单，但我们是Maker）
+                if not orderbook.get('asks') or len(orderbook['asks']) == 0:
+                    print(f"⚠️ 盘口数据异常，卖盘为空")
+                    return None
+                
+                best_ask = orderbook['asks'][0][0]
+                # 略微上浮0.05%确保成交
+                slippage = self.config.get('aggressive_limit_slippage', 0.05) / 100
+                price = best_ask * (1 + slippage)
+            else:
+                # 卖出：挂在买一价
+                if not orderbook.get('bids') or len(orderbook['bids']) == 0:
+                    print(f"⚠️ 盘口数据异常，买盘为空")
+                    return None
+                
+                best_bid = orderbook['bids'][0][0]
+                slippage = self.config.get('aggressive_limit_slippage', 0.05) / 100
+                price = best_bid * (1 - slippage)
+            
+            # 价格精度处理
+            price = float(self.exchange.price_to_precision(symbol, price))
+            
+            # 滑点保护
+            max_slippage = self.config.get('market_order_slippage', 0.2) / 100
+            if side == 'buy':
+                if price > current_price * (1 + max_slippage):
+                    print(f"⚠️ 价格超出滑点保护({price:.4f} > {current_price * (1 + max_slippage):.4f})")
+                    return None
+            else:
+                if price < current_price * (1 - max_slippage):
+                    print(f"⚠️ 价格超出滑点保护({price:.4f} < {current_price * (1 - max_slippage):.4f})")
+                    return None
+            
+            print(f"📝 激进限价单: {side} {amount:.6f} @ {price:.4f} (对手盘最优价)")
+            
+            # 下单
+            order = self.exchange.create_limit_order(symbol, side, amount, price)
+            
+            # 等待短时间检查成交状态
+            timeout = self.config.get('order_timeout_seconds', 3)
+            time.sleep(min(timeout, 2))
+            
+            try:
+                order_status = self.exchange.fetch_order(order['id'], symbol)
+                if order_status['status'] == 'closed':
+                    print(f"✅ 订单立即成交 @ {order_status.get('average', price):.4f}")
+                else:
+                    print(f"⏳ 订单已挂出，等待成交...")
+            except Exception as e:
+                print(f"⚠️ 查询订单状态失败: {e}")
+            
+            return order
+            
+        except Exception as e:
+            print(f"❌ 激进限价单失败: {e}")
+            return None
+    
+    def market_with_slippage_control(self, symbol: str, side: str, amount: float, current_price: float) -> dict:
+        """
+        带滑点保护的市价单
+        
+        实现：使用限价单模拟市价单，但有价格上下限
+        
+        Args:
+            symbol: 交易对
+            side: 'buy' 或 'sell'
+            amount: 数量
+            current_price: 当前价格
+        
+        Returns:
+            订单对象 or None
+        """
+        try:
+            max_slippage = self.config.get('market_order_slippage', 0.2) / 100
+            
+            if side == 'buy':
+                max_price = current_price * (1 + max_slippage)
+                price = float(self.exchange.price_to_precision(symbol, max_price))
+            else:
+                min_price = current_price * (1 - max_slippage)
+                price = float(self.exchange.price_to_precision(symbol, min_price))
+            
+            print(f"📝 带保护的市价单: {side} {amount:.6f} @ ≤{price:.4f} (滑点≤{max_slippage*100:.2f}%)")
+            
+            return self.exchange.create_limit_order(symbol, side, amount, price)
+            
+        except Exception as e:
+            print(f"❌ 带保护市价单失败: {e}")
+            return None
+
+
+class UnifiedOrderExecutor:
+    """
+    🆕 V8.7: 统一订单执行器
+    
+    整合所有策略，提供统一的执行接口
+    
+    核心功能：
+    1. 信号验证：过滤过期/价格偏离的信号
+    2. 动态价格：使用实时价格而非AI给出的过时价格
+    3. 分层策略：根据场景选择最优执行方式
+       - 止损：市价单（快速离场）
+       - 开仓：激进限价单（省手续费）
+       - 止盈：激进限价单或耐心等待
+    """
+    
+    def __init__(self, exchange, config: dict = None):
+        self.exchange = exchange
+        self.validator = SignalValidator(config)
+        self.executor = OrderExecutor(exchange, config)
+        self.config = config or {}
+        
+        # 执行日志
+        self.execution_log = []
+    
+    def execute(self, signal: dict, market_data: dict = None, strategy: str = 'auto') -> dict:
+        """
+        统一执行入口
+        
+        Args:
+            signal: AI信号或快速通道信号 {
+                'action': 'OPEN_LONG' / 'STOP_LOSS' / 'TAKE_PROFIT',
+                'symbol': 'BTC/USDT:USDT',
+                'amount': 0.1,
+                'reference_price': 90000,
+                'timestamp': 1234567890,
+                'signal_strength': 85,
+                'type': 'ai_decision' / 'fast_track'
+            }
+            market_data: 当前市场数据（可选，如不提供则自动获取）
+            strategy: 执行策略 'auto'/'aggressive_limit'/'market'
+        
+        Returns:
+            {
+                'success': True/False,
+                'order': 订单对象 or None,
+                'reason': str,
+                'execution_details': dict
+            }
+        """
+        try:
+            symbol = signal.get('symbol')
+            action = signal.get('action', '')
+            signal_type = signal.get('type', 'ai_decision')
+            
+            # 1. 获取最新市场数据
+            if market_data is None:
+                market_data = self._fetch_market_data(symbol)
+            
+            # 2. 快速通道：止损、TP1等紧急场景
+            if signal_type == 'fast_track' or 'STOP_LOSS' in action or 'EMERGENCY' in action:
+                print(f"⚡ 快速通道执行: {action}")
+                return self._fast_track_execution(signal, market_data)
+            
+            # 3. AI信号：验证有效性
+            validation = self.validator.validate_signal(signal, market_data)
+            
+            if not validation['valid']:
+                print(f"❌ 信号验证失败: {validation['reason']}")
+                self._log_execution(signal, None, market_data, validation['reason'], success=False)
+                return {
+                    'success': False,
+                    'order': None,
+                    'reason': validation['reason'],
+                    'execution_details': {}
+                }
+            
+            print(f"✅ 信号验证通过")
+            adj_params = validation['adjusted_params']
+            if adj_params:
+                print(f"   参考价格: {adj_params.get('reference_price', 0):.2f}")
+                print(f"   当前价格: {adj_params.get('execution_price', 0):.2f}")
+                print(f"   价格变化: {adj_params.get('price_change_pct', 0):.2f}%")
+                print(f"   信号延迟: {adj_params.get('age_seconds', 0):.0f}秒")
+            
+            # 4. 选择执行策略
+            if strategy == 'auto':
+                strategy = self._select_strategy(signal, market_data)
+            
+            # 5. 执行订单
+            order = self._execute_with_strategy(signal, market_data, strategy)
+            
+            if order:
+                self._log_execution(signal, order, market_data, f"成功: {strategy}", success=True)
+                return {
+                    'success': True,
+                    'order': order,
+                    'reason': f"执行成功: {strategy}",
+                    'execution_details': {
+                        'strategy': strategy,
+                        'price': market_data.get('price'),
+                        'validation': validation
+                    }
+                }
+            else:
+                self._log_execution(signal, None, market_data, f"执行失败: {strategy}", success=False)
+                return {
+                    'success': False,
+                    'order': None,
+                    'reason': f"订单执行失败",
+                    'execution_details': {}
+                }
+                
+        except Exception as e:
+            print(f"❌ 订单执行异常: {e}")
+            self._log_execution(signal, None, market_data, f"异常: {str(e)}", success=False)
+            return {
+                'success': False,
+                'order': None,
+                'reason': f"执行异常: {str(e)}",
+                'execution_details': {}
+            }
+    
+    def _fast_track_execution(self, signal: dict, market_data: dict) -> dict:
+        """
+        快速通道执行（绕过AI延迟）
+        
+        适用场景：
+        1. 止损：必须立即执行
+        2. TP1分批止盈：快速成交
+        3. 追踪止损：及时离场
+        """
+        action = signal.get('action', '')
+        symbol = signal.get('symbol')
+        amount = signal.get('amount')
+        current_price = market_data.get('price')
+        
+        side = 'buy' if 'LONG' in action or 'BUY' in action else 'sell'
+        
+        if 'STOP_LOSS' in action or 'EMERGENCY' in action:
+            # 止损：立即市价单
+            print(f"⚡ 止损快速通道: 市价单")
+            try:
+                order = self.exchange.create_market_order(symbol, side, amount)
+                return {
+                    'success': True,
+                    'order': order,
+                    'reason': '止损市价单执行',
+                    'execution_details': {'strategy': 'fast_track_market'}
+                }
+            except Exception as e:
+                print(f"❌ 止损执行失败: {e}")
+                return {'success': False, 'order': None, 'reason': str(e), 'execution_details': {}}
+        
+        elif 'TP1' in action or 'TAKE_PROFIT' in action:
+            # 止盈：激进限价单（快速成交，省手续费）
+            print(f"⚡ 止盈快速通道: 激进限价单")
+            order = self.executor.aggressive_limit_order(symbol, side, amount, current_price)
+            return {
+                'success': order is not None,
+                'order': order,
+                'reason': '止盈激进限价单' if order else '激进限价单失败',
+                'execution_details': {'strategy': 'fast_track_aggressive_limit'}
+            }
+        
+        else:
+            # 默认：激进限价单
+            order = self.executor.aggressive_limit_order(symbol, side, amount, current_price)
+            return {
+                'success': order is not None,
+                'order': order,
+                'reason': '快速通道执行' if order else '执行失败',
+                'execution_details': {'strategy': 'fast_track_default'}
+            }
+    
+    def _select_strategy(self, signal: dict, market_data: dict) -> str:
+        """
+        根据信号特征选择最优执行策略
+        
+        策略选择逻辑：
+        - 紧急情况（止损）：market
+        - 高强度信号 + 正常紧急度：aggressive_limit
+        - 其他：aggressive_limit（优先享受Maker费率）
+        """
+        action = signal.get('action', '')
+        signal_strength = signal.get('signal_strength', 70)
+        
+        # 止损/紧急：市价单
+        if 'STOP_LOSS' in action or 'EMERGENCY' in action:
+            return 'market'
+        
+        # 开仓/止盈：激进限价单（省手续费）
+        if signal_strength >= 70:
+            return 'aggressive_limit'
+        
+        # 默认：激进限价单
+        return 'aggressive_limit'
+    
+    def _execute_with_strategy(self, signal: dict, market_data: dict, strategy: str) -> dict:
+        """执行订单（根据策略）"""
+        symbol = signal.get('symbol')
+        amount = signal.get('amount')
+        current_price = market_data.get('price')
+        
+        action = signal.get('action', '')
+        side = 'buy' if 'LONG' in action or 'BUY' in action else 'sell'
+        
+        if strategy == 'market':
+            return self.executor.market_with_slippage_control(symbol, side, amount, current_price)
+        elif strategy == 'aggressive_limit':
+            return self.executor.aggressive_limit_order(symbol, side, amount, current_price)
+        else:
+            print(f"⚠️ 未知策略: {strategy}，使用激进限价单")
+            return self.executor.aggressive_limit_order(symbol, side, amount, current_price)
+    
+    def _fetch_market_data(self, symbol: str) -> dict:
+        """获取最新市场数据"""
+        try:
+            ticker = self.exchange.fetch_ticker(symbol)
+            return {
+                'price': ticker['last'],
+                'timestamp': time.time()
+            }
+        except Exception as e:
+            print(f"⚠️ 获取市场数据失败: {e}")
+            return {'price': 0, 'timestamp': time.time()}
+    
+    def _log_execution(self, signal: dict, order: dict, market_data: dict, reason: str, success: bool):
+        """记录执行日志"""
+        log_entry = {
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'signal_timestamp': signal.get('timestamp', time.time()),
+            'delay_seconds': time.time() - signal.get('timestamp', time.time()),
+            'symbol': signal.get('symbol'),
+            'action': signal.get('action'),
+            'reference_price': signal.get('reference_price', 0),
+            'execution_price': market_data.get('price', 0),
+            'price_slippage_pct': abs(market_data.get('price', 0) - signal.get('reference_price', 0)) / signal.get('reference_price', 1) * 100 if signal.get('reference_price', 0) > 0 else 0,
+            'order_id': order.get('id') if order else None,
+            'success': success,
+            'reason': reason
+        }
+        
+        self.execution_log.append(log_entry)
+        
+        # 只保留最近100条记录
+        if len(self.execution_log) > 100:
+            self.execution_log = self.execution_log[-100:]
+
+
+# ==================== 订单执行优化器结束 ====================
+
+
 # 初始化Qwen客户端
 qwen_api_key = os.getenv("QWEN_API_KEY")
 if not qwen_api_key:
@@ -639,6 +1156,100 @@ TRADE_CONFIG = {
     == "true",  # 从环境变量读取测试模式
     "bark_key": os.getenv("BARK_KEY", "kqMFY7827om3TQMR2iziNR"),  # Bark推送密钥
 }
+
+# 🆕 V8.7: 订单执行优化配置
+ORDER_EXECUTION_CONFIG = {
+    # 信号验证参数
+    "signal_validation": {
+        "max_age_seconds": 300,          # 信号最大有效期5分钟
+        "max_price_deviation_pct": 0.8,  # 最大价格偏离0.8%
+        "min_signal_strength": 60,       # 最低信号强度
+    },
+    
+    # 滑点控制
+    "slippage_control": {
+        "aggressive_limit_slippage": 0.05,  # 激进限价单滑点0.05%
+        "market_order_slippage": 0.2,       # 市价单最大滑点0.2%
+    },
+    
+    # 执行策略
+    "execution_strategy": {
+        "enabled": os.getenv("ENABLE_ORDER_OPTIMIZATION", "true").lower() == "true",  # 启用订单优化
+        "default_strategy": "aggressive_limit",  # 默认策略：aggressive_limit/market
+        "use_fast_track_for_stop_loss": True,   # 止损使用快速通道
+        "order_timeout_seconds": 3,              # 订单等待超时3秒
+    }
+}
+
+# 🆕 V8.7: 初始化全局订单执行器
+# 合并配置
+execution_config = {
+    **ORDER_EXECUTION_CONFIG.get('signal_validation', {}),
+    **ORDER_EXECUTION_CONFIG.get('slippage_control', {}),
+    **ORDER_EXECUTION_CONFIG.get('execution_strategy', {})
+}
+order_executor = UnifiedOrderExecutor(exchange, execution_config)
+print(f"✅ V8.7订单执行优化器已初始化 (优化{'启用' if execution_config.get('enabled', True) else '禁用'})")
+
+
+# 🆕 V8.7: 辅助函数 - 智能订单执行
+def smart_create_order(symbol: str, side: str, amount: float, order_type: str = 'entry', 
+                        reference_price: float = None, signal_strength: int = 70,
+                        params: dict = None) -> dict:
+    """
+    智能订单执行（使用V8.7优化器或回退到传统市价单）
+    
+    Args:
+        symbol: 交易对
+        side: 'buy' 或 'sell'
+        amount: 数量
+        order_type: 订单类型 'entry'/'exit'/'stop_loss'/'take_profit'/'add_position'
+        reference_price: 参考价格（用于验证）
+        signal_strength: 信号强度
+        params: 额外参数（传递给交易所）
+    
+    Returns:
+        订单对象
+    """
+    try:
+        # 检查是否启用优化
+        if not execution_config.get('enabled', True):
+            # 优化未启用，使用传统市价单
+            return exchange.create_market_order(symbol, side, amount, params=params or {})
+        
+        # 使用V8.7优化器
+        action_map = {
+            'entry': 'OPEN_LONG' if side == 'buy' else 'OPEN_SHORT',
+            'exit': 'CLOSE_LONG' if side == 'sell' else 'CLOSE_SHORT',
+            'stop_loss': 'STOP_LOSS',
+            'take_profit': 'TAKE_PROFIT',
+            'add_position': 'ADD_POSITION'
+        }
+        
+        signal = {
+            'type': 'fast_track' if order_type in ['stop_loss', 'take_profit'] else 'ai_decision',
+            'action': action_map.get(order_type, 'OPEN_LONG' if side == 'buy' else 'OPEN_SHORT'),
+            'symbol': symbol,
+            'amount': amount,
+            'reference_price': reference_price if reference_price else 0,
+            'timestamp': time.time(),
+            'signal_strength': signal_strength
+        }
+        
+        result = order_executor.execute(signal)
+        
+        if result['success']:
+            return result['order']
+        else:
+            # 优化器执行失败，回退到传统市价单
+            print(f"  ⚠️ 优化器执行失败({result['reason']})，使用传统市价单")
+            return exchange.create_market_order(symbol, side, amount, params=params or {})
+            
+    except Exception as e:
+        # 任何异常都回退到传统市价单
+        print(f"  ⚠️ 智能执行异常({str(e)})，使用传统市价单")
+        return exchange.create_market_order(symbol, side, amount, params=params or {})
+
 
 # ==================== V7.6.5: 信号分级配置 ====================
 
@@ -3999,12 +4610,15 @@ def add_to_position(symbol, side, new_amount, new_price, leverage, existing_posi
         print(f"  新增: {new_amount:.3f}个 @{new_price:.2f}")
         print(f"  合并后: {total_amount:.3f}个 @{avg_price:.2f}")
 
-        # 4. 执行市价单加仓
+        # 4. 执行市价单加仓（🆕 V8.7: 使用智能订单执行）
         order_side = 'buy' if side == 'long' else 'sell'
-        exchange.create_market_order(
+        smart_create_order(
             symbol,
             order_side,
             new_amount,
+            order_type='add_position',
+            reference_price=new_price,
+            signal_strength=ai_signal.get('signal_quality', 75),
             params={'tag': 'f1ee03b510d5SUDE'}
         )
         print("  ✓ 加仓订单已执行")
@@ -19875,12 +20489,15 @@ def _execute_single_close_action(action, current_positions):
                 close_amount = partial_amount
                 print(f"  📊 分批平仓: {close_pct}%仓位 ({close_amount:.6f}/{real_pos['size']:.6f})")
 
-        # 执行平仓（使用实时的持仓数量）
-        order = exchange.create_market_order(
+        # 执行平仓（使用实时的持仓数量）（🆕 V8.7: 使用智能订单执行）
+        order = smart_create_order(
             symbol,
             side,
             close_amount,
-            params={"reduceOnly": "true", "tag": "f1ee03b510d5SUDE"},
+            order_type='exit',
+            reference_price=None,  # 平仓不需要参考价格
+            signal_strength=80,  # 平仓是确定性操作
+            params={"reduceOnly": "true", "tag": "f1ee03b510d5SUDE"}
         )
         print("✓ 平仓成功")
 
@@ -20694,11 +21311,14 @@ def _execute_single_open_action_v55(
             ):
                 print(f"先平{current_pos['side']}仓...")
                 close_side = "buy" if current_pos["side"] == "short" else "sell"
-                exchange.create_market_order(
+                smart_create_order(
                     symbol,
                     close_side,
                     current_pos["size"],
-                    params={"reduceOnly": "true", "tag": "f1ee03b510d5SUDE"},
+                    order_type='exit',
+                    reference_price=None,
+                    signal_strength=80,
+                    params={"reduceOnly": "true", "tag": "f1ee03b510d5SUDE"}
                 )
                 time.sleep(1)
 
@@ -20906,8 +21526,12 @@ def _execute_single_open_action_v55(
                 take_profit = float(exchange.price_to_precision(symbol, take_profit))
 
             order_side = "buy" if operation == "OPEN_LONG" else "sell"
-            order = exchange.create_market_order(
-                symbol, order_side, amount, params={"tag": "f1ee03b510d5SUDE"}
+            order = smart_create_order(
+                symbol, order_side, amount, 
+                order_type='entry',
+                reference_price=price,
+                signal_strength=signal_score,
+                params={"tag": "f1ee03b510d5SUDE"}
             )
             print("✓ 开仓成功")
         except Exception as e:
@@ -21433,12 +22057,15 @@ def execute_portfolio_actions(
                     print(f"平仓: {current_pos['side']}仓 {current_pos['size']}个")
                     side = "sell" if current_pos["side"] == "long" else "buy"
 
-                    # 执行平仓
-                    order = exchange.create_market_order(
+                    # 执行平仓（🆕 V8.7: 使用智能订单执行）
+                    order = smart_create_order(
                         symbol,
                         side,
                         current_pos["size"],
-                        params={"reduceOnly": "true", "tag": "f1ee03b510d5SUDE"},
+                        order_type='exit',
+                        reference_price=None,
+                        signal_strength=80,
+                        params={"reduceOnly": "true", "tag": "f1ee03b510d5SUDE"}
                     )
                     print("✓ 平仓成功")
 
@@ -21496,13 +22123,16 @@ def execute_portfolio_actions(
 
             elif operation == "OPEN_LONG":
                 if current_pos and current_pos["side"] == "short":
-                    # 先平空
+                    # 先平空（🆕 V8.7: 使用智能订单执行）
                     print("先平空仓...")
-                    close_order = exchange.create_market_order(
+                    close_order = smart_create_order(
                         symbol,
                         "buy",
                         current_pos["size"],
-                        params={"reduceOnly": "true", "tag": "f1ee03b510d5SUDE"},
+                        order_type='exit',
+                        reference_price=None,
+                        signal_strength=80,
+                        params={"reduceOnly": "true", "tag": "f1ee03b510d5SUDE"}
                     )
 
                     # 更新交易记录
@@ -21539,8 +22169,12 @@ def execute_portfolio_actions(
                     print(
                         f"开多仓: ${position_usd:.2f} {leverage}x杠杆 (约{amount:.6f}个)"
                     )
-                    order = exchange.create_market_order(
-                        symbol, "buy", amount, params={"tag": "f1ee03b510d5SUDE"}
+                    order = smart_create_order(
+                        symbol, "buy", amount,
+                        order_type='entry',
+                        reference_price=price,
+                        signal_strength=action.get('signal_strength', 75),
+                        params={"tag": "f1ee03b510d5SUDE"}
                     )
                     print("✓ 开仓成功")
 
@@ -21614,13 +22248,16 @@ def execute_portfolio_actions(
 
             elif operation == "OPEN_SHORT":
                 if current_pos and current_pos["side"] == "long":
-                    # 先平多
+                    # 先平多（🆕 V8.7: 使用智能订单执行）
                     print("先平多仓...")
-                    close_order = exchange.create_market_order(
+                    close_order = smart_create_order(
                         symbol,
                         "sell",
                         current_pos["size"],
-                        params={"reduceOnly": "true", "tag": "f1ee03b510d5SUDE"},
+                        order_type='exit',
+                        reference_price=None,
+                        signal_strength=80,
+                        params={"reduceOnly": "true", "tag": "f1ee03b510d5SUDE"}
                     )
 
                     # 更新交易记录
@@ -21655,8 +22292,12 @@ def execute_portfolio_actions(
                     print(
                         f"开空仓: ${position_usd:.2f} {leverage}x杠杆 (约{amount:.6f}个)"
                     )
-                    order = exchange.create_market_order(
-                        symbol, "sell", amount, params={"tag": "f1ee03b510d5SUDE"}
+                    order = smart_create_order(
+                        symbol, "sell", amount,
+                        order_type='entry',
+                        reference_price=price,
+                        signal_strength=action.get('signal_strength', 75),
+                        params={"tag": "f1ee03b510d5SUDE"}
                     )
                     print("✓ 开仓成功")
 
