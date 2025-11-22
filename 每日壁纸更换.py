@@ -102,7 +102,7 @@ def calculate_max_drawdown(trades_history):
     max_dd = 0.0
     
     for trade in sorted_trades:
-        if trade.get('平仓时间'):  # 只计算已平仓的交易
+        if trade.get('平仓时间'):  # 只计算已平仓的交易 
             pnl = float(trade.get('盈亏(U)', 0) or 0)
             capital += pnl
             
