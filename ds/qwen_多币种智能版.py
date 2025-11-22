@@ -229,15 +229,16 @@ class AICallOptimizer:
     """AI调用优化器"""
 
     def __init__(self):
-        self.last_fingerprints = {}  # {symbol: fingerprint}
-        self.last_portfolio_call_time = None  # 上次组合决策时间
-        self.call_stats = {
+        from typing import Dict, Any, Optional
+        self.last_fingerprints: Dict[str, str] = {}  # {symbol: fingerprint}
+        self.last_portfolio_call_time: Optional[datetime] = None  # 上次组合决策时间
+        self.call_stats: Dict[str, int] = {
             'total': 0,
             'saved': 0,
             'forced': 0,  # 强制调用次数（关键变化）
         }
         # 详细记录（用于邮件报告）
-        self.daily_details = {
+        self.daily_details: Dict[str, Any] = {
             'skip_reasons': [],  # 跳过原因列表
             'force_reasons': [],  # 强制调用原因列表
             'saved_cost_estimate': 0.0,  # 估算节省成本
@@ -883,8 +884,8 @@ def send_email_notification(subject, body_html, model_name="Qwen"):
         print(f"[邮件通知] 映射后display_name: {display_name}")
         msg['Subject'] = f"[{display_name}] {subject}"
         print(f"[邮件通知] 最终邮件主题: {msg['Subject']}")
-        msg['From'] = email_config['from_address']
-        msg['To'] = email_config['to_address']
+        msg['From'] = str(email_config['from_address'])
+        msg['To'] = str(email_config['to_address'])
         msg['Date'] = datetime.now().strftime('%a, %d %b %Y %H:%M:%S +0800')
 
         # 添加HTML内容
@@ -892,12 +893,17 @@ def send_email_notification(subject, body_html, model_name="Qwen"):
         msg.attach(html_part)
 
         # 发送邮件
-        if email_config['use_ssl']:
-            server = smtplib.SMTP_SSL(email_config['smtp_server'], email_config['smtp_port'], timeout=30)
-        else:
-            server = smtplib.SMTP(email_config['smtp_server'], email_config['smtp_port'], timeout=30)
+        smtp_server = str(email_config['smtp_server'])
+        smtp_port = int(email_config['smtp_port'])
+        username = str(email_config['username'])
+        password = str(email_config['password'])
 
-        server.login(email_config['username'], email_config['password'])
+        if email_config['use_ssl']:
+            server = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=30)
+        else:
+            server = smtplib.SMTP(smtp_server, smtp_port, timeout=30)
+
+        server.login(username, password)
         server.send_message(msg)
         server.quit()
 
@@ -1279,7 +1285,7 @@ def clear_symbol_orders(symbol, verbose=True):
 
         # 使用ccxt的底层方法调用papi API
         # GET /papi/v1/um/conditional/openOrders
-        timestamp = int(time.time() * 1000)
+        timestamp: int = int(time.time() * 1000)
 
         # 尝试查询条件单
         try:
@@ -1655,7 +1661,7 @@ def sync_csv_with_exchange_positions(current_positions):
                             contexts = json.load(f)
                             if coin in contexts:
                                 signal_type = contexts[coin].get('signal_type', 'unknown')
-                                expected_holding = contexts[coin].get('expected_holding_minutes', 0)
+                                expected_holding = int(contexts[coin].get('expected_holding_minutes', 0) or 0)
 
                     # 计算实际持仓时间
                     if isinstance(open_time_str, str) and open_time_str:
@@ -5107,12 +5113,12 @@ def ai_review_backtest_result(original_stats, backtest_original, backtest_optimi
         original_weighted_pr = backtest_original.get('weighted_profit_ratio', backtest_original.get('profit_ratio', 0)) if backtest_original else 0
         original_composite = backtest_original.get('composite_profit_metric', 0) if backtest_original else 0
 
-        optimized_weighted_wr = backtest_optimized.get('weighted_win_rate', backtest_optimized.get('win_rate', 0)) if backtest_optimized else 0
-        optimized_weighted_pr = backtest_optimized.get('weighted_profit_ratio', backtest_optimized.get('profit_ratio', 0)) if backtest_optimized else 0
-        optimized_composite = backtest_optimized.get('composite_profit_metric', 0) if backtest_optimized else 0
+        optimized_weighted_wr = float(backtest_optimized.get('weighted_win_rate', backtest_optimized.get('win_rate', 0)) if backtest_optimized else 0)
+        optimized_weighted_pr = float(backtest_optimized.get('weighted_profit_ratio', backtest_optimized.get('profit_ratio', 0)) if backtest_optimized else 0)
+        optimized_composite = float(backtest_optimized.get('composite_profit_metric', 0) if backtest_optimized else 0)
 
         # 计算综合利润指标的提升幅度
-        composite_improvement = 0
+        composite_improvement: float = 0.0
         if original_composite > 0:
             composite_improvement = ((optimized_composite - original_composite) / original_composite) * 100
 
