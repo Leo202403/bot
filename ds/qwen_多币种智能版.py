@@ -810,6 +810,347 @@ class SignalValidator:
             }
 
 
+class AdaptiveSignalValidator:
+    """
+    🆕 V8.9: 自适应信号验证器
+    
+    核心改进：
+    1. 区分策略类型（Trend Following vs Mean Reversion vs Breakout）
+    2. 动态调整价格偏离容忍度
+    3. 基于ATR归一化偏离
+    4. 解决V8.7的"幸存者偏差"问题
+    
+    问题：V8.7的SignalValidator对所有策略一刀切地拒绝"价格上涨"
+    实际：Trend Following策略中，价格上涨=动能确认，应该追！
+    """
+    
+    def __init__(self, config: dict = None):
+        self.config = config or {}
+        
+        # 策略类型偏离阈值配置
+        self.strategy_thresholds = {
+            'trend_following': {
+                'max_deviation_pct': 2.0,        # 趋势跟随：允许2%偏离
+                'min_signal_strength': 70,       # 更高的信号强度要求
+                'check_momentum': True,          # 检查动量持续性
+                'allow_favorable_move': True,    # 允许朝交易方向的价格移动
+            },
+            'mean_reversion': {
+                'max_deviation_pct': 0.5,        # 均值回归：严格0.5%偏离
+                'min_signal_strength': 60,       # 信号强度要求较低
+                'check_momentum': False,         # 不检查动量
+                'allow_favorable_move': False,   # 不允许价格偏离
+            },
+            'breakout': {
+                'max_deviation_pct': 3.0,        # 突破策略：允许3%偏离
+                'min_signal_strength': 75,       # 高信号强度要求
+                'check_momentum': True,          # 必须检查动量
+                'volume_confirmation': True,     # 需要成交量确认
+                'allow_favorable_move': True,    # 允许突破方向的价格移动
+            },
+            'default': {
+                'max_deviation_pct': 0.8,        # 默认：保守0.8%偏离
+                'min_signal_strength': 65,
+                'check_momentum': False,
+                'allow_favorable_move': False,
+            }
+        }
+    
+    def validate_signal(self, ai_signal: dict, current_market_data: dict) -> dict:
+        """
+        自适应信号验证
+        
+        Args:
+            ai_signal: {
+                'action': 'OPEN_LONG',
+                'reference_price': 90000,
+                'timestamp': 1234567890,
+                'signal_strength': 85,
+                'signal_type': 'scalping'/'swing',
+                'strategy_type': 'trend_following'/'mean_reversion'/'breakout',  # V8.9新增
+                'reason': str
+            }
+            current_market_data: {
+                'price': 90500,
+                'timestamp': 1234567950,
+                'atr': 2000,  # V8.9新增：用于ATR归一化
+                'volume': 1000000,  # V8.9新增：用于成交量确认
+                'avg_volume': 800000,  # V8.9新增
+                'recent_price_change': 0.5  # V8.9新增：最近价格变化（用于判断动量）
+            }
+        
+        Returns:
+            {
+                'valid': True/False,
+                'reason': str,
+                'adjusted_params': dict or None,
+                'risk_level': 'LOW'/'MEDIUM'/'HIGH'  # V8.9新增
+            }
+        """
+        try:
+            # 1. 时效性检查（保持V8.7逻辑）
+            signal_timestamp = ai_signal.get('timestamp', time.time())
+            age_seconds = time.time() - signal_timestamp
+            max_age = self.config.get('max_signal_age_seconds', 300)  # 5分钟
+            
+            if age_seconds > max_age:
+                return {
+                    'valid': False,
+                    'reason': f'信号超时: {age_seconds:.0f}秒 > {max_age}秒',
+                    'adjusted_params': None,
+                    'risk_level': 'N/A'
+                }
+            
+            # 2. 获取策略类型配置
+            strategy_type = ai_signal.get('strategy_type')
+            if not strategy_type or strategy_type not in self.strategy_thresholds:
+                # 尝试从reason推断策略类型
+                strategy_type = self._infer_strategy_type(ai_signal)
+            
+            thresholds = self.strategy_thresholds.get(strategy_type, self.strategy_thresholds['default'])
+            
+            # 3. 计算价格偏离
+            current_price = current_market_data.get('price', 0)
+            reference_price = ai_signal.get('reference_price', current_price)
+            
+            if reference_price <= 0 or current_price <= 0:
+                return {
+                    'valid': False,
+                    'reason': '价格数据无效',
+                    'adjusted_params': None,
+                    'risk_level': 'N/A'
+                }
+            
+            price_change = (current_price - reference_price) / reference_price * 100
+            abs_price_change = abs(price_change)
+            
+            # 4. 判断价格移动方向
+            action = ai_signal.get('action', '')
+            is_long = 'LONG' in action or 'BUY' in action
+            price_moved_favorably = (is_long and price_change > 0) or (not is_long and price_change < 0)
+            
+            # 5. 动态偏离容忍度（基于ATR）
+            max_deviation = thresholds['max_deviation_pct']
+            
+            atr = current_market_data.get('atr')
+            if atr and atr > 0 and reference_price > 0:
+                # ATR归一化：如果偏离小于1个ATR，放宽容忍度
+                atr_pct = (atr / reference_price) * 100
+                atr_normalized_deviation = abs_price_change / atr_pct if atr_pct > 0 else 999
+                
+                if atr_normalized_deviation < 1.0:
+                    # 偏离小于1个ATR，放宽50%
+                    max_deviation = max_deviation * 1.5
+                    # print(f"[AdaptiveValidator] ATR归一化: 偏离{atr_normalized_deviation:.2f}ATR < 1.0, 放宽阈值到{max_deviation:.2f}%")
+            
+            # 6. 策略特定验证逻辑
+            if strategy_type == 'trend_following':
+                # 趋势跟随：价格朝交易方向移动是好事！
+                if price_moved_favorably and thresholds.get('allow_favorable_move'):
+                    # 检查动量是否持续
+                    if thresholds.get('check_momentum'):
+                        momentum_ok = self._check_momentum_continuation(ai_signal, current_market_data)
+                        if not momentum_ok:
+                            return {
+                                'valid': False,
+                                'reason': f'动量衰减: 价格虽变化{abs_price_change:.2f}%但动量减弱',
+                                'adjusted_params': None,
+                                'risk_level': 'HIGH'
+                            }
+                    
+                    # 趋势跟随中，价格上涨不是坏事
+                    if abs_price_change <= max_deviation:
+                        return {
+                            'valid': True,
+                            'reason': f'趋势确认: 价格朝预期方向移动{abs_price_change:.2f}% (动能强)',
+                            'adjusted_params': {
+                                'execution_price': current_price,
+                                'price_change_pct': price_change,
+                                'age_seconds': age_seconds,
+                                'strategy_type': strategy_type
+                            },
+                            'risk_level': 'MEDIUM'
+                        }
+                    else:
+                        # 超过阈值但动能强，可以追但风险高
+                        signal_strength = ai_signal.get('signal_strength', 0)
+                        if signal_strength >= thresholds['min_signal_strength'] + 10:
+                            return {
+                                'valid': True,
+                                'reason': f'强动能追单: 偏离{abs_price_change:.2f}%但信号强度{signal_strength}',
+                                'adjusted_params': {
+                                    'execution_price': current_price,
+                                    'price_change_pct': price_change,
+                                    'age_seconds': age_seconds,
+                                    'strategy_type': strategy_type
+                                },
+                                'risk_level': 'HIGH'
+                            }
+                        else:
+                            return {
+                                'valid': False,
+                                'reason': f'偏离过大: {abs_price_change:.2f}% > {max_deviation:.1f}%且信号强度不足',
+                                'adjusted_params': None,
+                                'risk_level': 'N/A'
+                            }
+                else:
+                    # 价格朝反方向移动
+                    if abs_price_change <= thresholds['max_deviation_pct'] * 0.5:
+                        return {
+                            'valid': True,
+                            'reason': f'小幅回调: 价格变化{abs_price_change:.2f}% (可接受)',
+                            'adjusted_params': {
+                                'execution_price': current_price,
+                                'price_change_pct': price_change,
+                                'age_seconds': age_seconds,
+                                'strategy_type': strategy_type
+                            },
+                            'risk_level': 'LOW'
+                        }
+                    else:
+                        return {
+                            'valid': False,
+                            'reason': f'价格反向移动: {abs_price_change:.2f}% (趋势可能反转)',
+                            'adjusted_params': None,
+                            'risk_level': 'N/A'
+                        }
+            
+            elif strategy_type == 'mean_reversion':
+                # 均值回归：价格应该回到均值，偏离太多说明趋势改变
+                if abs_price_change > max_deviation:
+                    return {
+                        'valid': False,
+                        'reason': f'均值回归策略价格偏离{abs_price_change:.2f}% > {max_deviation:.1f}% (趋势可能改变)',
+                        'adjusted_params': None,
+                        'risk_level': 'N/A'
+                    }
+                
+                return {
+                    'valid': True,
+                    'reason': f'均值回归有效: 偏离{abs_price_change:.2f}%可接受',
+                    'adjusted_params': {
+                        'execution_price': current_price,
+                        'price_change_pct': price_change,
+                        'age_seconds': age_seconds,
+                        'strategy_type': strategy_type
+                    },
+                    'risk_level': 'LOW'
+                }
+            
+            elif strategy_type == 'breakout':
+                # 突破策略：价格上涨=突破确认
+                if price_moved_favorably:
+                    # 检查成交量确认
+                    if thresholds.get('volume_confirmation'):
+                        volume_ok = self._check_volume_surge(current_market_data)
+                        if not volume_ok:
+                            return {
+                                'valid': False,
+                                'reason': f'突破未伴随放量: 价格变化{abs_price_change:.2f}%但成交量不足',
+                                'adjusted_params': None,
+                                'risk_level': 'HIGH'
+                            }
+                    
+                    # 突破中价格上涨是确认信号
+                    if abs_price_change <= max_deviation:
+                        return {
+                            'valid': True,
+                            'reason': f'突破确认: 价格突破{abs_price_change:.2f}% + 成交量放大',
+                            'adjusted_params': {
+                                'execution_price': current_price,
+                                'price_change_pct': price_change,
+                                'age_seconds': age_seconds,
+                                'strategy_type': strategy_type
+                            },
+                            'risk_level': 'MEDIUM'
+                        }
+                    else:
+                        return {
+                            'valid': False,
+                            'reason': f'突破过度: {abs_price_change:.2f}% > {max_deviation:.1f}% (可能追高)',
+                            'adjusted_params': None,
+                            'risk_level': 'N/A'
+                        }
+                else:
+                    return {
+                        'valid': False,
+                        'reason': f'假突破: 价格回落{abs_price_change:.2f}%',
+                        'adjusted_params': None,
+                        'risk_level': 'N/A'
+                    }
+            
+            # 默认：使用保守逻辑
+            if abs_price_change <= max_deviation:
+                return {
+                    'valid': True,
+                    'reason': f'价格偏离{abs_price_change:.2f}%可接受',
+                    'adjusted_params': {
+                        'execution_price': current_price,
+                        'price_change_pct': price_change,
+                        'age_seconds': age_seconds,
+                        'strategy_type': strategy_type
+                    },
+                    'risk_level': 'LOW'
+                }
+            else:
+                return {
+                    'valid': False,
+                    'reason': f'价格偏离{abs_price_change:.2f}% > {max_deviation:.1f}%',
+                    'adjusted_params': None,
+                    'risk_level': 'N/A'
+                }
+        
+        except Exception as e:
+            print(f"⚠️ 自适应信号验证异常: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'valid': False,
+                'reason': f'验证异常: {str(e)}',
+                'adjusted_params': None,
+                'risk_level': 'N/A'
+            }
+    
+    def _infer_strategy_type(self, ai_signal: dict) -> str:
+        """从信号reason推断策略类型"""
+        signal_type = ai_signal.get('signal_type', 'swing')
+        reason = ai_signal.get('reason', '').lower()
+        
+        # 关键词匹配
+        if any(kw in reason for kw in ['突破', 'breakout', '放量', 'volume surge', 'break', '突破关键']):
+            return 'breakout'
+        elif any(kw in reason for kw in ['超卖', 'oversold', '回调', 'pullback', '反弹', 'bounce', '超买', 'overbought']):
+            return 'mean_reversion'
+        elif signal_type == 'swing' or any(kw in reason for kw in ['趋势', 'trend', '上涨', 'uptrend', '下跌', 'downtrend']):
+            return 'trend_following'
+        else:
+            return 'default'
+    
+    def _check_momentum_continuation(self, ai_signal: dict, current_market_data: dict) -> bool:
+        """检查动量是否持续"""
+        recent_change = current_market_data.get('recent_price_change', 0)
+        action = ai_signal.get('action', '')
+        is_long = 'LONG' in action or 'BUY' in action
+        
+        if is_long:
+            return recent_change > -0.2  # 多单：最近价格变化不能太负
+        else:
+            return recent_change < 0.2   # 空单：最近价格变化不能太正
+    
+    def _check_volume_surge(self, current_market_data: dict) -> bool:
+        """检查成交量是否放大"""
+        current_volume = current_market_data.get('volume', 0)
+        avg_volume = current_market_data.get('avg_volume', current_volume)
+        
+        if avg_volume <= 0:
+            return True  # 没有均量数据时默认通过
+        
+        volume_ratio = current_volume / avg_volume
+        
+        # 成交量放大1.5倍以上视为确认
+        return volume_ratio >= 1.5
+
+
 class OrderExecutor:
     """
     🆕 V8.7: 订单执行器
@@ -1624,6 +1965,35 @@ PORTFOLIO_RISK_CONFIG = {
     "warning_threshold": 0.8,                # 警告阈值：80%利用率时警告
 }
 
+# 🆕 V8.9: 自适应信号验证配置
+ADAPTIVE_SIGNAL_VALIDATOR_CONFIG = {
+    "enabled": os.getenv("ENABLE_ADAPTIVE_VALIDATOR", "true").lower() == "true",  # 启用自适应验证器
+    "max_signal_age_seconds": 300,  # 信号最大有效期5分钟
+    
+    # 策略类型偏离阈值（会覆盖AdaptiveSignalValidator的默认值）
+    "strategy_thresholds": {
+        "trend_following": {
+            "max_deviation_pct": 2.0,        # 趋势跟随：允许2%偏离
+            "min_signal_strength": 70,
+            "check_momentum": True,
+            "allow_favorable_move": True,
+        },
+        "mean_reversion": {
+            "max_deviation_pct": 0.5,        # 均值回归：严格0.5%偏离
+            "min_signal_strength": 60,
+            "check_momentum": False,
+            "allow_favorable_move": False,
+        },
+        "breakout": {
+            "max_deviation_pct": 3.0,        # 突破策略：允许3%偏离
+            "min_signal_strength": 75,
+            "check_momentum": True,
+            "volume_confirmation": True,
+            "allow_favorable_move": True,
+        },
+    }
+}
+
 # 🆕 V8.7: 初始化全局订单执行器
 # 合并配置
 execution_config = {
@@ -1637,6 +2007,10 @@ print(f"✅ V8.7订单执行优化器已初始化 (优化{'启用' if execution_
 # 🆕 V8.8 P0: 初始化投资组合风控管理器
 portfolio_risk_manager = PortfolioRiskManager(PORTFOLIO_RISK_CONFIG)
 print(f"✅ V8.8投资组合风控已初始化 (风控{'启用' if PORTFOLIO_RISK_CONFIG.get('enabled', True) else '禁用'}, 总敞口上限{PORTFOLIO_RISK_CONFIG['max_total_exposure_multiplier']}x)")
+
+# 🆕 V8.9: 初始化自适应信号验证器
+adaptive_signal_validator = AdaptiveSignalValidator(ADAPTIVE_SIGNAL_VALIDATOR_CONFIG)
+print(f"✅ V8.9自适应信号验证器已初始化 (自适应验证{'启用' if ADAPTIVE_SIGNAL_VALIDATOR_CONFIG.get('enabled', True) else '禁用'})")
 
 
 # 🆕 V8.7: 辅助函数 - 智能订单执行
