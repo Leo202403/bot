@@ -1860,7 +1860,17 @@ def get_default_config():
                 # === 风险控制 ===
                 "total_risk_budget": 0.03,           # 总风险预算3%
                 "max_loss_per_trade": 0.015,         # 单笔最大亏损1.5%
-                "trailing_stop_trigger": 1.0,        # 🔧 V8.0: 盈利1%启动移动止损
+                
+                # === 🆕 V8.6.1: 分批止盈策略 ===
+                "partial_tp_enabled": True,          # 启用分批止盈
+                "tp1_atr_multiplier": 1.5,           # TP1 = entry + 1.5×ATR（第一目标位）
+                "tp1_close_pct": 50,                 # TP1触发时平仓50%
+                "move_sl_to_breakeven": True,        # TP1后移止损到Break-even
+                "breakeven_buffer_pct": 0.2,         # Break-even缓冲（成本上方0.2%）
+                "trailing_stop_enabled": True,       # 启用Trailing Stop（剩余50%）
+                "trailing_start_after_tp1": True,    # TP1触发后才启动Trailing
+                "trailing_distance_atr": 1.5,        # Trailing距离（距最高点1.5×ATR）
+                "trailing_stop_trigger": 1.0,        # 🔧 V8.0: 盈利1%启动移动止损（保留兼容）
                 
                 # === 交易频率控制 ===
                 "cooldown_same_coin_minutes": 30,    # 同币种冷却30分钟
@@ -1896,15 +1906,23 @@ def get_default_config():
                 # === 风险控制 ===
                 "total_risk_budget": 0.05,           # 总风险预算5%
                 "max_loss_per_trade": 0.02,          # 单笔最大亏损2%
-                "trailing_stop_trigger": 2.0,        # 🔧 V8.0: 盈利2%启动移动止损
+                
+                # === 🆕 V8.6.1: 分批止盈策略 ===
+                "partial_tp_enabled": True,          # 启用分批止盈
+                "tp1_atr_multiplier": 3.0,           # TP1 = entry + 3.0×ATR（第一目标位）
+                "tp1_close_pct": 50,                 # TP1触发时平仓50%
+                "move_sl_to_breakeven": True,        # TP1后移止损到Break-even
+                "breakeven_buffer_pct": 0.3,         # Break-even缓冲（成本上方0.3%）
+                "trailing_stop_enabled": True,       # 启用Trailing Stop（剩余50%）
+                "trailing_start_after_tp1": True,    # TP1触发后才启动Trailing
+                "trailing_distance_atr": 2.5,        # Trailing距离（距最高点2.5×ATR）
+                "trailing_stop_trigger": 2.0,        # 🔧 V8.0: 盈利2%启动移动止损（保留兼容）
+                "trailing_stop_trigger_pct": 2.0,    # 盈利2%启动追踪（保留兼容）
                 
                 # === 多周期确认 ===
                 "multi_timeframe_threshold": 2,      # 🔧 V8.0: 降低到2（15m+1h）
-                "trailing_stop_enabled": True,       # 启用追踪止损
-                "trailing_stop_trigger_pct": 2.0,    # 盈利2%启动追踪
-                "trailing_stop_distance_atr": 1.0,   # 追踪距离（1倍ATR）
-                "partial_exit_enabled": True,        # 启用分批平仓
-                "partial_exit_first_target_pct": 50, # 第一目标平仓50%
+                "partial_exit_enabled": True,        # 启用分批平仓（保留兼容）
+                "partial_exit_first_target_pct": 50, # 第一目标平仓50%（保留兼容）
             },
             
             # 【V7.9新增】信号优先级策略
@@ -14851,6 +14869,13 @@ def calculate_unified_risk_reward_v2(entry_price, side, market_data, signal_clas
             reward = abs(take_profit - entry_price)
             actual_rr = reward / risk if risk > 0 else 0
             
+            # 🆕 V8.6.1: 计算TP1（第一目标位）
+            tp1_multiplier = config.get('scalping_params', {}).get('tp1_atr_multiplier', 1.5)
+            if side == "long":
+                tp1_price = entry_price + (atr_15m * tp1_multiplier * volume_surge_multiplier)
+            else:
+                tp1_price = entry_price - (atr_15m * tp1_multiplier * volume_surge_multiplier)
+            
             return {
                 "stop_loss": round(stop_loss, 2),
                 "take_profit": round(take_profit, 2),
@@ -14860,7 +14885,11 @@ def calculate_unified_risk_reward_v2(entry_price, side, market_data, signal_clas
                 "stop_loss_reason": stop_reason,
                 "take_profit_reason": tp_reason,
                 "valid": actual_rr >= min_rr,
-                "mode": "scalping"
+                "mode": "scalping",
+                # 🆕 V8.6.1: 分批止盈相关
+                "tp1_price": round(tp1_price, 2),
+                "tp1_close_pct": config.get('scalping_params', {}).get('tp1_close_pct', 50),
+                "partial_tp_enabled": config.get('scalping_params', {}).get('partial_tp_enabled', True),
             }
         
         else:
@@ -14973,6 +15002,13 @@ def calculate_unified_risk_reward_v2(entry_price, side, market_data, signal_clas
                 actual_rr = min_rr
                 tp_reason = f"盈亏比{min_rr}:1（调整后）"
             
+            # 🆕 V8.6.1: 计算TP1（第一目标位）
+            tp1_multiplier = config.get('swing_params', {}).get('tp1_atr_multiplier', 3.0)
+            if side == "long":
+                tp1_price = entry_price + (atr_1h * tp1_multiplier * volume_surge_multiplier)
+            else:
+                tp1_price = entry_price - (atr_1h * tp1_multiplier * volume_surge_multiplier)
+            
             return {
                 "stop_loss": round(stop_loss, 2),
                 "take_profit": round(take_profit, 2),
@@ -14982,7 +15018,11 @@ def calculate_unified_risk_reward_v2(entry_price, side, market_data, signal_clas
                 "stop_loss_reason": stop_reason,
                 "take_profit_reason": tp_reason,
                 "valid": actual_rr >= min_rr,
-                "mode": "swing"
+                "mode": "swing",
+                # 🆕 V8.6.1: 分批止盈相关
+                "tp1_price": round(tp1_price, 2),
+                "tp1_close_pct": config.get('swing_params', {}).get('tp1_close_pct', 50),
+                "partial_tp_enabled": config.get('swing_params', {}).get('partial_tp_enabled', True),
             }
     
     except Exception as e:
@@ -16987,6 +17027,222 @@ def calculate_risk_reward_ratio(entry_price, stop_loss, take_profit, side="long"
     except Exception as e:
         print(f"⚠️ 计算盈亏比异常：{e}")
         return 0
+
+
+def check_tp1_trigger(position, current_price):
+    """
+    【V8.6.1新增】检查第一目标位（TP1）是否触发
+    
+    Args:
+        position: 持仓字典
+        current_price: 当前价格
+    
+    Returns:
+        (triggered: bool, reason: str)
+    """
+    try:
+        # 检查TP1是否已触发
+        if position.get('tp1_triggered'):
+            return False, "TP1已触发"
+        
+        # 检查是否启用分批止盈
+        if not position.get('partial_tp_enabled', True):
+            return False, "分批止盈未启用"
+        
+        tp1_price = position.get('tp1_price')
+        if not tp1_price:
+            return False, "TP1未设置"
+        
+        side = position.get('side', 'long')
+        
+        # 判断是否触发
+        if side == 'long':
+            if current_price >= tp1_price:
+                return True, f"TP1触发（多头）: 当前{current_price:.2f} >= TP1{tp1_price:.2f}"
+        else:  # short
+            if current_price <= tp1_price:
+                return True, f"TP1触发（空头）: 当前{current_price:.2f} <= TP1{tp1_price:.2f}"
+        
+        return False, f"未达TP1（当前{current_price:.2f}, TP1{tp1_price:.2f}）"
+    
+    except Exception as e:
+        print(f"⚠️ 检查TP1触发异常: {e}")
+        return False, f"检查失败: {e}"
+
+
+def execute_tp1_partial_close(position, current_price, config):
+    """
+    【V8.6.1新增】执行TP1分批平仓：平50% + 移动止损到Break-even
+    
+    Args:
+        position: 持仓字典（会被修改）
+        current_price: 当前价格
+        config: 配置字典
+    
+    Returns:
+        (success: bool, message: str, close_info: dict)
+    """
+    try:
+        from datetime import datetime
+        
+        # 获取配置
+        signal_type = position.get('signal_type', 'swing')
+        type_params = config.get('global', {}).get(f'{signal_type}_params', {})
+        
+        tp1_close_pct = type_params.get('tp1_close_pct', 50) / 100
+        close_quantity = position.get('quantity', 0) * tp1_close_pct
+        
+        if close_quantity <= 0:
+            return False, "平仓数量无效", {}
+        
+        # 计算盈亏
+        entry_price = position.get('entry_price', 0)
+        side = position.get('side', 'long')
+        
+        if side == 'long':
+            pnl = (current_price - entry_price) * close_quantity
+        else:
+            pnl = (entry_price - current_price) * close_quantity
+        
+        # 记录平仓信息
+        close_info = {
+            'coin': position.get('coin', ''),
+            'side': side,
+            'close_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'close_price': current_price,
+            'close_quantity': close_quantity,
+            'close_pct': tp1_close_pct * 100,
+            'pnl': pnl,
+            'reason': 'TP1-50%'
+        }
+        
+        # 保存平仓记录（调用现有函数）
+        update_close_position(
+            position['coin'],
+            side,
+            close_info['close_time'],
+            current_price,
+            pnl,
+            'TP1-50%',
+            close_pct=tp1_close_pct * 100
+        )
+        
+        # 更新持仓状态
+        position['quantity'] -= close_quantity
+        position['tp1_triggered'] = True
+        position['tp1_close_time'] = close_info['close_time']
+        position['tp1_pnl'] = pnl
+        position['tp1_close_price'] = current_price
+        
+        # 🔑 移动止损到Break-even
+        breakeven_buffer = type_params.get('breakeven_buffer_pct', 0.2) / 100
+        if side == 'long':
+            new_stop_loss = entry_price * (1 + breakeven_buffer)
+            # 只能向上移动
+            position['stop_loss'] = max(new_stop_loss, position.get('stop_loss', 0))
+        else:  # short
+            new_stop_loss = entry_price * (1 - breakeven_buffer)
+            # 只能向下移动
+            position['stop_loss'] = min(new_stop_loss, position.get('stop_loss', float('inf')))
+        
+        position['stop_loss_reason'] = f"Break-even+{breakeven_buffer*100:.1f}% (TP1后)"
+        
+        # 初始化Trailing Stop相关字段
+        if type_params.get('trailing_start_after_tp1', True):
+            if side == 'long':
+                position['highest_price_after_tp1'] = current_price
+            else:
+                position['lowest_price_after_tp1'] = current_price
+        
+        message = f"✅ TP1触发 @ {current_price:.2f}\n"
+        message += f"   平仓: {tp1_close_pct*100:.0f}% ({close_quantity:.6f})\n"
+        message += f"   利润: ${pnl:.2f}\n"
+        message += f"   止损移至: {position['stop_loss']:.2f} (Break-even)"
+        
+        print(message)
+        
+        return True, message, close_info
+    
+    except Exception as e:
+        error_msg = f"⚠️ 执行TP1平仓失败: {e}"
+        print(error_msg)
+        import traceback
+        traceback.print_exc()
+        return False, error_msg, {}
+
+
+def update_trailing_stop(position, current_price, atr, config):
+    """
+    【V8.6.1新增】更新Trailing Stop（仅在TP1触发后）
+    
+    Args:
+        position: 持仓字典（会被修改）
+        current_price: 当前价格
+        atr: ATR值
+        config: 配置字典
+    
+    Returns:
+        (updated: bool, message: str)
+    """
+    try:
+        # 检查是否启用Trailing Stop
+        signal_type = position.get('signal_type', 'swing')
+        type_params = config.get('global', {}).get(f'{signal_type}_params', {})
+        
+        if not type_params.get('trailing_stop_enabled', True):
+            return False, "Trailing Stop未启用"
+        
+        # 检查是否在TP1后才启动
+        if type_params.get('trailing_start_after_tp1', True):
+            if not position.get('tp1_triggered'):
+                return False, "TP1未触发，Trailing Stop未启动"
+        
+        side = position.get('side', 'long')
+        trailing_distance = atr * type_params.get('trailing_distance_atr', 1.5)
+        
+        # 更新最高点/最低点并计算新止损
+        if side == 'long':
+            highest = position.get('highest_price_after_tp1', position.get('entry_price', 0))
+            if current_price > highest:
+                position['highest_price_after_tp1'] = current_price
+                
+                # 计算新的Trailing Stop
+                new_stop = current_price - trailing_distance
+                old_stop = position.get('stop_loss', 0)
+                
+                # 只能向上移动
+                if new_stop > old_stop:
+                    position['stop_loss'] = new_stop
+                    position['stop_loss_reason'] = f"Trailing({trailing_distance:.0f}距最高)"
+                    
+                    message = f"📈 Trailing Stop上移: {old_stop:.2f} → {new_stop:.2f} (距最高{trailing_distance:.0f})"
+                    print(f"  {message}")
+                    return True, message
+        
+        else:  # short
+            lowest = position.get('lowest_price_after_tp1', position.get('entry_price', float('inf')))
+            if current_price < lowest:
+                position['lowest_price_after_tp1'] = current_price
+                
+                # 计算新的Trailing Stop
+                new_stop = current_price + trailing_distance
+                old_stop = position.get('stop_loss', float('inf'))
+                
+                # 只能向下移动
+                if new_stop < old_stop:
+                    position['stop_loss'] = new_stop
+                    position['stop_loss_reason'] = f"Trailing({trailing_distance:.0f}距最低)"
+                    
+                    message = f"📉 Trailing Stop下移: {old_stop:.2f} → {new_stop:.2f} (距最低{trailing_distance:.0f})"
+                    print(f"  {message}")
+                    return True, message
+        
+        return False, "价格未创新高/低，止损未移动"
+    
+    except Exception as e:
+        error_msg = f"⚠️ 更新Trailing Stop失败: {e}"
+        print(error_msg)
+        return False, error_msg
 
 
 def calculate_realtime_signal_score(market_data, learning_config=None):
@@ -19186,6 +19442,25 @@ def monitor_positions_for_invalidation(market_data_list: list, current_positions
             # 🆕 V7.7.0.19: 获取币种特定阈值（如果有）
             symbol_config = config.get('per_symbol', {}).get(coin_name, {})
             symbol_thresholds = symbol_config.get('invalidation_thresholds', {})
+            
+            # 🆕 V8.6.1: 优先检查TP1触发和Trailing Stop更新
+            current_price = market_data.get('current_price', 0)
+            if current_price > 0:
+                # 检查TP1触发
+                tp1_triggered, tp1_reason = check_tp1_trigger(position, current_price)
+                if tp1_triggered:
+                    print(f"\n🎯 {coin_name} TP1触发检测: {tp1_reason}")
+                    success, message, close_info = execute_tp1_partial_close(position, current_price, config)
+                    if success:
+                        print(f"   {message}")
+                        # TP1平仓成功，继续监控剩余仓位
+                
+                # 更新Trailing Stop（如果TP1已触发）
+                if position.get('tp1_triggered'):
+                    atr = market_data.get('atr', {}).get('atr_14', 0)
+                    if atr > 0:
+                        updated, trail_msg = update_trailing_stop(position, current_price, atr, config)
+                        # Trailing Stop的日志已在函数内打印，这里不重复
             
             # 【V7.9】根据信号类型调整阈值
             if signal_type == 'scalping':
