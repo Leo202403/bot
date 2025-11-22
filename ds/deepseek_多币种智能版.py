@@ -17458,6 +17458,46 @@ def ai_evaluate_position_adjustment(
             'reason': f'调整后仓位${suggested_position:.0f}U超过账户35%风险限制（${available_balance*0.35:.0f}U），拒绝'
         }
 
+    # 🆕 V8.9.1: 分级Prompt策略 - 根据场景选择不同的Prompt
+    use_simplified_prompt = False
+    
+    # 判断是否只需要检查市场反转（有持仓且不需要新Entry）
+    if current_positions and len(current_positions) > 0:
+        # 检查是否有足够资金开新仓
+        remaining_capital = max_total_position - total_position_value
+        min_position_size = 20  # 最小开仓金额
+        
+        if remaining_capital < min_position_size:
+            # 资金不足，只需要检查现有持仓是否需要反转平仓
+            use_simplified_prompt = True
+            print("   💡 [V8.9.1] 使用精简Prompt（反转检查）- 资金不足开新仓")
+    
+    if use_simplified_prompt:
+        # 使用精简Prompt - 只检查市场反转
+        from prompt_optimizer import build_reversal_check_prompt
+        
+        # 为每个持仓生成反转检查Prompt
+        reversal_checks = []
+        for position in current_positions:
+            symbol = position.get('symbol')
+            # 找到对应的市场数据
+            market_data = next((m for m in market_data_list if m and m.get('symbol') == symbol), None)
+            if market_data:
+                reversal_prompt = build_reversal_check_prompt(position, market_data, learning_config)
+                reversal_checks.append(reversal_prompt)
+        
+        # 合并所有反转检查
+        if reversal_checks:
+            prompt = "\n\n".join(reversal_checks)
+            print(f"   📊 [V8.9.1] Prompt Token估算: ~{len(prompt)//4} tokens（精简版）")
+        else:
+            # 如果没有生成反转检查，回退到完整Prompt
+            use_simplified_prompt = False
+    
+    if not use_simplified_prompt:
+        # 使用完整Prompt - 扫描Entry机会
+        print("   💡 [V8.9.1] 使用完整Prompt（Entry扫描）")
+
     prompt = f"""**[IMPORTANT: Respond ONLY in Chinese (中文)]**
 
 Position Adjustment Evaluation Request
@@ -23516,6 +23556,62 @@ def trading_bot():
                     print(f"⚠️ 刷新持仓失败: {e}")
             else:
                 print("✓ 无需主动平仓")
+
+        # 🆕 V8.9.1: 确定性EXIT检查（TP/SL/Time Stop）
+        if current_positions:
+            print("⏳ [3.7/6] 确定性EXIT检查（Python处理）...")
+            from prompt_optimizer import check_deterministic_exit
+            
+            deterministic_exits = []
+            for position in current_positions:
+                symbol = position.get('symbol')
+                coin_name = symbol.split("/")[0] if symbol else "UNKNOWN"
+                
+                # 获取当前价格
+                market_data = next((m for m in market_data_list if m and m.get('symbol') == symbol), None)
+                if not market_data:
+                    continue
+                
+                current_price = market_data.get('price', 0)
+                should_exit, reason = check_deterministic_exit(position, current_price)
+                
+                if should_exit:
+                    print(f"   ✓ {coin_name}: {reason} - 直接平仓（不调用AI）")
+                    deterministic_exits.append({
+                        'symbol': symbol,
+                        'action': 'CLOSE',
+                        'reason': f'Deterministic EXIT: {reason}',
+                        'is_deterministic': True
+                    })
+            
+            # 执行确定性平仓
+            if deterministic_exits:
+                print(f"   💡 检测到 {len(deterministic_exits)} 个确定性EXIT，立即执行")
+                for exit_action in deterministic_exits:
+                    try:
+                        _execute_single_close_action(exit_action, current_positions)
+                    except Exception as e:
+                        print(f"   ⚠️ 确定性平仓失败: {e}")
+                
+                # 刷新持仓数据
+                try:
+                    print("   刷新持仓数据...")
+                    current_positions, total_position_value = get_all_positions()
+                    save_positions_snapshot(current_positions, total_position_value)
+                    print(f"   ✓ 确定性EXIT后持仓: {len(current_positions)}个")
+                except Exception as e:
+                    print(f"   ⚠️ 刷新持仓失败: {e}")
+                
+                # 如果所有持仓都已平仓，跳过AI调用
+                if not current_positions:
+                    print("   ✓ 所有持仓已通过确定性检查平仓，跳过AI调用（节省Token）")
+                    
+                    # 保存系统状态
+                    elapsed = time.time() - start_time
+                    print(f"\n✅ 确定性EXIT完成 (耗时: {elapsed:.1f}秒)\n")
+                    return
+            else:
+                print("   ✓ 无确定性EXIT触发")
 
         print("⏳ [4/6] AI决策分析...")
         # 3. AI决策
