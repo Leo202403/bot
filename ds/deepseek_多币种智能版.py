@@ -5794,136 +5794,209 @@ def ai_optimize_parameters(trading_data_summary, learning_mode="full_optimizatio
         else:
             experience_context = "## 📚 HISTORICAL VALIDATION LESSONS\n\nNo historical data available yet. This is the first optimization.\n\n"
 
-        prompt = f"""**[IMPORTANT: Respond ONLY in Chinese (中文)]**
+        prompt = f"""
+**[Reply in Chinese]** Professional cryptocurrency trading AI | 3-Layer Trend Framework
 
-You are a professional quantitative trading parameter optimization expert. Analyze the following trading data comprehensively and propose actionable parameter adjustments.
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ FRAMEWORK:4H(40%) Primary Trend → 1H(30%) TP/SL → 15m(20%) Entry Timing   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-【V8.5.2.4.43】移动止盈止损决策指南：
-- 当市场波动率高、趋势明确时，建议启用移动止损（trailing_stop_enabled=true）
-- 超短线交易：适合在快速突破时使用移动止损，保护短期利润
-- 波段交易：在强趋势中使用移动止损，让利润充分奔跑
-- 震荡市场：建议使用静态止损（trailing_stop_enabled=false），避免频繁触发
-- 根据历史回测数据和当前市场状态，自主决定是否启用移动止损
-- trailing_stop_enabled参数可以在scalping_params和swing_params中独立设置
+{learning_params_info}
+{decision_context}
+{symbol_characteristics_info}
+{dual_mode_info}
+{signal_tier_info}
 
-{experience_context}
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 1. MARKET DATA |3-Layer Analysis                                ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-{mode_instruction}
+{market_overview}
 
-## TRADING DATA STATISTICS
+{market_regime_text}
 
-{trading_data_summary}
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 2. ACCOUNT                                                    ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-## ADJUSTABLE PARAMETERS
+{position_info}
 
-1. **Risk Control**
-- min_risk_reward: Minimum risk-reward ratio (current value shown above)
-- atr_stop_multiplier: ATR stop-loss multiplier (current value shown above)
-- max_loss_per_trade: Max loss per trade % (0.01-0.03)
-- max_consecutive_losses: Max consecutive losses (2-5)
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 3. ADAPTIVE PARAMS |Based on last {trades_count} trades             ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-2. **Position Management**
-- base_position_ratio: Base position ratio (0.10-0.30)
-- high_signal_multiplier: High-quality signal multiplier (1.0-2.0)
+R:R={learning_config['global']['min_risk_reward']:.1f}:1 | SL=ATR×{learning_config['global']['atr_stop_multiplier']:.1f} | Consensus={learning_config['global']['min_indicator_consensus']}/5 | Key Penalty=×{learning_config['global']['key_level_penalty']:.1f} | Updated: {learning_config['last_update'] or 'Initial'}
 
-3. **Entry Timing**
-- min_indicator_consensus: Min indicators consensus (3-5)
-- key_level_penalty: Key level penalty coefficient (0.5-1.0)
-- min_trend_strength: Minimum trend strength (0.5-0.8)
+Auto-Rules: WinRate<45%→↑R:R | Frequent SL→Widen Buffer | High Risk→5/5 Consensus
 
-4. **Exit Strategy**
-- max_hold_time_hours: Max holding time hours (12-48)
-- partial_take_profit: Partial profit taking (true/false)
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 4. TP/SL RULES | V8.5 CRITICALOptimized from {trades_count} Historical Trades║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-## COMPREHENSIVE ANALYSIS REQUIREMENTS
+Scalp(15min-2h | TP=Entry±15m_ATR×{scalping_params.get('atr_tp_multiplier', 2.5):.1f} | SL=Entry∓15m_ATR×{scalping_params.get('atr_stop_multiplier', 1.5):.1f} | MaxHold={scalping_params.get('max_holding_hours', 12)}h | Target:50-70%
+Swing(2h-24h | TP=Entry±1H_ATR×{swing_params.get('atr_tp_multiplier', 4.0):.1f} | SL=Entry∓1H_ATR×{swing_params.get('atr_stop_multiplier', 1.5):.1f} | MaxHold={swing_params.get('max_holding_hours', 72)}h | Target:50-70%
 
-### 1. **问题诊断 (Diagnosis)** - 3-4句
-识别核心问题，包括：
-- 胜率问题（如：低于50%）
-- 盈亏比问题（如：低于1.5:1）
-- 止损/止盈触发模式（如：频繁止损、提前止盈）
-- 信号质量问题（如：逆势、假突破、震荡市）
+⚠️ MUST use ATR multipliers above (proven 50-70% vs old 30-40%) | NO S/R-based TP unless pattern requires
 
-### 2. **根本原因 (Root Cause)** - 4-5句
-深挖参数层面的根因：
-- 哪个参数设置过松/过紧
-- 导致了什么类型的错误交易
-- 举1-2个具体交易案例说明（如："XRP空单在震荡市中被1.7倍ATR止损频繁扫损"）
-- 与当前市场环境的匹配度（如：参数适合趋势市，但当前为震荡市）
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 5. LESSONS |Match Mode to Lesson                                ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-### 3. **参数调整建议 (Adjustments)** - 明确对比
-对每个需要调整的参数，说明：
-- **当前值 → 建议值**（如：min_risk_reward 1.5 → 1.8）
-- **调整理由**（1句话，如："降低盈亏比门槛以提高入场机会，配合更严格的信号过滤"）
-- **影响范围**（如："影响所有币种的开仓决策"）
+| Lesson | Scalping | Swing |
+|--------|----------|-------|
+| TP Too Conservative | IGNORE (quick exits) | APPLY: TP×1.5-2, 4H levels |
+| High SL Rate | Cautious (@ exact S/R) | Strong (score≥75, perfect align) |
+| Premature Exit | IGNORE (expected) | APPLY: ≥2h hold, 1H S/R |
 
-### 4. **量化预期效果 (Expected Effect)** - 5-6句，必须包含具体数值
-- **胜率预期**："从当前X%提升至Y%（±Z%）"，说明原因
-- **盈亏比预期**："从当前A:1改善至B:1"，说明如何实现
-- **机会捕获率**："预计提升至15-25%"（基于历史错过机会分析）
-- **具体案例**："如昨日错过的BTC 1245强信号，调整后可捕获"
-- **风险提示**："可能增加X类型风险，需监控Y指标"
+⚠️ Tag [Scalping Lesson] or [Swing Lesson] in reason to avoid mode confusion
 
-### 5. **执行建议 (Action Required)**
-- **是否立即调整**：YES/NO/WAIT（观察期）
-- **理由**：1-2句（如："样本量充足且问题明确，建议立即调整" OR "样本量不足，建议再观察3天"）
-- **监控重点**：调整后应重点关注的指标（如："关注止损触发率是否下降"）
+Entry:LONG when 4H↑ | SHORT when 4H↓
+✓ Indicators (5/5): EMA20 vs 50, MACD>/<0, RSI 30-70, Vol>120%, ATR moderate
+✓ PA Confirm (PRIORITY): S/R + Pin/Engulfing OR Simple Pullback complete
+✓ Context: @Resistance→Short | @Support→Long | Neutral→Follow 4H
 
-## OUTPUT FORMAT (Strict JSON with V2.0 Enhanced Fields)
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 6. PRICE ACTION |Priority: Exhaustion>Inception>Pullback>Volume  ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-```json
+| Pattern | P | Conditions | Pos | Action |
+|---------|---|------------|-----|--------|
+| IncpStr | 1 | BO(bdy>70%,rng>1.5%)+3con+4Haln | 50% | EnterNow |
+| SimplePB | 2 | 1-3bar,ret<38.2%,rec>50% | 47.5% | Enter(BestRR) |
+| ExtrVol | 3 | Vol≥3×+brkHi | 48.75% | Enter(WR>80%) |
+| IncpMod | 4 | BO(bdy>70%)only | 37.5% | WaitConf |
+| BOMaru | 5 | Bdy>60%,brkHi,vol>1.5× | 42.5% | Even4Hneutral |
+| ComplexPB | 6 | Ret38-62%,cons<3% | 25% | WAITBO |
+| Consec3+ | 7 | 3+sameDir | 35% | Chase |
+| PinBar | 8 | Wick>2×bdy+bnc>1.5% | 32.5% | @Supp |
+| ⚠️ExhaustHi | EXIT | Wick>60%OREngulf | - | CloseNow |
+| ⚠️ExhaustMod | EXIT | Doji@HL OR bdyShrnk>50% | - | IfProfit |
+
+Rules: (1)Incept wins (2)PB=bestRR (3)Exhaust=exit (4)ComplexPB=wait (5)NoFOMO
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 7. PROFIT PROTECT | V8.5.4 (Hist: +8%→-5% observed)                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+Act when: Profit>3-5%/2ATR + Exhaust/KeyLvlRev + StructBrk → Use CLOSE proactive
+Balance: let winners run ⚖️ secure gains | Consider: 50%@1stS/R, rest→TP
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 8. YTC SIGNALS | ⚠️ Override 4H when S/R≥4 OR weak≥0.85                     ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+| Sig | Sc | Cond | Pos | Trap |
+|-----|---|------|-----|------|
+| PB | 92 | weak≥0.85+aln | 35-45% | FadeRev |
+| BOF/BPB/TST | 85-90 | S/R≥4+struct | 20-25%(ctr) | FadeBO/tst |
+| CPB | 78 | Ret38-62%,cons | WAIT | NeedBO |
+Fields: type,dir,str,sr,weak,LWP | Mom: >0.5=bull,-0.1~0.1=stall,<-0.5=bear
+Rules: (1)≥85→Enter(Ctr:RR≥2,20-25%|Trend:RR≥1.5,35-45%) (2)CPB→WAIT (3)vsLWP>0.5%→REJECT (4)Prior:PB(92)>BOF/TST(85-90)>Incept(88-90)
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 9. HIERARCHY & SL/TP                                                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+Prior: (1)YTC(S/R≥4)>4H (2)PA@KeyLvl>Indic (3)4H>15m (4)RevPA>TP | Note: V8.5.2 removed "InProfit+Counter→Exit"
+SL/TP(1H): LONG:SL=1Hsup-ATR×0.5,TP=1Hres-ATR×1.0 | SHORT:SL=1Hres+ATR×0.5,TP=1Hsup+ATR×1.0
+S/R unclear: SL=Entry±ATR×{learning_config['global']['atr_stop_multiplier']:.1f},TP from RR | Valid:RR≥{learning_config['global']['min_risk_reward']:.1f}
+Entry: (1)4Haln (2)15mCons≥{learning_config['global']['min_indicator_consensus']}/5 (3)PA+SafeLoc(S/R) | HIGH: S/R+Pin/Engulf+5/5
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 10. EXIT RULES | V8.5.2 CRITICAL RR PROTECT (Hist: 1.1:1→0.01:1!)           ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+⚠️ 105 trades: Avg profit 0.014U (premature exits!) STRICTLY follow:
+
+✅ ALLOWED EXIT (ONE of):
+1. TP Reached: Price≥TP(LONG)/≤TP(SHORT) - PRIMARY, achieve RR≥{learning_config['global']['min_risk_reward']:.1f}:1
+2. SL Trigger: Price≤SL(LONG)/≥SL(SHORT) - Accept loss, exit immediate
+3. Time Stop: Hold>{scalping_params.get('max_holding_hours', 12)}h(Scalp)/{swing_params.get('max_holding_hours', 72)}h(Swing) - Exit at market
+4. Mkt Reversal (V8.5.3): (A)4H reversed (primary) OR (B)1H+15m both reversed (mid+short)
+   Ex(SHORT): Exit if 4H→bull OR (1H→bull AND 15m→bull) | Hold if only 15m→bull(normal PB)
+   Why: Wait all 3 TF reverse=2-3days, profit gone. New rule exits earlier.
+
+❌ FORBIDDEN EXIT (DO NOT):
+1. ❌ Single TF rev (eg"15m BearExhaust") - Not enough, normal PA
+2. ❌ "InProfit+anyCounter" - Old rule caused RR collapse, WAIT TP
+3. ❌ Subjective ("feels enough"/"worried giveback"/"saw resist") - WRONG
+4. ❌ Partial profit ("reached 50% TP"/"lock gains") - WRONG, trust RR
+
+📊 RR MECHANISM: Min RR={learning_config['global']['min_risk_reward']:.1f}:1 | Exit before TP→RR~0.01:1
+Hist: 105 trades, 57% WR, 1.43U total (0.014U/trade!) | Solution: WAIT TP for 1.0-2.0U/win
+
+Decision Flow: price≥TP?→EXIT | price≤SL?→EXIT | hold>maxHrs?→EXIT | 4Hrev OR(1H+15m rev)?→EXIT | else→HOLD
+⚠️ If see Exhaustion: 15m signal only, NOT exit alone. Check 4H+1H also rev? No→IGNORE,HOLD til TP
+Hist Lessons: Exit on "any counter"=46% premature | Missed 0.0%/trade | RR: expect 1.1:1→actual 0.01:1
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 11. WORKFLOW & LEVERAGE                                                      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+Workflow: [L1]4H→[L2]15mCons(X/5)→[L3]PA+loc→[SL/TP]RRcalc→[Decision]+rationale
+
+Leverage:
+| Lev | Sig | RR | Cons | Cond |
+|-----|-----|-----|------|------|
+| 5x | HIGH | ≥2.0 | 5/5 | @KeyS/R |
+| 4x | HIGH | ≥1.8 | 4/5 | StrongConfl |
+| 3x | MID/HIGH | ≥1.5 | 3-4/5 | MedQual |
+| 2x | MID | 1.5-1.8 | 3/5 | BarelyQual |
+| 1x | LOW | <1.6 | <3/5 | Weak/range |
+Formula: Base=1x + (RR≥2:+2x | RR1.8-2:+1x) + (5/5:+1x | 4/5:+0.5x) + KeyS/R:+1x + HIGH:+1x | Final=min(sum,5)
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 12. OUTPUT JSON FORMAT                                                       ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+⚠️ Priority: (1)actions (2)risk_assessment (3)analysis (4)思考过程(can simplify if space limited)
+
 {{
-  "diagnosis": "核心问题诊断，3-4句话，包含具体指标数值",
-  "root_cause": "参数层面的根本原因分析，4-5句话，必须举1-2个具体交易案例",
-  "adjustments": {{
-    "global": {{
-      "min_risk_reward": 1.8,
-      "atr_stop_multiplier": 1.5,
-      "_rationale": {{
-        "min_risk_reward": "当前1.5→建议1.8，原因：降低门槛以提高机会捕获率，配合更严格的信号过滤",
-        "atr_stop_multiplier": "当前1.7→建议1.5，原因：震荡市中1.7倍止损过宽，导致回撤过大"
-      }}
-    }},
-    "per_symbol": {{
-      "XRP/USDT:USDT": {{
-        "min_indicator_consensus": 4,
-        "_rationale": "XRP波动率高，需要更严格的信号确认（3→4）"
-      }}
+    "思考过程": "Analyze each symbol: 3-layer valid + lev calc. Include all(BTC/ETH/SOL/BNB/XRP) if possible",
+    "analysis": "[Complete] Final decision summary",
+    "actions": [
+        {{
+            "symbol": "BTC/USDT:USDT",
+            "action": "OPEN_LONG|OPEN_SHORT|CLOSE|HOLD",
+            "position_size_usd": 0,
+            "leverage": 5,
+            "reason": "[Complete] Mode(Scalp/Swing) + Rationale + YTC + Trapped + S/R Str/Ctx + Lev Rationale",
+            "signal_mode": "scalping|swing",
+            "expected_holding_hours": 0.5,
+            "stop_loss_price": 108375.00,  // ⚠️ NUMBER, NOT FORMULA
+            "take_profit_price": 110125.00,  // ⚠️ NUMBER, NOT FORMULA
+            "exit_plan": {{
+                "stop_loss_condition": "[Hard SL] 1H S/R - ATR (Premise Invalid)",
+                "take_profit_condition": "[Hard TP] 1H S/R - ATR (Before Opposite Flow)",
+                "invalidation_condition": "[YTC SCRATCH] Stalls>3 TTF AND mom vs pos"
+            }},
+            "confidence": "HIGH|MEDIUM|LOW",
+            "ytc_signal_detected": false,
+            "ytc_signal_type": "NONE",  // BOF|BPB|PB|TST|CPB|NONE
+            "sr_strength_used": 0,  // 1-5
+            "weakness_score": 0.0,  // 0.0-1.0
+            "trapped_traders": "",  // eg"Fading early sellers at PB low"
+            "lwp_reference": 0.0,
+            "price_vs_lwp": "UNKNOWN",  // OPTIMAL|ACCEPTABLE|CHASING|UNKNOWN
+            "overriding_4h_trend": false  // Counter: YTC + S/R≥4 OR weak≥0.85
+        }}
+    ],
+    "risk_assessment": "[Complete] Overall risk",
+    "trade_management_plan": {{
+        "part1_target": "Immed S/R (Quick)",
+        "part2_target": "Next HTF S/R OR Trail 15m struct",
+        "scaling_strategy": "Scale 50%@Part1, trail w/YTC SCRATCH"
     }}
-  }},
-  "expected_effect": "量化预期效果，5-6句话，必须包含：1)胜率从X%提升至Y%，2)盈亏比从A改善至B，3)机会捕获率提升至C%，4)具体案例（如昨日错过的某信号调整后可捕获），5)风险提示",
-  "expected_win_rate": "50-55%",
-  "expected_profit_ratio": "1.5:1",
-  "expected_capture_rate": "20%",
-  "confidence": 0.75,
-  "action_required": "YES",
-  "action_reason": "样本量充足（20笔）且问题明确，建议立即调整",
-  "monitor_focus": "关注止损触发率（目标降至30%以下）和机会捕获率"
 }}
-```
 
-## CRITICAL RULES
+Trade Mgmt(Sim): Code=single pos, AI plan multi-part: Part1(Quick):1H S/R,scale 50% | Part2(Trend):4H S/R OR trail(15m struct,YTC SCRATCH:stall>3bar+no profit→exit)
 
-1. **📚 Learn from History (经验复用)**：
-   - Review "HISTORICAL VALIDATION LESSONS" above carefully
-   - If a similar adjustment FAILED recently (within 3 lessons): Explain why this time is different OR choose a different direction
-   - If a similar adjustment SUCCEEDED: Build upon that success
-   - Focus on **Composite Profit Metric** (加权胜率 × 加权盈亏比 × 捕获率) when evaluating past lessons
-   - Avoid repeating mistakes, learn from successful patterns
-
-2. **量化优先**：所有预期效果必须有具体数值，避免"预计提升"、"有望改善"等模糊表述
-
-3. **案例支撑**：根本原因分析必须引用具体交易案例（从trading_data_summary中提取）
-
-4. **参数溯源**：每个调整建议必须说明"当前值→建议值"，不能只给新值
-
-5. **保守预测**：预期效果给出区间（如50-55%），不要过度乐观
-
-6. **执行明确**：必须给出YES/NO/WAIT的明确建议，不能含糊
-
-7. **中文输出**：diagnosis、root_cause、expected_effect等字段内容必须为中文
-
-8. **适度调整**：单次参数变化幅度不超过30%，避免过度震荡
+KEY REMINDERS V8.5.2:
+1. Long & Short Equal: In 4H bear, seek SHORT actively
+2. PA priority, especially @key levels
+3. RR<{learning_config['global']['min_risk_reward']:.1f} reject
+4. LONG:@support | SHORT:@resistance
+5. ❌ NO exit on single counter! Only TP/SL/TimeStop/CompleteRev (see EXIT RULES)
+6. Analysis: 3-layer valid (analyze both long/short seriously)
+7. Stop/TP: optimized ATR multipliers (see V8.5)
+8. Capital: {max_total_position:.0f}U
+9. Params auto-optimized, strictly follow EXIT RULES for RR
+10. 🚨 JSON: stop_loss_price & take_profit_price=NUMERIC (eg 108375.00), NEVER expressions (eg 100000+8375)
+11. V5.5 Smart Pos: pos_size_usd=0, sys auto 15-50% | lev suggest 1-5 | Strong🚀🚀🚀→50%+5x | Med🎯→35-47.5%+3-5x | Weak📊→25%+1-2x | Risk budget 10%, auto-reduce/reject if exceed | Multi sigs→sys ranks & prioritizes
 """
 
         # 调用AI分析
