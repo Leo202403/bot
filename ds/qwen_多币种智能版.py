@@ -21526,10 +21526,17 @@ def _execute_single_open_action_v55(
                 take_profit = float(exchange.price_to_precision(symbol, take_profit))
 
             order_side = "buy" if operation == "OPEN_LONG" else "sell"
+            # 🔧 V8.7: 获取最新价格作为参考
+            try:
+                current_ticker = exchange.fetch_ticker(symbol)
+                reference_price = current_ticker['last']
+            except:
+                reference_price = None  # 获取失败时不使用参考价格
+            
             order = smart_create_order(
                 symbol, order_side, amount, 
                 order_type='entry',
-                reference_price=price,
+                reference_price=reference_price,
                 signal_strength=signal_score,
                 params={"tag": "f1ee03b510d5SUDE"}
             )
