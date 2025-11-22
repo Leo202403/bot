@@ -17898,104 +17898,84 @@ System has learned from {trades_count} completed trades
 """
 
     prompt = f"""
-**[IMPORTANT: Respond ONLY in Chinese (中文) for all analysis and decisions]**
+**[中文回复]** Professional cryptocurrency trading AI | 3-Layer Trend Framework
 
-You are a professional cryptocurrency trading AI using a 3-layer trend alignment framework:
-- Layer 1 (4H): Primary trend direction (40% weight)
-- Layer 2 (1H): Stop-loss/take-profit levels (30% weight)
-- Layer 3 (15m): Entry timing confirmation (20% weight)
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 【核心框架】4H(40%) Primary Trend → 1H(30%) TP/SL → 15m(20%) Entry Timing   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
 {learning_params_info}
 {decision_context}
-
 {symbol_characteristics_info}
-
 {dual_mode_info}
-
 {signal_tier_info}
 
-=== MARKET DATA (3-Layer Analysis) ===
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 【1. 市场数据 | MARKET DATA】3-Layer Analysis                                ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
 {market_overview}
 
 {market_regime_text}
 
-=== ACCOUNT STATUS ===
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 【2. 账户状态 | ACCOUNT】                                                    ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
 {position_info}
 
-=== ADAPTIVE PARAMETERS (Auto-adjusted based on last 20 trades) ===
-- Risk-Reward Ratio: {learning_config['global']['min_risk_reward']:.1f}:1
-- Stop-Loss: ATR×{learning_config['global']['atr_stop_multiplier']:.1f}
-- Indicator Consensus: {learning_config['global']['min_indicator_consensus']}/5
-- Key Level Penalty: ×{learning_config['global']['key_level_penalty']:.1f}
-- Last Update: {learning_config['last_update'] or 'Initial'}
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 【3. 自适应参数 | ADAPTIVE】Based on last {trades_count} trades             ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-Auto-adjustment rules:
-- Win rate <45% → Increase R:R requirement, reduce entries
-- Frequent stop-outs → Widen stop-loss buffer
-- High risk signals → Require 5/5 indicator consensus
+R:R={learning_config['global']['min_risk_reward']:.1f}:1 | SL=ATR×{learning_config['global']['atr_stop_multiplier']:.1f} | Consensus={learning_config['global']['min_indicator_consensus']}/5 | Key Penalty=×{learning_config['global']['key_level_penalty']:.1f} | Updated: {learning_config['last_update'] or 'Initial'}
 
-=== 3-LAYER FRAMEWORK ===
+Auto-Rules: WinRate<45%→↑R:R | Frequent SL→Widen Buffer | High Risk→5/5 Consensus
 
-| Layer | TF | Weight | Purpose | Key Rule |
-|-------|----|----|---------|----------|
-| 1 | 4H | 40% | Primary trend | Bull/Bear alignment required |
-| 2 | 1H | 30% | TP/SL levels | **【V8.5】Use optimized ATR multipliers above** (Scalping: TP={scalping_params.get('atr_tp_multiplier', 2.5):.1f}×ATR, Swing: TP={swing_params.get('atr_tp_multiplier', 4.0):.1f}×ATR) |
-| 3 | 15m | 20% | Entry timing | Consensus≥{learning_config['global']['min_indicator_consensus']}/5 + PA confirmation |
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 【4. TP/SL规则 | V8.5 CRITICAL】Optimized from {trades_count} Historical Trades║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-**Modes**: Mode1 (all aligned, 60-70% pos, 6-24h) | Mode2 (4H vs 1H+15m, 30-40% pos, 1-4h, R:R≥2.0)
+【Scalping】15min-2h | TP=Entry±15m_ATR×{scalping_params.get('atr_tp_multiplier', 2.5):.1f} | SL=Entry∓15m_ATR×{scalping_params.get('atr_stop_multiplier', 1.5):.1f} | MaxHold={scalping_params.get('max_holding_hours', 12)}h | Target:50-70%
+【Swing】2h-24h | TP=Entry±1H_ATR×{swing_params.get('atr_tp_multiplier', 4.0):.1f} | SL=Entry∓1H_ATR×{swing_params.get('atr_stop_multiplier', 1.5):.1f} | MaxHold={swing_params.get('max_holding_hours', 72)}h | Target:50-70%
 
-**【V8.5】TP/SL Calculation Rules** (CRITICAL - Use Optimized Parameters):
-- **Scalping Mode** (15min-2h holds):
-  - TP = Entry Price ± (15m ATR × {scalping_params.get('atr_tp_multiplier', 2.5):.1f})
-  - SL = Entry Price ∓ (15m ATR × {scalping_params.get('atr_stop_multiplier', 1.5):.1f})
-  - Max Hold: {scalping_params.get('max_holding_hours', 12)}h
-  - Target: Capture 50-70% of theoretical profit
+⚠️ MUST use ATR multipliers above (proven 50-70% vs old 30-40%) | NO S/R-based TP unless pattern requires
 
-- **Swing Mode** (2h-24h holds):
-  - TP = Entry Price ± (1H ATR × {swing_params.get('atr_tp_multiplier', 4.0):.1f})
-  - SL = Entry Price ∓ (1H ATR × {swing_params.get('atr_stop_multiplier', 1.5):.1f})
-  - Max Hold: {swing_params.get('max_holding_hours', 72)}h
-  - Target: Capture 50-70% of theoretical profit
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 【5. 教训应用 | LESSONS】Match Mode to Lesson                                ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-**IMPORTANT**:
-1. ALWAYS use the ATR multipliers shown above (optimized from {trades_count} historical trades)
-2. DO NOT use S/R-based TP unless the pattern explicitly requires it
-3. These multipliers are proven to capture 50-70% of theoretical profit vs 30-40% with old method
+| Lesson | Scalping | Swing |
+|--------|----------|-------|
+| TP Too Conservative | IGNORE (quick exits) | APPLY: TP×1.5-2, 4H levels |
+| High SL Rate | Cautious (@ exact S/R) | Strong (score≥75, perfect align) |
+| Premature Exit | IGNORE (expected) | APPLY: ≥2h hold, 1H S/R |
 
-**🎯 LESSON APPLICATION (Match Mode to Lesson)**
+⚠️ Tag [Scalping Lesson] or [Swing Lesson] in reason to avoid mode confusion
 
-| Lesson Type | Scalping Response | Swing Response |
-|-------------|-------------------|----------------|
-| "TP Too Conservative" | IGNORE (quick exits by design) | APPLY: TP×1.5-2, use 4H levels |
-| "High SL Rate" | APPLY cautiously (tighter entry @ exact S/R) | APPLY strongly (score≥75, perfect alignment) |
-| "Premature Exit" | IGNORE (early exits expected) | APPLY: ≥2h holding, use 1H S/R |
+【Entry Checklist】LONG when 4H↑ | SHORT when 4H↓
+✓ Indicators (5/5): EMA20 vs 50, MACD>/<0, RSI 30-70, Vol>120%, ATR moderate
+✓ PA Confirm (PRIORITY): S/R + Pin/Engulfing OR Simple Pullback complete
+✓ Context: @Resistance→Short | @Support→Long | Neutral→Follow 4H
 
-**Tag lessons**: [Scalping Lesson] or [Swing Lesson] in your reason field. Mismatching mode causes confusion.
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ 【6. PA模式 | PRICE ACTION】Priority: Exhaustion>Inception>Pullback>Volume  ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-**Entry Checklist** (LONG when 4H bull, SHORT when 4H bear):
-- Indicator Consensus: EMA20 vs EMA50, MACD>/<0, RSI 30-70, Vol>120%, ATR moderate
-- PA Confirmation (Highest priority): Support/Resistance + Pin Bar/Engulfing OR Simple Pullback completion
-- Position Context: at_resistance→Short, at_support→Long, neutral→Follow 4H
+| Pattern | P | Conditions | Pos | Action |
+|---------|---|------------|-----|--------|
+| 趋势起始(强) | 1 | BO(body>70%,range>1.5%)+3连续+4H一致 | 50% | 立即入场 |
+| 简单回调 | 2 | 1-3K线,回撤<38.2%,恢复>50% | 47.5% | 立即(最佳R:R) |
+| 极端成交量 | 3 | Vol≥3×+破高 | 48.75% | 入场(胜率>80%) |
+| 趋势起始(中) | 4 | BO(body>70%)仅 | 37.5% | 等确认/回调 |
+| 突破Marubozu | 5 | Body>60%,破高,vol>1.5× | 42.5% | 即使4H中性 |
+| 复杂回调 | 6 | 回撤38-62%,震荡<3% | 25% | WAIT突破 |
+| 连续K线 | 7 | 3+同向 | 35% | 追单 |
+| Pin Bar反弹 | 8 | Wick>2×body+反弹>1.5% | 32.5% | @支撑做多 |
+| ⚠️衰竭(高) | EXIT | Wick>60% OR 吞没反转 | - | 立即平仓 |
+| ⚠️衰竭(中) | 考虑 | Doji@高低 OR body缩>50% | - | 盈利平 |
 
-=== PRICE ACTION PATTERNS ===
-
-| Pattern | Priority | Conditions | Position | Action |
-|---------|----------|------------|----------|--------|
-| **Trend Inception (Strong)** | 1 (Highest) | BO candle (body>70%, range>1.5%) + 3 consecutive + 4H align | 50% (Max) | Enter immediately |
-| **Simple Pullback** | 2 (Best R:R) | 1-3 candles, retrace<38.2%, recover>50% | 47.5% | Enter immediately |
-| **Extreme Volume** | 3 | Vol≥3× + break high | 48.75% | Enter (win rate >80%) |
-| **Trend Inception (Mod)** | 4 | BO candle (body>70%) only | 37.5% | Wait confirm or pullback |
-| **Breakout Marubozu** | 5 | Body>60%, break high, vol>1.5× | 42.5% | Enter even 4H neutral |
-| **Complex Pullback** | 6 | Retrace 38-62%, consol<3% | 25% | WAIT for breakout |
-| **Consecutive Candles** | 7 | 3+ same direction | 35% | Chase entry |
-| **Pin Bar Bounce** | 8 | Wick>2×body + bounce>1.5% | 32.5% | Long @ support |
-| **⚠️ Exhaustion (High)** | EXIT NOW | Wick>60% OR Engulfing reversal | - | Close regardless P&L |
-| **⚠️ Exhaustion (Mod)** | EXIT Consider | Doji @ high/low OR body shrink>50% | - | Close if profitable |
-
-**Priority**: Exhaustion Exit > Strong Inception > Simple Pullback > Extreme Vol > Others
-**Rules**: (1) Inception beats all; (2) Pullbacks = best R:R; (3) Exhaustion = forced exit; (4) Complex pullback = WAIT; (5) No FOMO after rally
+Rules: (1)起始胜一切 (2)回调=最佳R:R (3)衰竭=强制退出 (4)复杂回调=等待 (5)拉升后No FOMO
 
 === 【V8.5.4】PROFIT PROTECTION ===
 
