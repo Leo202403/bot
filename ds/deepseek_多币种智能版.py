@@ -3381,6 +3381,10 @@ def get_default_config():
                 "multi_timeframe_threshold": 2,      # 🔧 V8.0: 降低到2（15m+1h）
                 "partial_exit_enabled": True,        # 启用分批平仓（保留兼容）
                 "partial_exit_first_target_pct": 50, # 第一目标平仓50%（保留兼容）
+                
+                # === V8.9.2: 智能分批平仓阈值 ===
+                "partial_min_reject_threshold": 0.2,  # 硬性拒绝阈值（U）：低于此值直接拒绝
+                "partial_ai_eval_threshold": 1.0,     # AI判断上限（U）：高于此值直接通过
             },
             
             # 【V7.9新增】信号优先级策略
@@ -20923,8 +20927,145 @@ def check_swing_trailing_stop(position, market_data, entry_context, config):
         return False, 0, "检查失败"
 
 
+def ai_evaluate_partial_close(position, partial_profit, market_data, entry_context):
+    """
+    【V8.9.2新增】AI评估分批平仓的必要性
+    
+    Args:
+        position: 持仓信息
+        partial_profit: 分批平仓的预期盈利（U）
+        market_data: 市场数据
+        entry_context: 入场上下文
+    
+    Returns:
+        dict: {'should_close': bool, 'reason': str, 'confidence': float, 'alternative': str}
+    """
+    try:
+        symbol = position.get('symbol', 'UNKNOWN')
+        side = position.get('side', 'unknown')
+        unrealized_pnl = position.get('unrealized_pnl', 0)
+        entry_time = position.get('open_time', '')
+        entry_price = position.get('entry_price', 0)
+        current_price = market_data.get('current_price', 0)
+        
+        # 计算持仓时间
+        if entry_time:
+            try:
+                from datetime import datetime
+                entry_dt = datetime.strptime(entry_time, "%Y-%m-%d %H:%M:%S")
+                holding_hours = (datetime.now() - entry_dt).total_seconds() / 3600
+            except:
+                holding_hours = 0
+        else:
+            holding_hours = 0
+        
+        # 获取市场状态
+        trend_4h = market_data.get('long_term', {}).get('trend', 'neutral')
+        trend_1h = market_data.get('mid_term', {}).get('trend', 'neutral')
+        momentum_15m = market_data.get('short_term', {}).get('momentum', {})
+        macd_15m = momentum_15m.get('macd', 0)
+        rsi_15m = momentum_15m.get('rsi', 50)
+        
+        # 计算手续费成本
+        fee_cost = partial_profit * 0.0002  # Maker费率
+        net_profit = partial_profit - fee_cost
+        
+        # 构建prompt
+        prompt = f"""**[Reply in Chinese]** 你是专业的交易风控顾问，评估分批平仓的必要性。
+
+【持仓信息】
+- 币种: {symbol}
+- 方向: {'多头' if side=='long' else '空头'}
+- 入场价: ${entry_price:.2f}
+- 当前价: ${current_price:.2f}
+- 总盈利: {unrealized_pnl:.2f}U
+- **分批盈利: {partial_profit:.2f}U (50%)**
+- 手续费成本: ~{fee_cost:.4f}U (Maker)
+- **净利润: {net_profit:.4f}U**
+- 持仓时间: {holding_hours:.1f}小时
+
+【市场状态】
+- 4H趋势: {trend_4h}
+- 1H趋势: {trend_1h}
+- 15m MACD: {macd_15m:+.1f}
+- 15m RSI: {rsi_15m:.0f}
+- 状态: 价格已触及1H支撑/阻力（第一目标）
+
+【评估要求】
+1. 分批盈利{partial_profit:.2f}U（净利润{net_profit:.2f}U）是否值得？考虑手续费
+2. 趋势是否还有延续空间？
+3. 如果拒绝分批，应该全部持有还是全部平仓？
+
+**决策标准**：
+- 净利润<0.1U：通常不值得（手续费占比过高）
+- 0.1-0.3U：临界区（需要结合趋势判断）
+- >0.3U：值得锁定利润
+
+回复JSON格式：
+{{
+    "should_close": true/false,
+    "reason": "原因说明（中文，<50字）",
+    "confidence": 0.0-1.0,
+    "alternative": "HOLD_ALL / CLOSE_ALL / PARTIAL_50"
+}}"""
+        
+        # 调用AI
+        model_name = os.getenv("MODEL_NAME", "deepseek")
+        if model_name == "deepseek":
+            response = deepseek_client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=300
+            )
+        else:
+            response = qwen_client.chat.completions.create(
+                model="qwen-plus",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=300
+            )
+        
+        ai_content = response.choices[0].message.content.strip()
+        
+        # 解析JSON
+        import re
+        json_match = re.search(r'\{[^{}]*"should_close"[^{}]*\}', ai_content, re.DOTALL)
+        if json_match:
+            result = json.loads(json_match.group())
+            return {
+                'should_close': result.get('should_close', False),
+                'reason': result.get('reason', 'AI评估完成'),
+                'confidence': result.get('confidence', 0.5),
+                'alternative': result.get('alternative', 'HOLD_ALL')
+            }
+        else:
+            # 解析失败，默认拒绝
+            return {
+                'should_close': False,
+                'reason': 'AI响应解析失败，保守拒绝',
+                'confidence': 0.0,
+                'alternative': 'HOLD_ALL'
+            }
+    
+    except Exception as e:
+        print(f"⚠️ AI分批平仓评估失败: {e}")
+        # 异常时保守拒绝
+        return {
+            'should_close': False,
+            'reason': f'AI评估异常: {str(e)}',
+            'confidence': 0.0,
+            'alternative': 'HOLD_ALL'
+        }
+
+
 def check_swing_partial_exit(position, market_data, entry_context, config):
-    """【V7.9新增】Swing订单分批平仓检查
+    """【V7.9新增 | V8.9.2增强】Swing订单分批平仓检查（三层决策）
+    
+    V8.9.2三层决策：
+    1. 硬性阈值（0.2U）：直接拒绝（避免手续费浪费）
+    2. AI判断区（0.2-1.0U）：调用AI智能评估
+    3. 自动通过（>1.0U）：直接执行（盈利足够）
     
     Returns:
         (should_partial_exit: bool, exit_pct: float, reason: str)
@@ -20953,16 +21094,48 @@ def check_swing_partial_exit(position, market_data, entry_context, config):
         # 获取第一目标（1h阻力/支撑）
         sr_1h = market_data.get('mid_term', {}).get('support_resistance', {})
         
+        reached_target = False
+        first_target = 0
+        
         if side == 'long':
             first_target = sr_1h.get('nearest_resistance', {}).get('price', 0)
             if first_target > 0 and current_price >= first_target * 0.995:  # 到达目标前0.5%
-                return True, exit_pct, f"达第一目标${first_target:.0f}，分批{exit_pct}%"
+                reached_target = True
         else:  # short
             first_target = sr_1h.get('nearest_support', {}).get('price', 0)
             if first_target > 0 and current_price <= first_target * 1.005:
-                return True, exit_pct, f"达第一目标${first_target:.0f}，分批{exit_pct}%"
+                reached_target = True
         
-        return False, 0, "未达第一目标"
+        if not reached_target:
+            return False, 0, "未达第一目标"
+        
+        # 🆕 V8.9.2: 三层决策
+        # 计算分批后的盈利
+        unrealized_pnl = position.get('unrealized_pnl', 0)
+        partial_profit = unrealized_pnl * (exit_pct / 100.0)
+        
+        # 获取配置阈值
+        min_reject_threshold = swing_params.get('partial_min_reject_threshold', 0.2)  # 硬性拒绝
+        ai_eval_threshold = swing_params.get('partial_ai_eval_threshold', 1.0)      # AI判断上限
+        
+        # 第1层：硬性拒绝（盈利太小）
+        if partial_profit < min_reject_threshold:
+            return False, 0, f"分批盈利{partial_profit:.2f}U < 最小阈值{min_reject_threshold}U（避免手续费浪费）"
+        
+        # 第3层：自动通过（盈利足够）
+        if partial_profit >= ai_eval_threshold:
+            return True, exit_pct, f"达第一目标${first_target:.0f}，分批{exit_pct}%（盈利{partial_profit:.2f}U充足）"
+        
+        # 第2层：AI智能判断（临界区 0.2-1.0U）
+        print(f"   🤖 分批盈利{partial_profit:.2f}U处于临界区，调用AI评估...")
+        ai_result = ai_evaluate_partial_close(position, partial_profit, market_data, entry_context)
+        
+        if ai_result['should_close']:
+            reason = f"达第一目标${first_target:.0f}，分批{exit_pct}%（AI建议: {ai_result['reason']}）"
+            return True, exit_pct, reason
+        else:
+            reason = f"AI拒绝分批: {ai_result['reason']} | 建议: {ai_result['alternative']}"
+            return False, 0, reason
     
     except Exception as e:
         print(f"⚠️ 分批平仓检查失败: {e}")
