@@ -48,6 +48,134 @@ AI_AGGRESSIVENESS_DYNAMIC = True        # 动态AI激进度（根据Time Exit率
 
 # ==================== 辅助函数 ====================
 
+# 🆕 V8.8 P1: Pydantic数据模型 - 标准化AI输出格式
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional, Literal
+
+class AIDecisionModel(BaseModel):
+    """
+    🆕 V8.8 P1: AI决策输出的标准格式（使用Pydantic验证）
+    
+    优势：
+    1. 自动类型验证
+    2. 字段缺失检测
+    3. 数据清洗和标准化
+    4. IDE自动补全
+    """
+    
+    # 核心决策
+    action: Literal['OPEN_LONG', 'OPEN_SHORT', 'CLOSE', 'HOLD', 'ADD_POSITION']
+    confidence: float = Field(ge=0, le=100, description="置信度 0-100")
+    reason: str = Field(max_length=1000, description="决策理由")
+    
+    # 价格相关（可选）
+    entry_price: Optional[float] = Field(None, gt=0, description="入场价格")
+    stop_loss_price: Optional[float] = Field(None, gt=0, description="止损价格")
+    take_profit_price: Optional[float] = Field(None, gt=0, description="止盈价格")
+    
+    # 仓位相关（可选）
+    position_size: Optional[float] = Field(None, gt=0, description="仓位大小")
+    leverage: Optional[int] = Field(None, ge=1, le=20, description="杠杆倍数")
+    
+    # 信号相关（可选）
+    signal_strength: Optional[int] = Field(None, ge=0, le=100, description="信号强度")
+    signal_type: Optional[Literal['scalping', 'swing']] = Field(None, description="信号类型")
+    
+    @field_validator('confidence')
+    @classmethod
+    def confidence_must_be_reasonable(cls, v: float) -> float:
+        """验证置信度合理性"""
+        if v < 40:
+            raise ValueError(f'置信度{v}过低（<40），拒绝执行')
+        return v
+    
+    @field_validator('stop_loss_price', 'take_profit_price', 'entry_price')
+    @classmethod
+    def prices_must_be_positive(cls, v: Optional[float]) -> Optional[float]:
+        """验证价格为正数"""
+        if v is not None and v <= 0:
+            raise ValueError(f'价格{v}必须为正数')
+        return v
+    
+    @field_validator('leverage')
+    @classmethod
+    def leverage_must_be_reasonable(cls, v: Optional[int]) -> Optional[int]:
+        """验证杠杆合理性"""
+        if v is not None and (v < 1 or v > 20):
+            raise ValueError(f'杠杆{v}超出合理范围 [1-20]')
+        return v
+    
+    model_config = {
+        "extra": "allow",  # 允许额外字段（保持兼容性）
+        "str_strip_whitespace": True,  # 自动去除字符串首尾空格
+    }
+
+
+def parse_ai_decision_robust(ai_content: str, strict_mode: bool = False) -> dict:
+    """
+    🆕 V8.8 P1: 使用Pydantic增强的AI响应解析器
+    
+    流程：
+    1. 使用原有的extract_json_from_ai_response提取JSON
+    2. 使用Pydantic模型验证和清洗数据
+    3. 自动处理类型转换和默认值
+    4. 提供详细的错误信息
+    
+    Args:
+        ai_content: AI原始响应文本
+        strict_mode: 严格模式（True=验证失败抛出异常，False=返回原始dict）
+    
+    Returns:
+        dict: 验证后的AI决策字典
+    
+    Raises:
+        ValueError: strict_mode=True时，验证失败抛出异常
+    """
+    try:
+        # Step 1: 使用原有方法提取JSON
+        json_data = extract_json_from_ai_response(ai_content)
+        
+        if not json_data:
+            if strict_mode:
+                raise ValueError("无法从AI响应中提取有效的JSON数据")
+            return {}
+        
+        # Step 2: 使用Pydantic验证
+        try:
+            # 创建模型实例（自动验证）
+            decision_model = AIDecisionModel(**json_data)
+            
+            # 转换为dict（保留所有字段，包括额外字段）
+            validated_data = decision_model.model_dump(exclude_none=False)
+            
+            # 保留原始JSON中的额外字段
+            for key, value in json_data.items():
+                if key not in validated_data:
+                    validated_data[key] = value
+            
+            # 打印验证成功信息（调试用）
+            # print(f"✅ Pydantic验证通过: action={validated_data['action']}, confidence={validated_data['confidence']:.1f}%")
+            
+            return validated_data
+            
+        except Exception as validation_error:
+            # Pydantic验证失败
+            print(f"⚠️ Pydantic验证失败: {validation_error}")
+            
+            if strict_mode:
+                raise ValueError(f"AI输出验证失败: {validation_error}")
+            else:
+                # 非严格模式：返回原始JSON，打印警告
+                print("   使用原始JSON数据继续执行")
+                return json_data
+    
+    except Exception as e:
+        print(f"❌ AI响应解析异常: {e}")
+        if strict_mode:
+            raise
+        return {}
+
+
 def extract_json_from_ai_response(ai_content: str) -> dict:
     """
     从AI响应中提取JSON对象（鲁棒版本）
@@ -725,7 +853,7 @@ class OrderExecutor:
             if side == 'buy':
                 # 买入：挂在卖一价（吃对手盘的挂单，但我们是Maker）
                 if not orderbook.get('asks') or len(orderbook['asks']) == 0:
-                    print(f"⚠️ 盘口数据异常，卖盘为空")
+                    print("⚠️ 盘口数据异常，卖盘为空")
                     return None
                 
                 best_ask = orderbook['asks'][0][0]
@@ -735,7 +863,7 @@ class OrderExecutor:
             else:
                 # 卖出：挂在买一价
                 if not orderbook.get('bids') or len(orderbook['bids']) == 0:
-                    print(f"⚠️ 盘口数据异常，买盘为空")
+                    print("⚠️ 盘口数据异常，买盘为空")
                     return None
                 
                 best_bid = orderbook['bids'][0][0]
@@ -770,7 +898,7 @@ class OrderExecutor:
                 if order_status['status'] == 'closed':
                     print(f"✅ 订单立即成交 @ {order_status.get('average', price):.4f}")
                 else:
-                    print(f"⏳ 订单已挂出，等待成交...")
+                    print("⏳ 订单已挂出，等待成交...")
             except Exception as e:
                 print(f"⚠️ 查询订单状态失败: {e}")
             
@@ -890,7 +1018,7 @@ class UnifiedOrderExecutor:
                     'execution_details': {}
                 }
             
-            print(f"✅ 信号验证通过")
+            print("✅ 信号验证通过")
             adj_params = validation['adjusted_params']
             if adj_params:
                 print(f"   参考价格: {adj_params.get('reference_price', 0):.2f}")
@@ -922,7 +1050,7 @@ class UnifiedOrderExecutor:
                 return {
                     'success': False,
                     'order': None,
-                    'reason': f"订单执行失败",
+                    'reason': "订单执行失败",
                     'execution_details': {}
                 }
                 
@@ -954,7 +1082,7 @@ class UnifiedOrderExecutor:
         
         if 'STOP_LOSS' in action or 'EMERGENCY' in action:
             # 止损：立即市价单
-            print(f"⚡ 止损快速通道: 市价单")
+            print("⚡ 止损快速通道: 市价单")
             try:
                 order = self.exchange.create_market_order(symbol, side, amount)
                 return {
@@ -969,7 +1097,7 @@ class UnifiedOrderExecutor:
         
         elif 'TP1' in action or 'TAKE_PROFIT' in action:
             # 止盈：激进限价单（快速成交，省手续费）
-            print(f"⚡ 止盈快速通道: 激进限价单")
+            print("⚡ 止盈快速通道: 激进限价单")
             order = self.executor.aggressive_limit_order(symbol, side, amount, current_price)
             return {
                 'success': order is not None,
@@ -1064,6 +1192,313 @@ class UnifiedOrderExecutor:
 
 
 # ==================== 订单执行优化器结束 ====================
+
+
+# ==================== 【V8.8 P0】投资组合风控管理器 ====================
+
+class PortfolioRiskManager:
+    """
+    🆕 V8.8 P0: 投资组合风险管理器
+    
+    核心功能：
+    1. 总敞口控制：防止"假分散"风险
+    2. 单方向敞口限制：防止方向性过度集中
+    3. 实时风险度量：计算当前风险敞口
+    
+    解决问题：
+    - BTC、ETH、SOL同时做多 = 实际加杠杆做多整个市场
+    - 大盘回调时，所有持仓同时亏损
+    - 山寨币Beta>1，实际损失放大
+    """
+    
+    def __init__(self, config: dict = None):
+        self.config = config or {}
+        # 最大总敞口：3倍账户余额
+        self.max_total_exposure_multiplier = self.config.get('max_total_exposure_multiplier', 3.0)
+        # 最大单方向敞口：2倍账户余额
+        self.max_directional_exposure = self.config.get('max_directional_exposure', 2.0)
+        # Beta系数（相对BTC，用于未来扩展）
+        self.beta_coefficients = {
+            'BTC': 1.0,
+            'ETH': 1.2,
+            'SOL': 1.8,
+            'DOGE': 2.5,
+            'BNB': 1.3,
+            'XRP': 1.5,
+            'LTC': 1.1,
+        }
+    
+    def check_new_position(self, account_balance: float, current_positions: list, 
+                           new_position: dict) -> dict:
+        """
+        检查新仓位是否超过投资组合风险限制
+        
+        Args:
+            account_balance: 账户余额（USDT）
+            current_positions: 当前持仓列表 [{
+                'symbol': 'BTC/USDT:USDT',
+                'side': 'long',
+                'size': 0.1,
+                'entry_price': 90000
+            }]
+            new_position: 拟开仓位 {
+                'symbol': 'BTC/USDT:USDT',
+                'side': 'long',
+                'size': 0.1,
+                'price': 90000,
+                'leverage': 5,
+                'margin': 2000
+            }
+        
+        Returns:
+            {
+                'allowed': True/False,
+                'reason': str,
+                'current_exposure': dict,
+                'new_exposure': dict,
+                'recommendation': dict or None
+            }
+        """
+        try:
+            # 1. 计算当前总敞口
+            current_long_exposure = 0.0
+            current_short_exposure = 0.0
+            current_positions_detail = []
+            
+            for pos in current_positions:
+                if pos.get('size', 0) <= 0:
+                    continue
+                
+                # 名义价值 = 持仓数量 × 价格
+                entry_price = pos.get('entry_price', pos.get('price', 0))
+                notional = abs(pos['size']) * entry_price
+                
+                current_positions_detail.append({
+                    'symbol': pos['symbol'],
+                    'side': pos['side'],
+                    'notional': notional
+                })
+                
+                if pos['side'] == 'long':
+                    current_long_exposure += notional
+                else:
+                    current_short_exposure += notional
+            
+            current_total_exposure = current_long_exposure + current_short_exposure
+            
+            # 2. 计算新仓位的名义价值
+            new_notional = abs(new_position['size']) * new_position['price']
+            new_side = new_position['side']
+            
+            # 3. 计算新仓位后的总敞口
+            if new_side == 'long':
+                new_long_exposure = current_long_exposure + new_notional
+                new_short_exposure = current_short_exposure
+            else:
+                new_long_exposure = current_long_exposure
+                new_short_exposure = current_short_exposure + new_notional
+            
+            new_total_exposure = new_long_exposure + new_short_exposure
+            
+            # 4. 检查总敞口限制
+            max_allowed_total = account_balance * self.max_total_exposure_multiplier
+            
+            if new_total_exposure > max_allowed_total:
+                utilization = (new_total_exposure / max_allowed_total) * 100
+                return {
+                    'allowed': False,
+                    'reason': f'总敞口超限: ${new_total_exposure:,.0f} > ${max_allowed_total:,.0f} ({self.max_total_exposure_multiplier}x账户)',
+                    'current_exposure': {
+                        'total': current_total_exposure,
+                        'long': current_long_exposure,
+                        'short': current_short_exposure,
+                        'utilization': (current_total_exposure / max_allowed_total * 100) if max_allowed_total > 0 else 0
+                    },
+                    'new_exposure': {
+                        'total': new_total_exposure,
+                        'long': new_long_exposure,
+                        'short': new_short_exposure,
+                        'utilization': utilization
+                    },
+                    'recommendation': self._suggest_risk_reduction(
+                        new_total_exposure - max_allowed_total,
+                        current_positions_detail,
+                        new_position
+                    )
+                }
+            
+            # 5. 检查单方向敞口限制
+            max_directional = account_balance * self.max_directional_exposure
+            
+            if new_side == 'long' and new_long_exposure > max_directional:
+                utilization = (new_long_exposure / max_directional) * 100
+                return {
+                    'allowed': False,
+                    'reason': f'多头敞口超限: ${new_long_exposure:,.0f} > ${max_directional:,.0f} ({self.max_directional_exposure}x账户)',
+                    'current_exposure': {
+                        'total': current_total_exposure,
+                        'long': current_long_exposure,
+                        'short': current_short_exposure
+                    },
+                    'new_exposure': {
+                        'total': new_total_exposure,
+                        'long': new_long_exposure,
+                        'short': new_short_exposure,
+                        'long_utilization': utilization
+                    },
+                    'recommendation': {
+                        'action': 'REDUCE_LONG',
+                        'amount': new_long_exposure - max_directional,
+                        'suggestion': f'建议减少多头敞口${new_long_exposure - max_directional:,.0f}或平掉部分多仓'
+                    }
+                }
+            
+            if new_side == 'short' and new_short_exposure > max_directional:
+                utilization = (new_short_exposure / max_directional) * 100
+                return {
+                    'allowed': False,
+                    'reason': f'空头敞口超限: ${new_short_exposure:,.0f} > ${max_directional:,.0f} ({self.max_directional_exposure}x账户)',
+                    'current_exposure': {
+                        'total': current_total_exposure,
+                        'long': current_long_exposure,
+                        'short': current_short_exposure
+                    },
+                    'new_exposure': {
+                        'total': new_total_exposure,
+                        'long': new_long_exposure,
+                        'short': new_short_exposure,
+                        'short_utilization': utilization
+                    },
+                    'recommendation': {
+                        'action': 'REDUCE_SHORT',
+                        'amount': new_short_exposure - max_directional,
+                        'suggestion': f'建议减少空头敞口${new_short_exposure - max_directional:,.0f}或平掉部分空仓'
+                    }
+                }
+            
+            # 6. 通过检查，返回当前风险状态
+            total_utilization = (new_total_exposure / max_allowed_total * 100) if max_allowed_total > 0 else 0
+            long_utilization = (new_long_exposure / max_directional * 100) if max_directional > 0 else 0
+            short_utilization = (new_short_exposure / max_directional * 100) if max_directional > 0 else 0
+            
+            # 风险等级评估
+            if total_utilization < 50:
+                risk_level = 'LOW'
+            elif total_utilization < 75:
+                risk_level = 'MEDIUM'
+            elif total_utilization < 90:
+                risk_level = 'HIGH'
+            else:
+                risk_level = 'CRITICAL'
+            
+            return {
+                'allowed': True,
+                'reason': f'风险可接受 (总敞口利用率: {total_utilization:.1f}%, 风险等级: {risk_level})',
+                'current_exposure': {
+                    'total': current_total_exposure,
+                    'long': current_long_exposure,
+                    'short': current_short_exposure,
+                    'utilization': (current_total_exposure / max_allowed_total * 100) if max_allowed_total > 0 else 0
+                },
+                'new_exposure': {
+                    'total': new_total_exposure,
+                    'long': new_long_exposure,
+                    'short': new_short_exposure,
+                    'total_utilization': total_utilization,
+                    'long_utilization': long_utilization,
+                    'short_utilization': short_utilization,
+                    'risk_level': risk_level
+                },
+                'recommendation': None
+            }
+            
+        except Exception as e:
+            print(f"⚠️ 投资组合风险检查异常: {e}")
+            # 出错时保守处理，拒绝开仓
+            return {
+                'allowed': False,
+                'reason': f'风险检查异常: {str(e)}',
+                'current_exposure': {},
+                'new_exposure': {},
+                'recommendation': None
+            }
+    
+    def _suggest_risk_reduction(self, over_limit_amount: float, 
+                                current_positions: list, new_position: dict) -> dict:
+        """建议风险降低方案"""
+        return {
+            'action': 'REDUCE_EXPOSURE',
+            'amount': over_limit_amount,
+            'options': [
+                f'1. 减少新仓位保证金${over_limit_amount / new_position.get("leverage", 1):,.0f}',
+                f'2. 降低新仓位杠杆到{max(1, int(new_position.get("leverage", 1) * 0.7))}x',
+                f'3. 平掉部分现有持仓，释放${over_limit_amount:,.0f}敞口',
+                '4. 改用对冲策略，减少单方向风险'
+            ]
+        }
+    
+    def get_current_risk_status(self, account_balance: float, current_positions: list) -> dict:
+        """
+        获取当前投资组合风险状态
+        
+        Returns:
+            {
+                'total_exposure': float,
+                'long_exposure': float,
+                'short_exposure': float,
+                'utilization': float,
+                'risk_level': str,
+                'positions_count': int
+            }
+        """
+        long_exposure = 0.0
+        short_exposure = 0.0
+        positions_detail = []
+        
+        for pos in current_positions:
+            if pos.get('size', 0) <= 0:
+                continue
+            
+            entry_price = pos.get('entry_price', pos.get('price', 0))
+            notional = abs(pos['size']) * entry_price
+            
+            positions_detail.append({
+                'symbol': pos['symbol'],
+                'side': pos['side'],
+                'notional': notional
+            })
+            
+            if pos['side'] == 'long':
+                long_exposure += notional
+            else:
+                short_exposure += notional
+        
+        total_exposure = long_exposure + short_exposure
+        max_allowed = account_balance * self.max_total_exposure_multiplier
+        utilization = (total_exposure / max_allowed * 100) if max_allowed > 0 else 0
+        
+        if utilization < 50:
+            risk_level = 'LOW'
+        elif utilization < 75:
+            risk_level = 'MEDIUM'
+        elif utilization < 90:
+            risk_level = 'HIGH'
+        else:
+            risk_level = 'CRITICAL'
+        
+        return {
+            'total_exposure': total_exposure,
+            'long_exposure': long_exposure,
+            'short_exposure': short_exposure,
+            'utilization': utilization,
+            'risk_level': risk_level,
+            'positions_count': len(positions_detail),
+            'positions_detail': positions_detail,
+            'max_allowed_exposure': max_allowed
+        }
+
+
+# ==================== 投资组合风控管理器结束 ====================
 
 
 # 初始化Qwen客户端
@@ -1181,6 +1616,14 @@ ORDER_EXECUTION_CONFIG = {
     }
 }
 
+# 🆕 V8.8 P0: 投资组合风控配置
+PORTFOLIO_RISK_CONFIG = {
+    "enabled": os.getenv("ENABLE_PORTFOLIO_RISK_CONTROL", "true").lower() == "true",  # 启用投资组合风控
+    "max_total_exposure_multiplier": 3.0,   # 最大总敞口：3倍账户余额
+    "max_directional_exposure": 2.0,        # 最大单方向敞口：2倍账户余额
+    "warning_threshold": 0.8,                # 警告阈值：80%利用率时警告
+}
+
 # 🆕 V8.7: 初始化全局订单执行器
 # 合并配置
 execution_config = {
@@ -1190,6 +1633,10 @@ execution_config = {
 }
 order_executor = UnifiedOrderExecutor(exchange, execution_config)
 print(f"✅ V8.7订单执行优化器已初始化 (优化{'启用' if execution_config.get('enabled', True) else '禁用'})")
+
+# 🆕 V8.8 P0: 初始化投资组合风控管理器
+portfolio_risk_manager = PortfolioRiskManager(PORTFOLIO_RISK_CONFIG)
+print(f"✅ V8.8投资组合风控已初始化 (风控{'启用' if PORTFOLIO_RISK_CONFIG.get('enabled', True) else '禁用'}, 总敞口上限{PORTFOLIO_RISK_CONFIG['max_total_exposure_multiplier']}x)")
 
 
 # 🆕 V8.7: 辅助函数 - 智能订单执行
@@ -16609,7 +17056,7 @@ Output JSON only:
         )
 
         ai_content = response.choices[0].message.content
-        decision = extract_json_from_ai_response(ai_content)  # 🔧 V7.7.0.15: 函数已返回dict，无需json.loads
+        decision = parse_ai_decision_robust(ai_content, strict_mode=False)  # 🆕 V8.8 P1: 使用Pydantic增强解析
 
         print(f"✓ AI评估完成: {decision['decision']}")
         return decision
@@ -19355,7 +19802,7 @@ Return JSON (reason MUST be in Chinese):
         )
 
         ai_content = response.choices[0].message.content
-        ai_decision = extract_json_from_ai_response(ai_content)
+        ai_decision = parse_ai_decision_robust(ai_content, strict_mode=False)  # 🆕 V8.8 P1: 使用Pydantic增强解析
 
         should_close = ai_decision.get('decision') == 'CLOSE'
         reason = ai_decision.get('reason', 'AI判断')
@@ -19475,7 +19922,7 @@ Return JSON:
         )
 
         ai_content = response.choices[0].message.content
-        ai_decision = extract_json_from_ai_response(ai_content)
+        ai_decision = parse_ai_decision_robust(ai_content, strict_mode=False)  # 🆕 V8.8 P1: 使用Pydantic增强解析
 
         should_adjust = ai_decision.get('should_adjust', False)
         new_tp = ai_decision.get('new_take_profit')
@@ -21515,6 +21962,71 @@ def _execute_single_open_action_v55(
         print(
             f"\n开{'多' if operation=='OPEN_LONG' else '空'}仓: ${planned_position:.2f} {leverage}x杠杆 (约{amount:.6f}个)"
                 )
+
+        # 🆕 V8.8 P0: 投资组合风控检查
+        if PORTFOLIO_RISK_CONFIG.get('enabled', True):
+            try:
+                # 获取当前账户余额和持仓
+                account_balance = available_balance  # 使用前面获取的可用余额
+                current_positions_for_risk = get_all_positions()[0]  # 获取当前所有持仓
+                
+                # 准备新仓位信息
+                new_position_info = {
+                    'symbol': symbol,
+                    'side': 'long' if operation == 'OPEN_LONG' else 'short',
+                    'size': amount,
+                    'price': entry_price_check,  # 使用前面获取的entry_price_check
+                    'leverage': leverage,
+                    'margin': planned_position
+                }
+                
+                # 执行风控检查
+                risk_check = portfolio_risk_manager.check_new_position(
+                    account_balance,
+                    current_positions_for_risk,
+                    new_position_info
+                )
+                
+                if not risk_check['allowed']:
+                    # 风控拒绝
+                    print("\n❌ 投资组合风控拒绝开仓")
+                    print(f"   原因: {risk_check['reason']}")
+                    
+                    current_exp = risk_check.get('current_exposure', {})
+                    new_exp = risk_check.get('new_exposure', {})
+                    
+                    print(f"   当前敞口: ${current_exp.get('total', 0):,.0f} (多头${current_exp.get('long', 0):,.0f}, 空头${current_exp.get('short', 0):,.0f})")
+                    print(f"   新增后: ${new_exp.get('total', 0):,.0f}")
+                    
+                    if risk_check.get('recommendation'):
+                        rec = risk_check['recommendation']
+                        print(f"   建议: {rec.get('suggestion', rec.get('action', 'N/A'))}")
+                    
+                    # 发送通知
+                    send_bark_notification(
+                        f"[{MODEL_DISPLAY_NAME}]{coin_name}风控拒绝{'📈多' if operation=='OPEN_LONG' else '📉空'}仓❌",
+                        f"原因: {risk_check['reason'][:80]}\n"
+                        f"当前总敞口: ${current_exp.get('total', 0):,.0f}\n"
+                        f"拟开仓: ${new_position_info['margin']:,.0f} × {leverage}x = ${new_position_info['margin'] * leverage:,.0f}\n"
+                        f"账户余额: ${account_balance:,.0f}"
+                    )
+                    return  # 拒绝开仓
+                
+                # 风控通过，打印风险状态
+                new_exp = risk_check.get('new_exposure', {})
+                print(f"\n✅ 风控检查通过 (风险等级: {new_exp.get('risk_level', 'N/A')})")
+                print(f"   新增后敞口: ${new_exp.get('total', 0):,.0f} / ${new_exp.get('max', account_balance * PORTFOLIO_RISK_CONFIG['max_total_exposure_multiplier']):,.0f}")
+                print(f"   利用率: {new_exp.get('total_utilization', 0):.1f}% (多头{new_exp.get('long_utilization', 0):.1f}%, 空头{new_exp.get('short_utilization', 0):.1f}%)")
+                
+                # 如果接近警告阈值，发送提醒
+                warning_threshold = PORTFOLIO_RISK_CONFIG.get('warning_threshold', 0.8)
+                if new_exp.get('total_utilization', 0) / 100 >= warning_threshold:
+                    print(f"   ⚠️ 注意: 敞口利用率已达{new_exp.get('total_utilization', 0):.1f}%，接近上限")
+                
+            except Exception as e:
+                print(f"⚠️ 风控检查异常: {e}")
+                print("   为安全起见，拒绝开仓")
+                return
 
         # 🔧 V8.5.2.5: 下单前最后一次精度处理 + 增强错误处理
         try:
