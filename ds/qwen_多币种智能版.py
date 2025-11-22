@@ -17997,30 +17997,24 @@ S/R unclear: SL=Entry±ATR×{learning_config['global']['atr_stop_multiplier']:.1
 Entry: (1)4Haln (2)15mCons≥{learning_config['global']['min_indicator_consensus']}/5 (3)PA+SafeLoc(S/R) | HIGH: S/R+Pin/Engulf+5/5
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║ 10. EXIT RULES | V8.5.2 CRITICAL RR PROTECT (Hist: 1.1:1→0.01:1!)           ║
+║ 10. EXIT RULES | V8.5.2 CRITICAL - Premature exits destroy R:R!             ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-⚠️ 105 trades: Avg profit 0.014U (premature exits!) STRICTLY follow:
+⚠️ CRITICAL: Historical data shows premature exits caused R:R collapse. WAIT for TP!
 
 ✅ ALLOWED EXIT (ONE of):
-1. TP Reached: Price≥TP(LONG)/≤TP(SHORT) - PRIMARY, achieve RR≥{learning_config['global']['min_risk_reward']:.1f}:1
+1. TP Reached: Price≥TP(LONG)/≤TP(SHORT) - PRIMARY target
 2. SL Trigger: Price≤SL(LONG)/≥SL(SHORT) - Accept loss, exit immediate
-3. Time Stop: Hold>{scalping_params.get('max_holding_hours', 12)}h(Scalp)/{swing_params.get('max_holding_hours', 72)}h(Swing) - Exit at market
-4. Mkt Reversal (V8.5.3): (A)4H reversed (primary) OR (B)1H+15m both reversed (mid+short)
-   Ex(SHORT): Exit if 4H→bull OR (1H→bull AND 15m→bull) | Hold if only 15m→bull(normal PB)
-   Why: Wait all 3 TF reverse=2-3days, profit gone. New rule exits earlier.
+3. Time Stop: Hold>{scalping_params.get('max_holding_hours', 12)}h(Scalp)/{swing_params.get('max_holding_hours', 72)}h(Swing)
+4. Mkt Reversal: (A)4H reversed OR (B)1H+15m both reversed
+   Ex: For SHORT→Exit if 4H→bull OR (1H+15m→bull) | Hold if only 15m→bull
 
-❌ FORBIDDEN EXIT (DO NOT):
-1. ❌ Single TF rev (eg"15m BearExhaust") - Not enough, normal PA
-2. ❌ "InProfit+anyCounter" - Old rule caused RR collapse, WAIT TP
-3. ❌ Subjective ("feels enough"/"worried giveback"/"saw resist") - WRONG
-4. ❌ Partial profit ("reached 50% TP"/"lock gains") - WRONG, trust RR
+❌ FORBIDDEN EXIT:
+1. ❌ Single TF reversal - Not enough
+2. ❌ "InProfit+Counter" - Caused R:R collapse
+3. ❌ Subjective judgment - Trust the system
+4. ❌ Partial profit - WAIT for TP
 
-📊 RR MECHANISM: Min RR={learning_config['global']['min_risk_reward']:.1f}:1 | Exit before TP→RR~0.01:1
-Hist: 105 trades, 57% WR, 1.43U total (0.014U/trade!) | Solution: WAIT TP for 1.0-2.0U/win
-
-Decision Flow: price≥TP?→EXIT | price≤SL?→EXIT | hold>maxHrs?→EXIT | 4Hrev OR(1H+15m rev)?→EXIT | else→HOLD
-⚠️ If see Exhaustion: 15m signal only, NOT exit alone. Check 4H+1H also rev? No→IGNORE,HOLD til TP
-Hist Lessons: Exit on "any counter"=46% premature | Missed 0.0%/trade | RR: expect 1.1:1→actual 0.01:1
+Decision: price≥TP?→EXIT | price≤SL?→EXIT | hold>max?→EXIT | 4H/1H+15m rev?→EXIT | else→HOLD
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║ 11. WORKFLOW & LEVERAGE                                                      ║
