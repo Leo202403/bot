@@ -17388,20 +17388,64 @@ def calculate_swing_score(market_data):
             elif strength == "moderate":
                 score += 25  # 📈 中等趋势发起
         
-        # 2. 多周期共振（波段次重要）
-        trends = [
-            market_data.get("trend_4h", ''),
-            market_data.get("trend_1h", ''),
-            market_data.get("trend_15m", '')
-        ]
-        bull_count = sum(1 for t in trends if '多头' in str(t))
-        bear_count = sum(1 for t in trends if '空头' in str(t))
-        aligned_count = max(bull_count, bear_count)
+        # 2. 【V8.5】"顺大逆小"策略 - 优化多周期逻辑
+        trend_4h = market_data.get("trend_4h", '')
+        trend_1h = market_data.get("trend_1h", '')
+        trend_15m = market_data.get("trend_15m", '')
         
-        if aligned_count >= 3:
-            score += 35  # 三周期共振！
-        elif aligned_count >= 2:
-            score += 20  # 两周期共振
+        # 获取RSI（用于判断回调）
+        rsi_data = market_data.get("rsi", {})
+        rsi = rsi_data.get("rsi_14", 50)
+        
+        # 判断大周期趋势（4H为主导）
+        is_4h_bullish = '多头' in trend_4h
+        is_4h_bearish = '空头' in trend_4h
+        is_4h_strong = '强势' in lt.get("trend", "")
+        
+        # 判断15m回调信号
+        is_15m_pullback = False
+        pullback_strength = 0
+        
+        if is_4h_bullish:
+            # 多头回调：15m转弱或空头 + RSI超卖
+            if '转弱' in trend_15m or '空头' in trend_15m:
+                is_15m_pullback = True
+                pullback_strength = 1
+            if rsi < 35:  # RSI超卖
+                is_15m_pullback = True
+                pullback_strength += 1
+        elif is_4h_bearish:
+            # 空头回调：15m转弱或多头 + RSI超买
+            if '转弱' in trend_15m or '多头' in trend_15m:
+                is_15m_pullback = True
+                pullback_strength = 1
+            if rsi > 65:  # RSI超买
+                is_15m_pullback = True
+                pullback_strength += 1
+        
+        # === 核心评分逻辑：顺大逆小 > 完美共振 ===
+        
+        # 【黄金组合】4H强势 + 15m回调（最佳入场点）
+        if (is_4h_strong or is_4h_bullish or is_4h_bearish) and is_15m_pullback:
+            if pullback_strength >= 2:
+                score += 45  # 🎯🎯 强势回调，黄金入场点
+            else:
+                score += 35  # 🎯 普通回调
+        
+        # 【次优】4H+1H同向 + 15m回调
+        elif ((is_4h_bullish and '多头' in trend_1h) or (is_4h_bearish and '空头' in trend_1h)) and is_15m_pullback:
+            score += 30  # 📈 两周期趋势 + 回调
+        
+        # 【保守】三周期完全共振（降低权重，避免追涨）
+        else:
+            bull_count = sum(1 for t in [trend_4h, trend_1h, trend_15m] if '多头' in str(t))
+            bear_count = sum(1 for t in [trend_4h, trend_1h, trend_15m] if '空头' in str(t))
+            aligned_count = max(bull_count, bear_count)
+            
+            if aligned_count >= 3:
+                score += 15  # ⚠️ 完美共振，但可能已滞后（从35降至15）
+            elif aligned_count >= 2:
+                score += 20  # 两周期共振（维持原值）
         
         # 3. 4小时趋势强度（波段关键）
         lt_trend = lt.get("trend", "")
@@ -17432,11 +17476,15 @@ def calculate_swing_score(market_data):
             elif candle_count >= 4:
                 score += 10
         
-        # 6. 简单回调（波段最佳入场点）
+        # 6. 简单回调（V8.5：与"顺大逆小"策略配合）
         pullback_type = pa.get("pullback_type")
         if pullback_type and isinstance(pullback_type, dict):
             if pullback_type.get("type") == "simple_pullback" and pullback_type.get("signal") == "entry_ready":
-                score += 30  # 🎯 回调完成，波段入场
+                # 如果大周期趋势明确，回调信号价值更高
+                if is_4h_strong:
+                    score += 35  # 🎯🎯 强势趋势中的回调，顶级信号
+                else:
+                    score += 25  # 🎯 普通回调（从30降至25，避免与上面重复计分）
         
         # === 短期信号（低权重）===
         
@@ -17455,11 +17503,13 @@ def calculate_swing_score(market_data):
         if sr.get("position_status") == "at_resistance":
             score -= 20  # 波段更怕阻力
         
-        # RSI极端值
-        rsi_data = market_data.get("rsi", {})
-        rsi = rsi_data.get("rsi_14", 50)
-        if rsi > 75 or rsi < 25:
-            score -= 10  # 波段看重RSI
+        # RSI极端值（V8.5调整：配合大周期判断）
+        # 只有在"逆向"的极端值时才减分
+        if is_4h_bullish and rsi > 75:
+            score -= 10  # 多头趋势中超买，警惕
+        elif is_4h_bearish and rsi < 25:
+            score -= 10  # 空头趋势中超卖，警惕
+        # 反之，如果是顺势回调的超卖/超买，前面已加分，不再减分
         
         # 趋势衰竭（严重）
         if pa.get("trend_exhaustion"):
