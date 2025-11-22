@@ -14779,26 +14779,73 @@ def calculate_unified_risk_reward_v2(entry_price, side, market_data, signal_clas
         sr_15m = market_data.get("support_resistance", {})
         sr_1h = market_data.get("mid_term", {}).get("support_resistance", {})
         
+        # 🆕 V8.5.3: Volume Surge动态止损（解决ATR滞后问题）
+        volume_surge = market_data.get("price_action", {}).get("volume_surge")
+        volume_surge_multiplier = 1.0  # 默认不调整
+        
+        if volume_surge:
+            volume_surge_type = volume_surge.get('type', '') if isinstance(volume_surge, dict) else ''
+            if volume_surge_type == 'extreme_surge':
+                volume_surge_multiplier = 1.5  # 极端放量：+50%
+                print(f"  🔥 检测到极端放量(3x+)，止损放宽至{volume_surge_multiplier}x")
+            elif volume_surge_type == 'strong_surge':
+                volume_surge_multiplier = 1.3  # 强放量：+30%
+                print(f"  🔥 检测到强放量(2-3x)，止损放宽至{volume_surge_multiplier}x")
+            elif volume_surge_type == 'moderate_surge':
+                volume_surge_multiplier = 1.15  # 普通放量：+15%
+                print(f"  📊 检测到放量(1.5-2x)，止损放宽至{volume_surge_multiplier}x")
+        
+        # 🆕 V8.5.3: 计算近期高低点（用于硬止损）
+        recent_klines = market_data.get("recent_klines", [])
+        recent_high = max([k.get('high', 0) for k in recent_klines[-20:]]) if len(recent_klines) >= 20 else 0
+        recent_low = min([k.get('low', 0) for k in recent_klines[-20:]]) if len(recent_klines) >= 20 else 0
+        
         if signal_type == 'scalping':
             # === 【V8.0】Scalping模式：从配置读取参数 ===
             scalping_config = config.get('scalping_params', {})
             atr_multiplier = scalping_config.get('atr_stop_multiplier', 1.0)
             tp_multiplier = scalping_config.get('atr_tp_multiplier', 1.5)
             
-            print(f"  ⚡ 超短线TP/SL: 止损{atr_multiplier}×ATR, 止盈{tp_multiplier}×ATR")
+            # 🆕 V8.5.3: 应用Volume Surge调整
+            atr_multiplier *= volume_surge_multiplier
+            tp_multiplier *= min(volume_surge_multiplier, 1.2)  # 止盈调整幅度较小
+            
+            print(f"  ⚡ 超短线TP/SL: 止损{atr_multiplier:.2f}×ATR, 止盈{tp_multiplier:.2f}×ATR")
             
             if side == "long":
                 stop_loss = entry_price - (atr_15m * atr_multiplier)
                 take_profit = entry_price + (atr_15m * tp_multiplier)
                 
-                stop_reason = f"15m_ATR×{atr_multiplier}（Scalping紧止损）"
-                tp_reason = f"15m_ATR×{tp_multiplier}（快速目标）"
+                # 🆕 V8.5.3: 硬止损保护
+                if recent_low > 0:
+                    hard_stop = recent_low * 0.95  # 近期低点下方5%
+                    if hard_stop < stop_loss:
+                        print(f"  🛡️ 硬止损({hard_stop:.2f})宽于ATR止损({stop_loss:.2f})，采用硬止损")
+                        stop_loss = hard_stop
+                        stop_reason = f"硬止损(近期低点×0.95)（Scalping+VolSurge）"
+                    else:
+                        stop_reason = f"15m_ATR×{atr_multiplier:.2f}（Scalping+VolSurge）"
+                else:
+                    stop_reason = f"15m_ATR×{atr_multiplier:.2f}（Scalping紧止损）"
+                
+                tp_reason = f"15m_ATR×{tp_multiplier:.2f}（快速目标）"
             else:  # short
                 stop_loss = entry_price + (atr_15m * atr_multiplier)
                 take_profit = entry_price - (atr_15m * tp_multiplier)
                 
-                stop_reason = f"15m_ATR×{atr_multiplier}（Scalping紧止损）"
-                tp_reason = f"15m_ATR×{tp_multiplier}（快速目标）"
+                # 🆕 V8.5.3: 硬止损保护
+                if recent_high > 0:
+                    hard_stop = recent_high * 1.05  # 近期高点上方5%
+                    if hard_stop > stop_loss:
+                        print(f"  🛡️ 硬止损({hard_stop:.2f})宽于ATR止损({stop_loss:.2f})，采用硬止损")
+                        stop_loss = hard_stop
+                        stop_reason = f"硬止损(近期高点×1.05)（Scalping+VolSurge）"
+                    else:
+                        stop_reason = f"15m_ATR×{atr_multiplier:.2f}（Scalping+VolSurge）"
+                else:
+                    stop_reason = f"15m_ATR×{atr_multiplier:.2f}（Scalping紧止损）"
+                
+                tp_reason = f"15m_ATR×{tp_multiplier:.2f}（快速目标）"
             
             risk = abs(entry_price - stop_loss)
             reward = abs(take_profit - entry_price)
@@ -14823,7 +14870,11 @@ def calculate_unified_risk_reward_v2(entry_price, side, market_data, signal_clas
             tp_multiplier = swing_config.get('atr_tp_multiplier', 6.0)
             swing_config.get('use_htf_levels', True)  # 是否使用高时间框架
             
-            print(f"  🌊 波段TP/SL: 止损{atr_multiplier}×ATR, 止盈{tp_multiplier}×ATR (优先支撑阻力位)")
+            # 🆕 V8.5.3: 应用Volume Surge调整（Swing模式也需要）
+            atr_multiplier *= volume_surge_multiplier
+            tp_multiplier *= min(volume_surge_multiplier, 1.3)  # 波段止盈调整幅度稍大
+            
+            print(f"  🌊 波段TP/SL: 止损{atr_multiplier:.2f}×ATR, 止盈{tp_multiplier:.2f}×ATR (优先支撑阻力位)")
             
             if side == "long":
                 # 止损：1h支撑位或ATR
@@ -14842,7 +14893,15 @@ def calculate_unified_risk_reward_v2(entry_price, side, market_data, signal_clas
                         stop_reason = f"15m支撑{support_price:.0f}（回退）"
                     else:
                         stop_loss = entry_price - (atr_1h * atr_multiplier)
-                        stop_reason = f"1h_ATR×{atr_multiplier}"
+                        stop_reason = f"1h_ATR×{atr_multiplier:.2f}"
+                        
+                        # 🆕 V8.5.3: 硬止损保护（Swing ATR回退）
+                        if recent_low > 0:
+                            hard_stop = recent_low * 0.95
+                            if hard_stop < stop_loss:
+                                print(f"  🛡️ Swing硬止损({hard_stop:.2f})宽于ATR({stop_loss:.2f})")
+                                stop_loss = hard_stop
+                                stop_reason = f"硬止损(近期低点×0.95)（Swing+VolSurge）"
                 
                 # 止盈：1h阻力位
                 nearest_resistance_1h = sr_1h.get("nearest_resistance", {})
@@ -14873,7 +14932,15 @@ def calculate_unified_risk_reward_v2(entry_price, side, market_data, signal_clas
                         stop_reason = f"15m阻力{resistance_price:.0f}（回退）"
                     else:
                         stop_loss = entry_price + (atr_1h * atr_multiplier)
-                        stop_reason = f"1h_ATR×{atr_multiplier}"
+                        stop_reason = f"1h_ATR×{atr_multiplier:.2f}"
+                        
+                        # 🆕 V8.5.3: 硬止损保护（Swing ATR回退）
+                        if recent_high > 0:
+                            hard_stop = recent_high * 1.05
+                            if hard_stop > stop_loss:
+                                print(f"  🛡️ Swing硬止损({hard_stop:.2f})宽于ATR({stop_loss:.2f})")
+                                stop_loss = hard_stop
+                                stop_reason = f"硬止损(近期高点×1.05)（Swing+VolSurge）"
                 
                 # 止盈：1h支撑位
                 nearest_support_1h = sr_1h.get("nearest_support", {})
