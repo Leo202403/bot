@@ -5794,6 +5794,23 @@ def ai_optimize_parameters(trading_data_summary, learning_mode="full_optimizatio
         else:
             experience_context = "## 📚 HISTORICAL VALIDATION LESSONS\n\nNo historical data available yet. This is the first optimization.\n\n"
 
+        # 🔧 V8.9.1.2: 加载必要的配置和变量
+        learning_config = load_learning_config()
+        scalping_params = learning_config.get('scalping_params', {})
+        swing_params = learning_config.get('swing_params', {})
+        trades_count = sample_count
+        max_total_position = TRADE_CONFIG.get('max_total_position', 100)
+        
+        # 简化的变量（参数优化不需要完整的市场数据）
+        learning_params_info = ""
+        decision_context = ""
+        symbol_characteristics_info = ""
+        dual_mode_info = ""
+        signal_tier_info = ""
+        market_overview = trading_data_summary  # 使用传入的交易数据摘要
+        market_regime_text = ""
+        position_info = ""
+
         prompt = f"""
 **[Reply in Chinese]** Professional cryptocurrency trading AI | 3-Layer Trend Framework
 
