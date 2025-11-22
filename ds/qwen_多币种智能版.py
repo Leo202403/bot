@@ -18126,18 +18126,20 @@ Formula: Base=1x + (RR≥2:+2x | RR1.8-2:+1x) + (5/5:+1x | 4/5:+0.5x) + KeyS/R:+
 
 Trade Mgmt(Sim): Code=single pos, AI plan multi-part: Part1(Quick):1H S/R,scale 50% | Part2(Trend):4H S/R OR trail(15m struct,YTC SCRATCH:stall>3bar+no profit→exit)
 
-KEY REMINDERS V8.5.2:
+KEY REMINDERS V8.9.1:
 1. Long & Short Equal: In 4H bear, seek SHORT actively
 2. PA priority, especially @key levels
 3. RR<{learning_config['global']['min_risk_reward']:.1f} reject
 4. LONG:@support | SHORT:@resistance
 5. ❌ NO exit on single counter! Only TP/SL/TimeStop/CompleteRev (see EXIT RULES)
 6. Analysis: 3-layer valid (analyze both long/short seriously)
-7. Stop/TP: optimized ATR multipliers (see V8.5)
+7. Stop/TP: optimized ATR multipliers (V8.5) + dynamic adjustments (V8.5.3)
 8. Capital: {max_total_position:.0f}U
 9. Params auto-optimized, strictly follow EXIT RULES for RR
 10. 🚨 JSON: stop_loss_price & take_profit_price=NUMERIC (eg 108375.00), NEVER expressions (eg 100000+8375)
-11. V5.5 Smart Pos: pos_size_usd=0, sys auto 15-50% | lev suggest 1-5 | Strong🚀🚀🚀→50%+5x | Med🎯→35-47.5%+3-5x | Weak📊→25%+1-2x | Risk budget 10%, auto-reduce/reject if exceed | Multi sigs→sys ranks & prioritizes
+11. Smart Pos: pos_size_usd=0, sys auto 15-50% | lev suggest 1-5 | Strong🚀🚀🚀→50%+5x | Med🎯→35-47.5%+3-5x | Weak📊→25%+1-2x | Risk budget 10%, auto-reduce/reject if exceed
+12. V8.6: Partial TP at 50% when TP1 reached, move SL to breakeven
+13. V8.9.1: Python handles deterministic EXIT (TP/SL/Time), AI focuses on market reversal
 """
 
     # 🔍 调试：记录 prompt 信息
