@@ -2046,6 +2046,18 @@ def smart_create_order(symbol: str, side: str, amount: float, order_type: str = 
             # 优化未启用，使用传统市价单
             return exchange.create_market_order(symbol, side, amount, params=params or {})
         
+        # 🔧 V8.9.1.2: 如果reference_price为None，自动获取当前市场价格
+        if reference_price is None or reference_price <= 0:
+            try:
+                ticker = exchange.fetch_ticker(symbol)
+                reference_price = ticker.get('last', 0)
+                if reference_price <= 0:
+                    # 如果无法获取有效价格，回退到市价单
+                    return exchange.create_market_order(symbol, side, amount, params=params or {})
+            except Exception:
+                # 获取价格失败，回退到市价单
+                return exchange.create_market_order(symbol, side, amount, params=params or {})
+        
         # 使用V8.7优化器
         action_map = {
             'entry': 'OPEN_LONG' if side == 'buy' else 'OPEN_SHORT',
@@ -2060,7 +2072,7 @@ def smart_create_order(symbol: str, side: str, amount: float, order_type: str = 
             'action': action_map.get(order_type, 'OPEN_LONG' if side == 'buy' else 'OPEN_SHORT'),
             'symbol': symbol,
             'amount': amount,
-            'reference_price': reference_price if reference_price else 0,
+            'reference_price': reference_price,
             'timestamp': time.time(),
             'signal_strength': signal_strength
         }
