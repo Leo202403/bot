@@ -92,12 +92,61 @@ def calculate_single_actual_profit(
                 atr_stop_mult *= 0.9  # -10%
                 atr_tp_mult *= 0.95   # -5%
         
+        # 🆕 V8.5.3: Volume Surge动态止损（解决ATR滞后问题）
+        volume_surge = opportunity.get('volume_surge', False)
+        volume_surge_type = opportunity.get('volume_surge_type', '')
+        
+        if volume_surge or volume_surge_type:
+            # 在波动率激增时放大止损距离，避免被正常波动打掉
+            if volume_surge_type == 'extreme_surge':
+                # 极端放量（3倍以上）：大幅放宽止损
+                atr_stop_mult *= 1.5  # +50%
+                atr_tp_mult *= 1.3    # +30%（止盈也相应提高）
+                if debug_mode:
+                    print(f"  🔥 检测到极端放量，止损放宽至{atr_stop_mult:.2f}倍ATR")
+            elif volume_surge_type == 'strong_surge':
+                # 强放量（2-3倍）：中度放宽
+                atr_stop_mult *= 1.3  # +30%
+                atr_tp_mult *= 1.2    # +20%
+                if debug_mode:
+                    print(f"  🔥 检测到强放量，止损放宽至{atr_stop_mult:.2f}倍ATR")
+            elif volume_surge:
+                # 普通放量（1.5-2倍）：轻度放宽
+                atr_stop_mult *= 1.15  # +15%
+                atr_tp_mult *= 1.1     # +10%
+                if debug_mode:
+                    print(f"  📊 检测到放量，止损放宽至{atr_stop_mult:.2f}倍ATR")
+        
+        # 🆕 V8.5.3: 硬止损（基于近期高低点）
+        # 作为ATR止损的补充，防止极端行情突破ATR止损
+        recent_high = opportunity.get('recent_high', 0)
+        recent_low = opportunity.get('recent_low', 0)
+        use_hard_stop = recent_high > 0 and recent_low > 0
+        
         if direction == 'long':
             stop_loss = entry_price - (atr * atr_stop_mult)
             take_profit = entry_price + (atr * atr_tp_mult)
+            
+            # 硬止损保护：使用近期低点（向下留5%缓冲）
+            if use_hard_stop:
+                hard_stop = recent_low * 0.95  # 近期低点下方5%
+                # 取两者中更宽松的止损（给趋势更多空间）
+                if hard_stop < stop_loss:
+                    if debug_mode:
+                        print(f"  🛡️ 硬止损({hard_stop:.2f})宽于ATR止损({stop_loss:.2f})，采用硬止损")
+                    stop_loss = hard_stop
         else:  # short
             stop_loss = entry_price + (atr * atr_stop_mult)
             take_profit = entry_price - (atr * atr_tp_mult)
+            
+            # 硬止损保护：使用近期高点（向上留5%缓冲）
+            if use_hard_stop:
+                hard_stop = recent_high * 1.05  # 近期高点上方5%
+                # 取两者中更宽松的止损
+                if hard_stop > stop_loss:
+                    if debug_mode:
+                        print(f"  🛡️ 硬止损({hard_stop:.2f})宽于ATR止损({stop_loss:.2f})，采用硬止损")
+                    stop_loss = hard_stop
         
         # 🔧 V8.5.2.4.63 调试：打印TP/SL价格
         if debug_mode:
