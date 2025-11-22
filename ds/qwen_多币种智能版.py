@@ -17134,18 +17134,19 @@ def execute_tp1_partial_close(position, current_price, config):
         position['tp1_pnl'] = pnl
         position['tp1_close_price'] = current_price
 
-        # 🔑 移动止损到Break-even
-        breakeven_buffer = type_params.get('breakeven_buffer_pct', 0.2) / 100
-        if side == 'long':
-            new_stop_loss = entry_price * (1 + breakeven_buffer)
-            # 只能向上移动
-            position['stop_loss'] = max(new_stop_loss, position.get('stop_loss', 0))
-        else:  # short
-            new_stop_loss = entry_price * (1 - breakeven_buffer)
-            # 只能向下移动
-            position['stop_loss'] = min(new_stop_loss, position.get('stop_loss', float('inf')))
+        # 🔑 移动止损到Break-even（如果启用）
+        if type_params.get('move_sl_to_breakeven', True):
+            breakeven_buffer = type_params.get('breakeven_buffer_pct', 0.2) / 100
+            if side == 'long':
+                new_stop_loss = entry_price * (1 + breakeven_buffer)
+                # 只能向上移动
+                position['stop_loss'] = max(new_stop_loss, position.get('stop_loss', 0))
+            else:  # short
+                new_stop_loss = entry_price * (1 - breakeven_buffer)
+                # 只能向下移动
+                position['stop_loss'] = min(new_stop_loss, position.get('stop_loss', float('inf')))
 
-        position['stop_loss_reason'] = f"Break-even+{breakeven_buffer*100:.1f}% (TP1后)"
+            position['stop_loss_reason'] = f"Break-even+{breakeven_buffer*100:.1f}% (TP1后)"
 
         # 初始化Trailing Stop相关字段
         if type_params.get('trailing_start_after_tp1', True):
@@ -17157,7 +17158,10 @@ def execute_tp1_partial_close(position, current_price, config):
         message = f"✅ TP1触发 @ {current_price:.2f}\n"
         message += f"   平仓: {tp1_close_pct*100:.0f}% ({close_quantity:.6f})\n"
         message += f"   利润: ${pnl:.2f}\n"
-        message += f"   止损移至: {position['stop_loss']:.2f} (Break-even)"
+        if type_params.get('move_sl_to_breakeven', True):
+            message += f"   止损移至: {position['stop_loss']:.2f} (Break-even)"
+        else:
+            message += f"   止损: {position['stop_loss']:.2f} (保持原位)"
 
         print(message)
 
