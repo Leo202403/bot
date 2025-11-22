@@ -1188,8 +1188,8 @@ class OrderExecutor:
             订单对象 or None
         """
         try:
-            # 获取实时盘口
-            orderbook = self.exchange.fetch_order_book(symbol, limit=1)
+            # 获取实时盘口（币安API要求limit>=5）
+            orderbook = self.exchange.fetch_order_book(symbol, limit=5)
             
             if side == 'buy':
                 # 买入：挂在卖一价（吃对手盘的挂单，但我们是Maker）
@@ -17553,7 +17553,18 @@ Output JSON only:
         )
 
         ai_content = response.choices[0].message.content
-        decision = parse_ai_decision_robust(ai_content, strict_mode=False)  # 🆕 V8.8 P1: 使用Pydantic增强解析
+        # 🔧 V8.9.1.2: 调整评估的JSON格式与交易决策不同，不使用parse_ai_decision_robust
+        # 直接使用json.loads解析（格式简单，无需复杂验证）
+        try:
+            decision = json.loads(ai_content.strip())
+        except json.JSONDecodeError:
+            # 尝试提取JSON
+            import re
+            json_match = re.search(r'\{.*\}', ai_content, re.DOTALL)
+            if json_match:
+                decision = json.loads(json_match.group())
+            else:
+                raise ValueError("无法解析AI返回的JSON")
 
         print(f"✓ AI评估完成: {decision['decision']}")
         return decision
