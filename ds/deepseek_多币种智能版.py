@@ -17493,46 +17493,6 @@ def ai_evaluate_position_adjustment(
             'reason': f'调整后仓位${suggested_position:.0f}U超过账户35%风险限制（${available_balance*0.35:.0f}U），拒绝'
         }
     
-    # 🆕 V8.9.1: 分级Prompt策略 - 根据场景选择不同的Prompt
-    use_simplified_prompt = False
-    
-    # 判断是否只需要检查市场反转（有持仓且不需要新Entry）
-    if current_positions and len(current_positions) > 0:
-        # 检查是否有足够资金开新仓
-        remaining_capital = max_total_position - total_position_value
-        min_position_size = 20  # 最小开仓金额
-        
-        if remaining_capital < min_position_size:
-            # 资金不足，只需要检查现有持仓是否需要反转平仓
-            use_simplified_prompt = True
-            print("   💡 [V8.9.1] 使用精简Prompt（反转检查）- 资金不足开新仓")
-    
-    if use_simplified_prompt:
-        # 使用精简Prompt - 只检查市场反转
-        from prompt_optimizer import build_reversal_check_prompt
-        
-        # 为每个持仓生成反转检查Prompt
-        reversal_checks = []
-        for position in current_positions:
-            symbol = position.get('symbol')
-            # 找到对应的市场数据
-            market_data = next((m for m in market_data_list if m and m.get('symbol') == symbol), None)
-            if market_data:
-                reversal_prompt = build_reversal_check_prompt(position, market_data, learning_config)
-                reversal_checks.append(reversal_prompt)
-        
-        # 合并所有反转检查
-        if reversal_checks:
-            prompt = "\n\n".join(reversal_checks)
-            print(f"   📊 [V8.9.1] Prompt Token估算: ~{len(prompt)//4} tokens（精简版）")
-        else:
-            # 如果没有生成反转检查，回退到完整Prompt
-            use_simplified_prompt = False
-    
-    if not use_simplified_prompt:
-        # 使用完整Prompt - 扫描Entry机会
-        print("   💡 [V8.9.1] 使用完整Prompt（Entry扫描）")
-    
     prompt = f"""**[IMPORTANT: Respond ONLY in Chinese (中文)]**
 
 Position Adjustment Evaluation Request
