@@ -2004,6 +2004,10 @@ ADAPTIVE_SIGNAL_VALIDATOR_CONFIG = {
 
 # 🆕 V8.7: 初始化全局订单执行器
 # 合并配置
+# 🆕 V8.9: 初始化自适应信号验证器（必须在UnifiedOrderExecutor之前！）
+adaptive_signal_validator = AdaptiveSignalValidator(ADAPTIVE_SIGNAL_VALIDATOR_CONFIG)
+print(f"✅ V8.9自适应信号验证器已初始化 (自适应验证{'启用' if ADAPTIVE_SIGNAL_VALIDATOR_CONFIG.get('enabled', True) else '禁用'})")
+
 execution_config = {
     **ORDER_EXECUTION_CONFIG.get('signal_validation', {}),
     **ORDER_EXECUTION_CONFIG.get('slippage_control', {}),
@@ -2015,10 +2019,6 @@ print(f"✅ V8.7订单执行优化器已初始化 (优化{'启用' if execution_
 # 🆕 V8.8 P0: 初始化投资组合风控管理器
 portfolio_risk_manager = PortfolioRiskManager(PORTFOLIO_RISK_CONFIG)
 print(f"✅ V8.8投资组合风控已初始化 (风控{'启用' if PORTFOLIO_RISK_CONFIG.get('enabled', True) else '禁用'}, 总敞口上限{PORTFOLIO_RISK_CONFIG['max_total_exposure_multiplier']}x)")
-
-# 🆕 V8.9: 初始化自适应信号验证器
-adaptive_signal_validator = AdaptiveSignalValidator(ADAPTIVE_SIGNAL_VALIDATOR_CONFIG)
-print(f"✅ V8.9自适应信号验证器已初始化 (自适应验证{'启用' if ADAPTIVE_SIGNAL_VALIDATOR_CONFIG.get('enabled', True) else '禁用'})")
 
 
 # 🆕 V8.7: 辅助函数 - 智能订单执行
