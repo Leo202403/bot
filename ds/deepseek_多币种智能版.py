@@ -6019,6 +6019,8 @@ def add_to_position(
         try:
             # 清理旧的止盈止损订单
             clear_symbol_orders(symbol, verbose=False)
+            # 🆕 V8.7.1: 等待交易所更新保证金状态
+            time.sleep(0.3)
 
             # 从AI信号获取新的止盈止损
             stop_loss = ai_signal.get("stop_loss_price", 0)
@@ -20354,12 +20356,13 @@ def ai_evaluate_position_adjustment(
         }
 
     # 安全检查：调整后超过账户风险预算
-    if suggested_position > available_balance * 0.35:
+    max_allowed = available_balance * 0.35
+    if suggested_position > max_allowed:
         return {
             "decision": "REJECT",
             "adjusted_position": 0,
             "confidence": "HIGH",
-            "reason": f"调整后仓位${suggested_position:.0f}U超过账户35%风险限制（${available_balance * 0.35:.0f}U），拒绝",
+            "reason": f"调整后仓位${suggested_position:.2f}U超过账户35%风险限制（${max_allowed:.2f}U），拒绝",
         }
 
     prompt = f"""**[IMPORTANT: Respond ONLY in Chinese (中文)]**
@@ -21613,7 +21616,7 @@ def execute_tp1_partial_close(
         # 保存平仓记录（调用现有函数）
         update_close_position(
             position["coin"],
-            side,
+            "多" if side == "long" else "空",  # 转换为中文
             close_info["close_time"],
             current_price,
             pnl,
@@ -22288,12 +22291,12 @@ def calculate_swing_score(market_data):
             bear_count = sum(
                 1 for t in [trend_4h, trend_1h, trend_15m] if "空头" in str(t)
             )
-        aligned_count = max(bull_count, bear_count)
+            aligned_count = max(bull_count, bear_count)
 
-        if aligned_count >= 3:
-            score += 15  # ⚠️ 完美共振，但可能已滞后（从35降至15）
-        elif aligned_count >= 2:
-            score += 20  # 两周期共振（维持原值）
+            if aligned_count >= 3:
+                score += 15  # ⚠️ 完美共振，但可能已滞后（从35降至15）
+            elif aligned_count >= 2:
+                score += 20  # 两周期共振（维持原值）
 
         # 3. 4小时趋势强度（波段关键）
         lt_trend = lt.get("trend", "")
@@ -23504,6 +23507,8 @@ def execute_tp_sl_adjustment(symbol, position, adjustment_result):
 
             if success_count > 0:
                 print(f"   ✓ 已取消 {success_count} 个旧订单")
+                # 🆕 V8.7.1: 有订单被取消时，等待交易所更新保证金状态
+                time.sleep(0.3)
             elif fail_count > 0:
                 print(f"   ⚠️ 取消订单失败 {fail_count} 个")
             else:
@@ -24387,6 +24392,8 @@ def monitor_positions_for_invalidation(
                             )
                             if success_count > 0:
                                 print(f"   ✓ 已取消 {success_count} 个旧止损订单")
+                                # 🆕 V8.7.1: 等待交易所更新保证金状态
+                                time.sleep(0.3)
 
                             # 设置新止损
                             exchange.create_order(
@@ -24725,6 +24732,8 @@ def _execute_single_close_action(action, current_positions):
         # 先取消该币种的所有止损/止盈订单（AI主动平仓）
         try:
             clear_symbol_orders(symbol, verbose=True)
+            # 🆕 V8.7.1: 等待交易所更新保证金状态，避免激进限价单因保证金计算滞后而失败
+            time.sleep(0.5)
         except Exception as e:
             print(f"⚠️ 取消订单失败（可能已成交）: {e}")
 
