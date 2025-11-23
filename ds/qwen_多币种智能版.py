@@ -24879,19 +24879,29 @@ def check_swing_partial_exit(position, market_data, entry_context, config):
         side = position.get("side", "")
 
         # 获取第一目标（1h阻力/支撑）
-        sr_1h = market_data.get("mid_term", {}).get("support_resistance", {})
+        mid_term = market_data.get("mid_term")
+        if not mid_term or not isinstance(mid_term, dict):
+            return False, 0, "缺少mid_term数据"
+        
+        sr_1h = mid_term.get("support_resistance")
+        if not sr_1h or not isinstance(sr_1h, dict):
+            return False, 0, "缺少1H支撑阻力数据"
 
         reached_target = False
         first_target = 0
 
         if side == "long":
-            first_target = sr_1h.get("nearest_resistance", {}).get("price", 0)
+            nearest_resistance = sr_1h.get("nearest_resistance")
+            if nearest_resistance and isinstance(nearest_resistance, dict):
+                first_target = nearest_resistance.get("price", 0)
             if (
                 first_target > 0 and current_price >= first_target * 0.995
             ):  # 到达目标前0.5%
                 reached_target = True
         else:  # short
-            first_target = sr_1h.get("nearest_support", {}).get("price", 0)
+            nearest_support = sr_1h.get("nearest_support")
+            if nearest_support and isinstance(nearest_support, dict):
+                first_target = nearest_support.get("price", 0)
             if first_target > 0 and current_price <= first_target * 1.005:
                 reached_target = True
 
