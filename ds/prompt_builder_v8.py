@@ -54,8 +54,12 @@ class PromptBuilderV8:
         elif pattern:
             pattern_desc = f"Pattern: {pattern}"
         
-        # ATR
-        atr = market_data.get("atr_14", 0)
+        # ATR（嵌套在atr字典中）
+        atr_data = market_data.get("atr", {})
+        if isinstance(atr_data, dict):
+            atr = atr_data.get("atr_14", 0)
+        else:
+            atr = 0
         
         # 信号分数
         signal_score = market_data.get("signal_score", 0)

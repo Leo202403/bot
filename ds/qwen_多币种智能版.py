@@ -21027,26 +21027,36 @@ def build_tpsl_options_for_symbols(
 
         symbol = data.get("symbol")
         price = data.get("price", 0)
-        atr = data.get("atr_14", 0)
+        
+        # ATR存储在嵌套的atr字典中
+        atr_data = data.get("atr", {})
+        if isinstance(atr_data, dict):
+            atr = atr_data.get("atr_14", 0)
+        else:
+            atr = 0
 
         if not symbol or price <= 0 or atr <= 0:
             continue
 
         # 获取支撑阻力位
         sr = data.get("support_resistance", {})
-        
+
         # 处理可能是dict的support/resistance
         nearest_support_data = sr.get("nearest_support", {})
         if isinstance(nearest_support_data, dict):
             nearest_support = nearest_support_data.get("price", price * 0.98)
         else:
-            nearest_support = nearest_support_data if nearest_support_data else price * 0.98
-        
+            nearest_support = (
+                nearest_support_data if nearest_support_data else price * 0.98
+            )
+
         nearest_resistance_data = sr.get("nearest_resistance", {})
         if isinstance(nearest_resistance_data, dict):
             nearest_resistance = nearest_resistance_data.get("price", price * 1.02)
         else:
-            nearest_resistance = nearest_resistance_data if nearest_resistance_data else price * 1.02
+            nearest_resistance = (
+                nearest_resistance_data if nearest_resistance_data else price * 1.02
+            )
 
         # 确定方向（根据趋势）
         trend_4h = data.get("trend_4h", "")
