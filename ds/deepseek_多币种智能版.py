@@ -1720,41 +1720,42 @@ class UnifiedOrderExecutor:
 
 class GlobalDrawdownProtector:
     """🆕 V8.7.4: 全局净值回撤熔断器（专业风控标配）
-    
+
     核心功能：
     1. 每日净值监控：记录日初始净值
     2. 实时回撤计算：当前净值 vs 日初始净值
     3. 熔断机制：回撤超阈值→强制平仓→停止交易至明日
-    
+
     目的：
     - 防止单日巨亏（如-10%、-20%）
     - 保护本金安全
     - 给策略"冷静期"
-    
+
     适用场景：
     - 黑天鹅事件（闪崩、监管消息）
     - 策略失效期（市场环境剧变）
     - 系统异常（AI决策混乱）
-    
+
     交易员建议：专业交易团队的标配风控
     """
-    
+
     def __init__(self, max_daily_dd_pct: float = 5.0):
         """初始化熔断器
-        
+
         Args:
             max_daily_dd_pct: 最大单日回撤百分比（默认5%）
+
         """
         self.max_daily_dd_pct = max_daily_dd_pct
         self.daily_start_equity = None
         self.last_reset_date = None
         self.is_halted = False
         self.halt_reason = ""
-        
+
     def update_daily_start(self, current_equity: float):
         """每日重置（在交易日开始时调用）"""
         from datetime import datetime
-        
+
         today = datetime.now().date()
         if self.last_reset_date != today:
             self.daily_start_equity = current_equity
@@ -1762,21 +1763,22 @@ class GlobalDrawdownProtector:
             self.is_halted = False
             self.halt_reason = ""
             print(f"📊 [回撤保护器] 日初始净值: ${current_equity:.2f}")
-    
+
     def check_drawdown(self, current_equity: float) -> tuple:
         """检查是否触发熔断
-        
+
         Returns:
             (is_halted: bool, dd_pct: float, message: str)
+
         """
         if self.daily_start_equity is None:
             self.update_daily_start(current_equity)
             return False, 0, ""
-        
+
         # 计算回撤
         dd_amount = current_equity - self.daily_start_equity
         dd_pct = (dd_amount / self.daily_start_equity) * 100
-        
+
         # 检查是否触发熔断
         if dd_pct < -self.max_daily_dd_pct and not self.is_halted:
             self.is_halted = True
@@ -1789,34 +1791,32 @@ class GlobalDrawdownProtector:
             msg += f"   亏损: ${dd_amount:.2f}"
             print(msg)
             return True, dd_pct, msg
-        
+
         return self.is_halted, dd_pct, self.halt_reason
-    
+
     def get_status(self) -> dict:
         """获取当前状态（用于状态持久化）"""
         return {
             "max_daily_dd_pct": self.max_daily_dd_pct,
             "daily_start_equity": self.daily_start_equity,
             "last_reset_date": (
-                self.last_reset_date.isoformat()
-                if self.last_reset_date
-                else None
+                self.last_reset_date.isoformat() if self.last_reset_date else None
             ),
             "is_halted": self.is_halted,
             "halt_reason": self.halt_reason,
         }
-    
+
     def restore_state(self, state: dict):
         """恢复状态（从持久化数据恢复）"""
-        from datetime import datetime, date
-        
+        from datetime import date
+
         self.max_daily_dd_pct = state.get("max_daily_dd_pct", 5.0)
         self.daily_start_equity = state.get("daily_start_equity")
-        
+
         last_reset_str = state.get("last_reset_date")
         if last_reset_str:
             self.last_reset_date = date.fromisoformat(last_reset_str)
-        
+
         self.is_halted = state.get("is_halted", False)
         self.halt_reason = state.get("halt_reason", "")
 
@@ -1826,34 +1826,32 @@ class GlobalDrawdownProtector:
 
 class RuntimeStateManager:
     """🆕 V8.7.4: 运行时状态管理器（崩溃恢复能力）
-    
+
     核心功能：
     1. 状态持久化：定期保存关键运行时状态到文件
     2. 崩溃恢复：程序重启时自动恢复上次的状态
     3. 避免重复分析：AICallOptimizer的指纹、调用时间等
-    
+
     保存的状态：
     - AICallOptimizer: last_fingerprints, last_call_time
     - GlobalDrawdownProtector: 日初始净值, 熔断状态
     - 其他关键状态
-    
+
     交易员建议：专业系统必备的鲁棒性设计
     """
-    
+
     STATE_FILE = "runtime_state.json"
-    
+
     @staticmethod
     def save_state(
-        ai_optimizer=None,
-        drawdown_protector=None,
-        extra_state: dict = None
+        ai_optimizer=None, drawdown_protector=None, extra_state: dict = None
     ):
         """保存关键状态到文件"""
         state = {
             "timestamp": datetime.now().isoformat(),
             "version": "V8.7.4",
         }
-        
+
         # AI Optimizer状态
         if ai_optimizer:
             try:
@@ -1868,79 +1866,75 @@ class RuntimeStateManager:
                 }
             except Exception as e:
                 print(f"⚠️ 保存AI Optimizer状态失败: {e}")
-        
+
         # Drawdown Protector状态
         if drawdown_protector:
             try:
                 state["drawdown_protector"] = drawdown_protector.get_status()
             except Exception as e:
                 print(f"⚠️ 保存Drawdown Protector状态失败: {e}")
-        
+
         # 额外状态
         if extra_state:
             state["extra"] = extra_state
-        
+
         # 写入文件
         try:
             with open(RuntimeStateManager.STATE_FILE, "w") as f:
                 json.dump(state, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"❌ 保存运行时状态失败: {e}")
-    
+
     @staticmethod
     def load_state() -> dict:
         """启动时恢复状态"""
         if not os.path.exists(RuntimeStateManager.STATE_FILE):
             print("📋 未检测到上次运行状态，全新启动")
             return None
-        
+
         try:
-            with open(RuntimeStateManager.STATE_FILE, "r") as f:
+            with open(RuntimeStateManager.STATE_FILE) as f:
                 state = json.load(f)
-            
-            print(f"🔄 检测到上次运行状态（{state.get('timestamp', 'unknown')}），正在恢复...")
+
+            print(
+                f"🔄 检测到上次运行状态（{state.get('timestamp', 'unknown')}），正在恢复..."
+            )
             return state
         except Exception as e:
             print(f"⚠️ 加载运行时状态失败: {e}")
             return None
-    
+
     @staticmethod
     def restore_ai_optimizer(ai_optimizer, saved_state: dict):
         """恢复AI Optimizer状态"""
         if not saved_state or "ai_optimizer" not in saved_state:
             return
-        
+
         try:
             ai_opt_state = saved_state["ai_optimizer"]
-            
+
             if "last_fingerprints" in ai_opt_state:
                 ai_optimizer.last_fingerprints = ai_opt_state["last_fingerprints"]
                 print(f"   ✅ 恢复AI指纹记录: {len(ai_optimizer.last_fingerprints)}个")
-            
-            if "last_call_time" in ai_opt_state and ai_opt_state["last_call_time"]:
+
+            if ai_opt_state.get("last_call_time"):
                 ai_optimizer.last_call_time = datetime.fromisoformat(
                     ai_opt_state["last_call_time"]
                 )
                 print(f"   ✅ 恢复AI调用时间: {ai_optimizer.last_call_time}")
-        
+
         except Exception as e:
             print(f"⚠️ 恢复AI Optimizer状态失败: {e}")
-    
+
     @staticmethod
-    def restore_drawdown_protector(
-        drawdown_protector,
-        saved_state: dict
-    ):
+    def restore_drawdown_protector(drawdown_protector, saved_state: dict):
         """恢复Drawdown Protector状态"""
         if not saved_state or "drawdown_protector" not in saved_state:
             return
-        
+
         try:
             drawdown_protector.restore_state(saved_state["drawdown_protector"])
-            print(
-                f"   ✅ 恢复回撤保护器状态: "
-                f"熔断={drawdown_protector.is_halted}"
-            )
+            print(f"   ✅ 恢复回撤保护器状态: 熔断={drawdown_protector.is_halted}")
         except Exception as e:
             print(f"⚠️ 恢复Drawdown Protector状态失败: {e}")
 
@@ -1950,56 +1944,58 @@ class RuntimeStateManager:
 
 class APIRateLimiter:
     """🆕 V8.7.4: 全局API请求频率控制器（令牌桶算法）
-    
+
     核心功能：
     1. 请求计数：追踪每分钟的请求次数和权重
     2. 自动限流：超限时自动阻塞等待
     3. 权重感知：不同API调用消耗不同权重
-    
+
     币安API限制：
     - 请求频率：1200次/分钟
     - 权重限制：6000权重/分钟
-    
+
     权重示例：
     - 下单/撤单：1权重
     - 查询订单：2权重
     - 查询持仓：5权重
-    
+
     交易员建议：避免触发Rate Limit导致封号
     """
-    
+
     def __init__(
-        self,
-        max_requests_per_minute: int = 1200,
-        weight_limit_per_minute: int = 6000
+        self, max_requests_per_minute: int = 1200, weight_limit_per_minute: int = 6000
     ):
         import threading
-        
+
         self.max_requests = max_requests_per_minute
         self.weight_limit = weight_limit_per_minute
-        
+
         self.request_count = 0
         self.weight_count = 0
         self.window_start = time.time()
         self.lock = threading.Lock()
-        
-        print(f"🚦 [API限频器] 已启动: {max_requests_per_minute}次/分, "
-              f"{weight_limit_per_minute}权重/分")
-    
+
+        print(
+            f"🚦 [API限频器] 已启动: {max_requests_per_minute}次/分, "
+            f"{weight_limit_per_minute}权重/分"
+        )
+
     def acquire(self, weight: int = 1):
         """请求许可（阻塞直到获得）"""
         with self.lock:
             now = time.time()
-            
+
             # 每分钟重置
             if now - self.window_start >= 60:
                 self.request_count = 0
                 self.weight_count = 0
                 self.window_start = now
-            
+
             # 检查是否超限
-            if (self.request_count >= self.max_requests or
-                    self.weight_count + weight > self.weight_limit):
+            if (
+                self.request_count >= self.max_requests
+                or self.weight_count + weight > self.weight_limit
+            ):
                 # 计算需要等待的时间
                 wait_time = 60 - (now - self.window_start)
                 if wait_time > 0:
@@ -2007,16 +2003,16 @@ class APIRateLimiter:
                     weight_msg = f"权重{self.weight_count}/{self.weight_limit}"
                     print(f"⏳ [API限频] {req_msg}, {weight_msg}, 等待{wait_time:.1f}s")
                     time.sleep(wait_time)
-                
+
                 # 重置
                 self.request_count = 0
                 self.weight_count = 0
                 self.window_start = time.time()
-            
+
             # 计数
             self.request_count += 1
             self.weight_count += weight
-    
+
     def get_status(self) -> dict:
         """获取当前状态"""
         with self.lock:
@@ -9929,8 +9925,8 @@ def quick_global_search_v8316(
 
     # 🆕 V8.7.2: 硬性约束ATR倍数，避免过拟合历史极端波动
     SCALPING_TP_MAX = 5.0  # 超短线TP上限5x ATR
-    SWING_TP_MAX = 12.0     # 波段TP上限12x ATR
-    
+    SWING_TP_MAX = 12.0  # 波段TP上限12x ATR
+
     scalping_params_range = {
         "atr_tp": [
             3.0,  # V8.7.2: 固定为3-5x范围
@@ -9954,7 +9950,7 @@ def quick_global_search_v8316(
 
     swing_params_range = {
         "atr_tp": [
-            8.0,   # V8.7.2: 固定为8-12x范围
+            8.0,  # V8.7.2: 固定为8-12x范围
             9.0,
             10.0,
             12.0,  # 上限12x
@@ -10055,16 +10051,16 @@ def quick_global_search_v8316(
         },
         # 🆕 V8.7.3交易员建议：高盈亏比探索（配合新维度）
         {
-            "momentum": 35,           # 极度看重动量（启动点）
-            "volume": 20,             # 降低成交量权重
-            "breakout": 20,           # 降低突破权重（假突破多）
-            "pattern": 10,            # 形态次要
-            "trend_align": 5,         # 几乎忽略趋势对齐（防止追高）
-            "volatility": 25,         # 提高波动率（大行情特征）
+            "momentum": 35,  # 极度看重动量（启动点）
+            "volume": 20,  # 降低成交量权重
+            "breakout": 20,  # 降低突破权重（假突破多）
+            "pattern": 10,  # 形态次要
+            "trend_align": 5,  # 几乎忽略趋势对齐（防止追高）
+            "volatility": 25,  # 提高波动率（大行情特征）
             "volume_pulse": 10,
-            "momentum_accel": 30,     # 极度看重动量加速（爆发点）
-            "space_factor": 35,       # 🆕 如果有空间因子数据，极度看重
-            "position_factor": 25,    # 🆕 如果有位置因子数据，极度看重
+            "momentum_accel": 30,  # 极度看重动量加速（爆发点）
+            "space_factor": 35,  # 🆕 如果有空间因子数据，极度看重
+            "position_factor": 25,  # 🆕 如果有位置因子数据，极度看重
             "name": "高盈亏比探索",
         },
     ]
@@ -10122,15 +10118,15 @@ def quick_global_search_v8316(
         },
         # 🆕 V8.7.3交易员建议：高盈亏比探索（配合新维度）
         {
-            "momentum": 15,           # 降低动能权重（滞后指标）
-            "volume": 15,             # 降低成交量权重
-            "breakout": 15,           # 降低突破权重（假突破多）
-            "trend_align": 10,        # 大幅降低趋势对齐（防止追高）
-            "ema_divergence": 5,      # 降低EMA发散
+            "momentum": 15,  # 降低动能权重（滞后指标）
+            "volume": 15,  # 降低成交量权重
+            "breakout": 15,  # 降低突破权重（假突破多）
+            "trend_align": 10,  # 大幅降低趋势对齐（防止追高）
+            "ema_divergence": 5,  # 降低EMA发散
             "trend_4h_strength": 10,  # 降低4H趋势强度
-            "space_factor": 35,       # 🆕 极度看重空间因子
-            "position_factor": 30,    # 🆕 极度看重位置因子（at_support）
-            "freshness_factor": 20,   # 🆕 极度看重新鲜度（新趋势）
+            "space_factor": 35,  # 🆕 极度看重空间因子
+            "position_factor": 30,  # 🆕 极度看重位置因子（at_support）
+            "freshness_factor": 20,  # 🆕 极度看重新鲜度（新趋势）
             "name": "高盈亏比探索",
         },
     ]
@@ -21065,42 +21061,42 @@ def build_tpsl_options_for_symbols(
     market_data_list: list,
     signal_type: str = "swing",
     atr_tp_mult: float = 4.0,
-    atr_sl_mult: float = 1.5
+    atr_sl_mult: float = 1.5,
 ) -> dict:
     """🆕 V8.8: 为所有币种预计算TP/SL选项
-    
+
     Args:
         market_data_list: 市场数据列表
         signal_type: "scalping" or "swing"
         atr_tp_mult: ATR止盈倍数
         atr_sl_mult: ATR止损倍数
-        
+
     Returns:
         {symbol: {atr: {...}, structure: {...}}}
+
     """
-    
     tpsl_options_map = {}
-    
+
     for data in market_data_list:
         if data is None:
             continue
-        
+
         symbol = data.get("symbol")
         price = data.get("price", 0)
         atr = data.get("atr_14", 0)
-        
+
         if not symbol or price <= 0 or atr <= 0:
             continue
-        
+
         # 获取支撑阻力位
         sr = data.get("support_resistance", {})
         nearest_support = sr.get("nearest_support", price * 0.98)
         nearest_resistance = sr.get("nearest_resistance", price * 1.02)
-        
+
         # 确定方向（根据趋势）
         trend_4h = data.get("trend_4h", "")
         side = "long" if "多" in str(trend_4h) or "Bull" in str(trend_4h) else "short"
-        
+
         # 计算TP/SL选项
         try:
             options = TPSLCalculator.calculate_tpsl_options(
@@ -21111,92 +21107,99 @@ def build_tpsl_options_for_symbols(
                 nearest_resistance=nearest_resistance,
                 atr_tp_mult=atr_tp_mult,
                 atr_sl_mult=atr_sl_mult,
-                signal_type=signal_type
+                signal_type=signal_type,
             )
             tpsl_options_map[symbol] = options
         except Exception as e:
             print(f"⚠️ 计算{symbol} TP/SL选项失败: {e}")
             continue
-    
+
     return tpsl_options_map
 
 
 def parse_ai_decision_v88(
-    ai_response: str,
-    tpsl_options_map: dict,
-    market_data_list: list
+    ai_response: str, tpsl_options_map: dict, market_data_list: list
 ) -> dict:
     """🆕 V8.8: 解析AI决策（新格式）并应用Python计算的价格
-    
+
     Args:
         ai_response: AI的JSON响应
         tpsl_options_map: 预计算的TP/SL选项
         market_data_list: 市场数据列表
-        
+
     Returns:
         解析后的决策（包含实际价格）
+
     """
-    
     import json
-    
+
     try:
         # 解析JSON
         if "```json" in ai_response:
             ai_response = ai_response.split("```json")[1].split("```")[0]
         elif "```" in ai_response:
             ai_response = ai_response.split("```")[1].split("```")[0]
-        
+
         decision = json.loads(ai_response.strip())
-        
+
         # 获取基本决策信息
         action = decision.get("action", "HOLD")
         symbol = decision.get("symbol", "")
         confidence = decision.get("confidence", 50)
         reason = decision.get("reason", "")
-        
+
         # 🆕 V8.8: 获取策略选择
         tpsl_strategy = decision.get("tpsl_strategy", "ATR")
         sl_adj = decision.get("sl_multiplier_adjustment", 1.0)
         tp_adj = decision.get("tp_multiplier_adjustment", 1.0)
-        
+
         # 如果是开仓操作，应用Python计算的价格
         if action in ["OPEN_LONG", "OPEN_SHORT"] and symbol:
             options = tpsl_options_map.get(symbol)
-            
+
             if options:
                 # 根据AI选择的策略获取价格
-                if tpsl_strategy == "STRUCTURE" and options["structure"]["rr_ratio"] >= 1.5:
+                if (
+                    tpsl_strategy == "STRUCTURE"
+                    and options["structure"]["rr_ratio"] >= 1.5
+                ):
                     selected = options["structure"]
                     strategy_used = "STRUCTURE"
                 else:
                     selected = options["atr"]
                     strategy_used = "ATR"
-                
+
                 # 应用微调
                 entry_price = next(
-                    (d["price"] for d in market_data_list if d and d.get("symbol") == symbol),
-                    None
+                    (
+                        d["price"]
+                        for d in market_data_list
+                        if d and d.get("symbol") == symbol
+                    ),
+                    None,
                 )
-                
+
                 if entry_price:
                     # 计算调整后的价格
                     sl_distance = abs(selected["sl_price"] - entry_price)
                     tp_distance = abs(selected["tp_price"] - entry_price)
-                    
+
                     if "LONG" in action:
                         sl_price = entry_price - (sl_distance * sl_adj)
                         tp_price = entry_price + (tp_distance * tp_adj)
                     else:
                         sl_price = entry_price + (sl_distance * sl_adj)
                         tp_price = entry_price - (tp_distance * tp_adj)
-                    
+
                     # 验证R:R
                     is_valid, reason_msg, actual_rr = TPSLCalculator.validate_tpsl(
-                        sl_price, tp_price, entry_price,
+                        sl_price,
+                        tp_price,
+                        entry_price,
                         "long" if "LONG" in action else "short",
-                        min_rr=1.5
+                        min_rr=1.5,
                     )
-                    
+
                     if is_valid:
                         # 添加价格信息到决策
                         decision["entry_price"] = round(entry_price, 2)
@@ -21210,23 +21213,15 @@ def parse_ai_decision_v88(
                         decision["action"] = "HOLD"
                         decision["reason"] = f"R:R验证失败: {reason_msg}"
                         decision["confidence"] = 0
-        
+
         return decision
-        
+
     except json.JSONDecodeError as e:
         print(f"⚠️ V8.8: JSON解析失败: {e}")
-        return {
-            "action": "HOLD",
-            "confidence": 0,
-            "reason": f"JSON解析失败: {str(e)}"
-        }
+        return {"action": "HOLD", "confidence": 0, "reason": f"JSON解析失败: {e!s}"}
     except Exception as e:
         print(f"⚠️ V8.8: 决策解析失败: {e}")
-        return {
-            "action": "HOLD",
-            "confidence": 0,
-            "reason": f"决策解析失败: {str(e)}"
-        }
+        return {"action": "HOLD", "confidence": 0, "reason": f"决策解析失败: {e!s}"}
 
 
 def ai_portfolio_decision(
@@ -21716,38 +21711,38 @@ System has learned from {trades_count} completed trades
     # 🆕 V8.8: 检查是否使用精简Prompt
     use_v88_prompt = os.getenv("USE_V88_PROMPT", "false").lower() == "true"
     tpsl_options_map = {}  # 初始化（V8.8需要）
-    
+
     if use_v88_prompt:
         # 🆕 V8.8: 使用精简Prompt（Python算价格，AI选策略）
         print("   🚀 [V8.8] 使用精简Prompt（Python算，AI选）")
-        
+
         # 1. 预计算TP/SL选项
         tpsl_options_map = build_tpsl_options_for_symbols(
             market_data_list,
             signal_type="swing",
             atr_tp_mult=swing_params.get("atr_tp_multiplier", 4.0),
-            atr_sl_mult=swing_params.get("atr_stop_multiplier", 1.5)
+            atr_sl_mult=swing_params.get("atr_stop_multiplier", 1.5),
         )
-        
+
         # 2. 使用PromptBuilderV8构建精简Prompt
         try:
             from prompt_builder_v8 import PromptBuilderV8
-            
+
             builder = PromptBuilderV8()
             prompt = builder.build_optimized_prompt(
                 market_data_list=market_data_list[:5],  # 限制5个币种
                 current_positions=current_positions,
                 tpsl_options_map=tpsl_options_map,
                 balance=available_balance,
-                signal_type="swing"
+                signal_type="swing",
             )
-            
+
             token_estimate = len(prompt) // 4
             print(f"   📊 [V8.8] Prompt Token: ~{token_estimate} (-85% vs 旧版)")
         except Exception as e:
             print(f"⚠️ [V8.8] Prompt构建失败，回退到旧版: {e}")
             use_v88_prompt = False  # 回退
-    
+
     if not use_v88_prompt:
         # 旧版Prompt构建
         prompt = f"""
@@ -22218,11 +22213,9 @@ The regime recommendation is advisory - final decision depends on specific coin 
                 if use_v88_prompt:
                     # 🆕 V8.8: 使用新解析器（应用Python计算的价格）
                     decision = parse_ai_decision_v88(
-                        json_str,
-                        tpsl_options_map,
-                        market_data_list
+                        json_str, tpsl_options_map, market_data_list
                     )
-                    
+
                     if decision.get("_v88_enhanced"):
                         strategy = decision.get("strategy_used", "N/A")
                         rr = decision.get("actual_rr", 0)
@@ -22238,9 +22231,7 @@ The regime recommendation is advisory - final decision depends on specific coin 
                         # V8.8尝试备用方法
                         extracted = extract_json_from_ai_response(result)
                         decision = parse_ai_decision_v88(
-                            json.dumps(extracted),
-                            tpsl_options_map,
-                            market_data_list
+                            json.dumps(extracted), tpsl_options_map, market_data_list
                         )
                     else:
                         decision = extract_json_from_ai_response(result)
@@ -22617,25 +22608,25 @@ def calculate_realtime_signal_score(market_data, learning_config=None):
         # 🆕 V8.7.3: 权重重构（交易员建议：从"确认型"转向"期望型"）
         # 核心改变：大幅降低趋势对齐权重，引入空间因子、位置因子
         DEFAULT_SCALPING_WEIGHTS = {
-            "momentum": 15,           # 降低（动能是滞后的）
-            "volume": 20,              # 降低
-            "breakout": 15,            # 降低（震荡市70%是假突破）
-            "pattern": 10,             # Pin Bar / 吞没
-            "trend_align": 5,          # 大幅降低（10→5）
-            "space_factor": 30,        # 🆕 核心：空间因子
-            "position_factor": 20,     # 🆕 位置因子（支撑/阻力）
+            "momentum": 15,  # 降低（动能是滞后的）
+            "volume": 20,  # 降低
+            "breakout": 15,  # 降低（震荡市70%是假突破）
+            "pattern": 10,  # Pin Bar / 吞没
+            "trend_align": 5,  # 大幅降低（10→5）
+            "space_factor": 30,  # 🆕 核心：空间因子
+            "position_factor": 20,  # 🆕 位置因子（支撑/阻力）
         }
 
         DEFAULT_SWING_WEIGHTS = {
-            "momentum": 10,            # 降低
-            "volume": 15,              # 降低
-            "breakout": 15,            # 降低
-            "trend_align": 15,         # 大幅降低（35→15）
-            "ema_divergence": 10,      # 降低
-            "trend_4h_strength": 10,   # 降低
-            "space_factor": 30,        # 🆕 核心：空间因子
-            "position_factor": 25,     # 🆕 位置因子
-            "freshness_factor": 15,    # 🆕 新鲜度因子（趋势年龄）
+            "momentum": 10,  # 降低
+            "volume": 15,  # 降低
+            "breakout": 15,  # 降低
+            "trend_align": 15,  # 大幅降低（35→15）
+            "ema_divergence": 10,  # 降低
+            "trend_4h_strength": 10,  # 降低
+            "space_factor": 30,  # 🆕 核心：空间因子
+            "position_factor": 25,  # 🆕 位置因子
+            "freshness_factor": 15,  # 🆕 新鲜度因子（趋势年龄）
         }
 
         # 从learning_config读取权重（如果有）
@@ -22734,12 +22725,12 @@ def calculate_realtime_signal_score(market_data, learning_config=None):
         sr_data = market_data.get("support_resistance", {})
         current_price = market_data.get("current_price", 0)
         atr = market_data.get("atr", {}).get("atr_14", 0)
-        
+
         if current_price > 0 and atr > 0:
             # 确定方向（通过趋势或信号类型）
             trend_15m = market_data.get("trend_15m", "")
             is_long = "多头" in trend_15m
-            
+
             # 计算空间
             if is_long:
                 resistance = sr_data.get("nearest_resistance", {}).get("price", 0)
@@ -22753,7 +22744,7 @@ def calculate_realtime_signal_score(market_data, learning_config=None):
                     space_atr = (current_price - support) / atr
                 else:
                     space_atr = 999  # 突破新低，无支撑
-            
+
             # 评分（关键差异点）
             if space_atr > 6:
                 score += weights.get("space_factor", 30)  # 空间巨大
@@ -22763,7 +22754,7 @@ def calculate_realtime_signal_score(market_data, learning_config=None):
                 score += weights.get("space_factor", 30) * 0.33  # 空间一般
             else:
                 score -= 50  # 空间被堵死，极大惩罚！
-        
+
         # 🆕 V8.7.3: 位置因子 - 买在支撑，卖在阻力
         position_status = sr_data.get("position_status", "neutral")
         if signal_type == "swing":
@@ -22773,10 +22764,9 @@ def calculate_realtime_signal_score(market_data, learning_config=None):
                 score += weights.get("position_factor", 25) * 0.4  # 中性
             elif position_status == "at_resistance":
                 score -= 100  # 绝对禁止在阻力位做多！
-        else:  # scalping
-            if position_status in ["at_support", "at_resistance"]:
-                score += weights.get("position_factor", 20)  # scalping喜欢关键位
-        
+        elif position_status in ["at_support", "at_resistance"]:
+            score += weights.get("position_factor", 20)  # scalping喜欢关键位
+
         # 🆕 V8.7.3: 新鲜度因子 - 趋势年龄（swing专用）
         if signal_type == "swing":
             trend_age = market_data.get("mkt_struct_age_candles", 0)
@@ -22788,7 +22778,7 @@ def calculate_realtime_signal_score(market_data, learning_config=None):
                 score -= 10  # 趋势太老
             elif trend_age > 80:
                 score -= 20  # 随时可能反转
-        
+
         # 🆕 V8.7.3: 乖离率惩罚 - 防止追高
         ema20 = market_data.get("moving_averages", {}).get("ema20", 0)
         if ema20 > 0 and current_price > 0 and atr > 0:
@@ -22797,13 +22787,13 @@ def calculate_realtime_signal_score(market_data, learning_config=None):
                 score -= 20  # 严重乖离
             elif extension > 2.0:
                 score -= 10  # 中度乖离
-        
+
         # 🆕 V8.7.3: 陷阱加成 - 假突破反向突破（猎杀止损）
         ytc_signal = market_data.get("ytc_signal", {})
         ytc_type = ytc_signal.get("type", "")
         if ytc_type == "BOF":  # Break and Failed (假突破)
             score += 20  # 大幅加分，这是一波流行情
-        
+
         # 【原有减分项：RSI极端】
         rsi_data = market_data.get("rsi", {})
         rsi = rsi_data.get("rsi_14", 50)
@@ -24950,7 +24940,9 @@ def ai_evaluate_partial_close(position, partial_profit, market_data, entry_conte
             )
         else:
             # DeepSeek版本不支持其他模型
-            raise ValueError(f"❌ DeepSeek版本只支持deepseek模型，当前MODEL_NAME={model_name}")
+            raise ValueError(
+                f"❌ DeepSeek版本只支持deepseek模型，当前MODEL_NAME={model_name}"
+            )
 
         ai_content = response.choices[0].message.content.strip()
 
@@ -25368,28 +25360,36 @@ def monitor_positions_for_invalidation(
             # 【V7.9】检查前提失效（分级策略）
             invalidation_reasons = []
             hard_invalidation = False  # 硬失效标志（无需确认，立即平仓）
-            
+
             # 🆕 V8.7.2: 最小盈利额保护（防止给交易所打工）
             unrealized_pnl = position.get("unrealized_pnl", 0)
             position_size_usd = abs(position.get("notional", 0))
             MIN_PROFIT_USD = position_size_usd * 0.001 * 1.5  # 手续费×1.5
-            
+
             if unrealized_pnl > 0 and unrealized_pnl < MIN_PROFIT_USD:
-                print(f"   💰 浮盈${unrealized_pnl:.2f}U < 最小${MIN_PROFIT_USD:.2f}U，禁止主动平仓")
+                print(
+                    f"   💰 浮盈${unrealized_pnl:.2f}U < 最小${MIN_PROFIT_USD:.2f}U，禁止主动平仓"
+                )
                 continue  # 跳过这个持仓的检查
-            
+
             # 🆕 V8.7.2: 浮盈保护（已有2%+浮盈时，暂停硬失效检查，让TP/移动止损处理）
             entry_price = position.get("entry_price", 0)
             current_price = market_data.get("current_price", 0)
             if entry_price > 0 and current_price > 0:
                 side = position.get("side")
                 if side == "long":
-                    position_profit_pct = (current_price - entry_price) / entry_price * 100
+                    position_profit_pct = (
+                        (current_price - entry_price) / entry_price * 100
+                    )
                 else:
-                    position_profit_pct = (entry_price - current_price) / entry_price * 100
-                
+                    position_profit_pct = (
+                        (entry_price - current_price) / entry_price * 100
+                    )
+
                 if position_profit_pct > 2.0:
-                    print(f"   ✅ 浮盈{position_profit_pct:.1f}% > 2%，暂停硬失效检查（由TP/移动止损管理）")
+                    print(
+                        f"   ✅ 浮盈{position_profit_pct:.1f}% > 2%，暂停硬失效检查（由TP/移动止损管理）"
+                    )
                     continue  # 跳过这个持仓的检查
 
             # === 【硬失效检查】关键位破位（所有类型都检查）===
@@ -25656,17 +25656,19 @@ def _execute_single_close_action(action, current_positions):
 
         print(f"✓ 确认持仓: {real_pos['side']}仓 {real_pos['size']}个")
         print(f"  当前盈亏: {real_pos['unrealized_pnl']:+.2f}U")
-        
+
         # 🆕 V8.7.2: 强制最小盈利额检查（避免给交易所打工）
         unrealized_pnl = real_pos.get("unrealized_pnl", 0)
         position_size_usd = abs(real_pos.get("notional", 0))  # 仓位市值
-        
+
         # 最小盈利额 = 手续费成本 × 1.5 (Taker费0.05% × 2 = 0.1%，×1.5安全边际)
         MIN_PROFIT_USD = position_size_usd * 0.001 * 1.5
-        
+
         if unrealized_pnl > 0 and unrealized_pnl < MIN_PROFIT_USD:
-            print(f"⚠️ 利润${unrealized_pnl:.2f}U < 最小盈利${MIN_PROFIT_USD:.2f}U（手续费×1.5），禁止主动平仓")
-            print(f"   只能被SL/TP订单触发，继续持有等待")
+            print(
+                f"⚠️ 利润${unrealized_pnl:.2f}U < 最小盈利${MIN_PROFIT_USD:.2f}U（手续费×1.5），禁止主动平仓"
+            )
+            print("   只能被SL/TP订单触发，继续持有等待")
             return
 
         side = "sell" if real_pos["side"] == "long" else "buy"
@@ -30173,12 +30175,12 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     # 【V8.5.2.4.48】客观指标筛选 + V8.7.2质量过滤
                     if consensus < 2:
                         continue
-                    
+
                     # 🆕 V8.7.2: 添加入场条件验证，提高机会质量
                     trend_4h = str(current.get("trend_4h", ""))
                     volume_ratio = float(current.get("volume_ratio", 0))
                     rsi_15m = float(current.get("rsi_15m", 50))
-                    
+
                     # 必须满足：有4H趋势 + 成交量>1.2倍均值 + RSI偏离中性区
                     if not trend_4h or volume_ratio < 1.2 or abs(rsi_15m - 50) < 15:
                         continue
