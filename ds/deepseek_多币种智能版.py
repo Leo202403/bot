@@ -9358,12 +9358,16 @@ def quick_global_search_v8316(
     scalping_holding_mid = scalping_real_holding
     swing_holding_mid = swing_real_holding
 
+    # 🆕 V8.7.2: 硬性约束ATR倍数，避免过拟合历史极端波动
+    SCALPING_TP_MAX = 5.0  # 超短线TP上限5x ATR
+    SWING_TP_MAX = 12.0     # 波段TP上限12x ATR
+    
     scalping_params_range = {
         "atr_tp": [
-            max(6.0, round(scalping_required_tp * 0.7, 1)),  # 70%
-            max(8.0, round(scalping_required_tp * 0.85, 1)),  # 85%
-            round(scalping_required_tp, 1),  # 100%
-            min(20.0, round(scalping_required_tp * 1.15, 1)),  # 115%
+            3.0,  # V8.7.2: 固定为3-5x范围
+            3.5,
+            4.0,
+            5.0,  # 上限5x
         ],
         "atr_sl": [
             1.5,  # 基于高密度：需要宽容的止损
@@ -9381,10 +9385,10 @@ def quick_global_search_v8316(
 
     swing_params_range = {
         "atr_tp": [
-            max(12.0, round(swing_required_tp * 0.8, 1)),  # 80%
-            round(swing_required_tp, 1),  # 100%
-            round(swing_required_tp * 1.2, 1),  # 120%
-            min(30.0, round(swing_required_tp * 1.5, 1)),  # 150%
+            8.0,   # V8.7.2: 固定为8-12x范围
+            9.0,
+            10.0,
+            12.0,  # 上限12x
         ],
         "atr_sl": [
             2.5,  # 基于低密度：需要非常宽容的止损
@@ -24460,10 +24464,32 @@ def monitor_positions_for_invalidation(
             # 【V7.9】检查前提失效（分级策略）
             invalidation_reasons = []
             hard_invalidation = False  # 硬失效标志（无需确认，立即平仓）
+            
+            # 🆕 V8.7.2: 最小盈利额保护（防止给交易所打工）
+            unrealized_pnl = position.get("unrealized_pnl", 0)
+            position_size_usd = abs(position.get("notional", 0))
+            MIN_PROFIT_USD = position_size_usd * 0.001 * 1.5  # 手续费×1.5
+            
+            if unrealized_pnl > 0 and unrealized_pnl < MIN_PROFIT_USD:
+                print(f"   💰 浮盈${unrealized_pnl:.2f}U < 最小${MIN_PROFIT_USD:.2f}U，禁止主动平仓")
+                continue  # 跳过这个持仓的检查
+            
+            # 🆕 V8.7.2: 浮盈保护（已有2%+浮盈时，暂停硬失效检查，让TP/移动止损处理）
+            entry_price = position.get("entry_price", 0)
+            current_price = market_data.get("current_price", 0)
+            if entry_price > 0 and current_price > 0:
+                side = position.get("side")
+                if side == "long":
+                    position_profit_pct = (current_price - entry_price) / entry_price * 100
+                else:
+                    position_profit_pct = (entry_price - current_price) / entry_price * 100
+                
+                if position_profit_pct > 2.0:
+                    print(f"   ✅ 浮盈{position_profit_pct:.1f}% > 2%，暂停硬失效检查（由TP/移动止损管理）")
+                    continue  # 跳过这个持仓的检查
 
             # === 【硬失效检查】关键位破位（所有类型都检查）===
             key_levels = entry_context.get("key_levels", {})
-            current_price = market_data.get("current_price", 0)
 
             if side == "long":
                 # 多单：检查是否跌破关键支撑
@@ -24726,6 +24752,18 @@ def _execute_single_close_action(action, current_positions):
 
         print(f"✓ 确认持仓: {real_pos['side']}仓 {real_pos['size']}个")
         print(f"  当前盈亏: {real_pos['unrealized_pnl']:+.2f}U")
+        
+        # 🆕 V8.7.2: 强制最小盈利额检查（避免给交易所打工）
+        unrealized_pnl = real_pos.get("unrealized_pnl", 0)
+        position_size_usd = abs(real_pos.get("notional", 0))  # 仓位市值
+        
+        # 最小盈利额 = 手续费成本 × 1.5 (Taker费0.05% × 2 = 0.1%，×1.5安全边际)
+        MIN_PROFIT_USD = position_size_usd * 0.001 * 1.5
+        
+        if unrealized_pnl > 0 and unrealized_pnl < MIN_PROFIT_USD:
+            print(f"⚠️ 利润${unrealized_pnl:.2f}U < 最小盈利${MIN_PROFIT_USD:.2f}U（手续费×1.5），禁止主动平仓")
+            print(f"   只能被SL/TP订单触发，继续持有等待")
+            return
 
         side = "sell" if real_pos["side"] == "long" else "buy"
 
@@ -29101,21 +29139,22 @@ def analyze_separated_opportunities(market_snapshots, old_config):
 
         # 【V8.5.2.4.48】内存优化配置
         MAX_OPPORTUNITIES_PER_TYPE = 2000  # 每类最多2000个
-        MIN_PROFIT_THRESHOLD = 5.0  # 最低盈利门槛（统一）
+        MIN_PROFIT_THRESHOLD = 8.0  # 最低盈利门槛（从5.0%提升至8.0%，提高质量）
 
         # 【V8.5.2.4.48】分阶段处理
         # Phase 1.1: 收集所有盈利机会（不分类）
         all_profit_opportunities = []  # 轻量级列表，只存统计数据
 
-        # 【V8.4.4修复→V8.4.6优化】使用固定的基准参数，确保阶段2的客观性
+        # 【V8.4.4修复→V8.4.6优化→V8.7.2约束】使用固定的基准参数，确保阶段2的客观性
+        # V8.7.2: 大幅降低TP倍数，避免优化器过度拟合历史极端波动
         scalping_params = {
-            "atr_tp_multiplier": 2.0,
+            "atr_tp_multiplier": 4.0,  # 从2.0提升至4.0（超短线合理范围3-5x）
             "atr_stop_multiplier": 1.5,
             "max_holding_hours": 12,
         }
 
         swing_params = {
-            "atr_tp_multiplier": 6.0,
+            "atr_tp_multiplier": 10.0,  # 从6.0提升至10.0（波段合理范围8-12x）
             "atr_stop_multiplier": 2.5,
             "max_holding_hours": 72,
         }
@@ -29222,8 +29261,17 @@ def analyze_separated_opportunities(market_snapshots, old_config):
                     signal_type = str(current.get("signal_type", "swing")).lower()
                     signal_name = str(current.get("signal_name", ""))
 
-                    # 【V8.5.2.4.48】客观指标筛选（只用consensus）
+                    # 【V8.5.2.4.48】客观指标筛选 + V8.7.2质量过滤
                     if consensus < 2:
+                        continue
+                    
+                    # 🆕 V8.7.2: 添加入场条件验证，提高机会质量
+                    trend_4h = str(current.get("trend_4h", ""))
+                    volume_ratio = float(current.get("volume_ratio", 0))
+                    rsi_15m = float(current.get("rsi_15m", 50))
+                    
+                    # 必须满足：有4H趋势 + 成交量>1.2倍均值 + RSI偏离中性区
+                    if not trend_4h or volume_ratio < 1.2 or abs(rsi_15m - 50) < 15:
                         continue
 
                     # 获取后续24小时数据

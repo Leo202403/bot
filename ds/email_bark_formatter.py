@@ -343,8 +343,14 @@ def generate_profit_comparison_table(phase_data: dict[str, Any]) -> str:
 
     # 计算总利润（假设每个机会的平均利润 * 捕获数量）
     # 注意：这里需要实际的总利润数据，如果没有，用占位符
+    p1_scalping_total = p1.get("scalping_total_profit", 0)
+    p1_swing_total = p1.get("swing_total_profit", 0)
+    
     p2_scalping_total = p2.get("scalping_total_profit", 0)
     p2_swing_total = p2.get("swing_total_profit", 0)
+    
+    p3_scalping_total = p3.get("scalping_total_profit", 0)
+    p3_swing_total = p3.get("swing_total_profit", 0)
 
     p4_scalping_total = p4.get("scalping_total_profit", 0)
     p4_swing_total = p4.get("swing_total_profit", 0)
