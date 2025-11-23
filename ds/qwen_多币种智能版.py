@@ -67,7 +67,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class AIDecisionModel(BaseModel):
     """🆕 V8.8: AI决策输出的标准格式（使用Pydantic验证）
-    
+
     V8.8核心改进（基于交易员建议）：
     - ❌ 删除价格字段（AI不擅长算术）
     - ✅ 新增策略选择（AI做决策，Python算价格）
@@ -87,23 +87,16 @@ class AIDecisionModel(BaseModel):
 
     # 🆕 V8.8: TP/SL策略选择（AI选策略，不算价格）
     tpsl_strategy: Literal["ATR", "STRUCTURE", "NONE"] = Field(
-        default="ATR",
-        description="止盈止损策略：ATR数学止损 or STRUCTURE结构止损"
+        default="ATR", description="止盈止损策略：ATR数学止损 or STRUCTURE结构止损"
     )
-    
+
     # 🆕 V8.8: 可选的策略微调
     sl_multiplier_adjustment: float = Field(
-        default=1.0,
-        ge=0.8,
-        le=1.5,
-        description="止损倍数微调（0.8-1.5倍，默认1.0）"
+        default=1.0, ge=0.8, le=1.5, description="止损倍数微调（0.8-1.5倍，默认1.0）"
     )
-    
+
     tp_multiplier_adjustment: float = Field(
-        default=1.0,
-        ge=0.8,
-        le=2.0,
-        description="止盈倍数微调（0.8-2.0倍，默认1.0）"
+        default=1.0, ge=0.8, le=2.0, description="止盈倍数微调（0.8-2.0倍，默认1.0）"
     )
 
     # ⚠️ DEPRECATED V8.8: 以下字段已废弃（向后兼容）
@@ -2065,20 +2058,20 @@ class APIRateLimiter:
 
 class TPSLCalculator:
     """🆕 V8.8: TP/SL精确计算器（Python负责算术，AI负责决策）
-    
+
     核心理念：
     - AI极不擅长浮点数运算，让它计算价格会出错
     - Python 100%精确计算所有TP/SL选项
     - AI只做选择题：选ATR还是结构止损
-    
+
     解决问题：
     - 止损价格计算错误（AI算术能力差）
     - R:R计算不准确
     - 价格精度问题
-    
+
     交易员建议：Python算，AI选
     """
-    
+
     @staticmethod
     def calculate_tpsl_options(
         entry_price: float,
@@ -2088,10 +2081,10 @@ class TPSLCalculator:
         nearest_resistance: float,
         atr_tp_mult: float,
         atr_sl_mult: float,
-        signal_type: str = "swing"
+        signal_type: str = "swing",
     ) -> dict:
         """计算所有TP/SL选项（ATR + 结构）
-        
+
         Args:
             entry_price: 入场价格
             side: "long" or "short"
@@ -2101,11 +2094,11 @@ class TPSLCalculator:
             atr_tp_mult: ATR止盈倍数（如4.0）
             atr_sl_mult: ATR止损倍数（如1.5）
             signal_type: "scalping" or "swing"
-            
+
         Returns:
             dict with "atr" and "structure" options
+
         """
-        
         if side.lower() == "long":
             # === Option A: ATR止损 ===
             atr_sl_price = entry_price - (atr * atr_sl_mult)
@@ -2114,7 +2107,7 @@ class TPSLCalculator:
             atr_tp_distance = atr_tp_price - entry_price
             atr_rr = atr_tp_distance / atr_sl_distance if atr_sl_distance > 0 else 0
             atr_sl_pct = (atr_sl_distance / entry_price) * 100
-            
+
             # === Option B: 结构止损 ===
             # 止损：支撑位下方0.5个ATR（安全缓冲）
             structure_sl_price = nearest_support - (atr * 0.5)
@@ -2128,7 +2121,7 @@ class TPSLCalculator:
                 else 0
             )
             structure_sl_pct = (structure_sl_distance / entry_price) * 100
-            
+
         else:  # short
             # === Option A: ATR止损 ===
             atr_sl_price = entry_price + (atr * atr_sl_mult)
@@ -2137,7 +2130,7 @@ class TPSLCalculator:
             atr_tp_distance = entry_price - atr_tp_price
             atr_rr = atr_tp_distance / atr_sl_distance if atr_sl_distance > 0 else 0
             atr_sl_pct = (atr_sl_distance / entry_price) * 100
-            
+
             # === Option B: 结构止损 ===
             structure_sl_price = nearest_resistance + (atr * 0.5)
             structure_tp_price = nearest_support + (atr * 0.3)
@@ -2149,7 +2142,7 @@ class TPSLCalculator:
                 else 0
             )
             structure_sl_pct = (structure_sl_distance / entry_price) * 100
-        
+
         # 返回两种选项的完整信息
         return {
             "atr": {
@@ -2160,7 +2153,7 @@ class TPSLCalculator:
                 "rr_ratio": round(atr_rr, 2),
                 "sl_pct": round(atr_sl_pct, 2),
                 "method": "ATR",
-                "description": f"数学止损（ATR×{atr_sl_mult}/{atr_tp_mult}）"
+                "description": f"数学止损（ATR×{atr_sl_mult}/{atr_tp_mult}）",
             },
             "structure": {
                 "sl_price": round(structure_sl_price, 2),
@@ -2170,30 +2163,30 @@ class TPSLCalculator:
                 "rr_ratio": round(structure_rr, 2),
                 "sl_pct": round(structure_sl_pct, 2),
                 "method": "STRUCTURE",
-                "description": "结构止损（支撑/阻力位）"
-            }
+                "description": "结构止损（支撑/阻力位）",
+            },
         }
-    
+
     @staticmethod
     def validate_tpsl(
         sl_price: float,
         tp_price: float,
         entry_price: float,
         side: str,
-        min_rr: float = 1.5
+        min_rr: float = 1.5,
     ) -> tuple:
         """验证TP/SL是否合理
-        
+
         Returns:
             (is_valid: bool, reason: str, actual_rr: float)
+
         """
-        
         if side.lower() == "long":
             if sl_price >= entry_price:
                 return False, "止损价格必须低于入场价", 0
             if tp_price <= entry_price:
                 return False, "止盈价格必须高于入场价", 0
-            
+
             sl_distance = entry_price - sl_price
             tp_distance = tp_price - entry_price
         else:  # short
@@ -2201,37 +2194,36 @@ class TPSLCalculator:
                 return False, "止损价格必须高于入场价", 0
             if tp_price >= entry_price:
                 return False, "止盈价格必须低于入场价", 0
-            
+
             sl_distance = sl_price - entry_price
             tp_distance = entry_price - tp_price
-        
+
         actual_rr = tp_distance / sl_distance if sl_distance > 0 else 0
-        
+
         if actual_rr < min_rr:
             return False, f"R:R不足（{actual_rr:.2f} < {min_rr}）", actual_rr
-        
+
         return True, "验证通过", actual_rr
-    
+
     @staticmethod
     def format_options_for_prompt(options: dict, entry_price: float) -> str:
         """格式化选项用于AI Prompt"""
-        
         atr = options["atr"]
         struct = options["structure"]
-        
+
         return f"""# TP/SL OPTIONS (Python Pre-calculated)
 
 Option A (ATR - Mathematical):
-  - Stop Loss: ${atr['sl_price']} ({atr['sl_pct']:.2f}% from entry)
-  - Take Profit: ${atr['tp_price']}
-  - Risk:Reward: 1:{atr['rr_ratio']}
-  - Description: {atr['description']}
+  - Stop Loss: ${atr["sl_price"]} ({atr["sl_pct"]:.2f}% from entry)
+  - Take Profit: ${atr["tp_price"]}
+  - Risk:Reward: 1:{atr["rr_ratio"]}
+  - Description: {atr["description"]}
 
 Option B (Structure - Price Action):
-  - Stop Loss: ${struct['sl_price']} ({struct['sl_pct']:.2f}% from entry)
-  - Take Profit: ${struct['tp_price']}
-  - Risk:Reward: 1:{struct['rr_ratio']}
-  - Description: {struct['description']}
+  - Stop Loss: ${struct["sl_price"]} ({struct["sl_pct"]:.2f}% from entry)
+  - Take Profit: ${struct["tp_price"]}
+  - Risk:Reward: 1:{struct["rr_ratio"]}
+  - Description: {struct["description"]}
 
 Entry Price: ${entry_price}"""
 
@@ -21006,6 +20998,177 @@ Output JSON only:
         }
 
 
+# ==================== 【V8.8】AI决策辅助函数 ====================
+
+
+def build_tpsl_options_for_symbols(
+    market_data_list: list,
+    signal_type: str = "swing",
+    atr_tp_mult: float = 4.0,
+    atr_sl_mult: float = 1.5
+) -> dict:
+    """🆕 V8.8: 为所有币种预计算TP/SL选项
+    
+    Args:
+        market_data_list: 市场数据列表
+        signal_type: "scalping" or "swing"
+        atr_tp_mult: ATR止盈倍数
+        atr_sl_mult: ATR止损倍数
+        
+    Returns:
+        {symbol: {atr: {...}, structure: {...}}}
+    """
+    
+    tpsl_options_map = {}
+    
+    for data in market_data_list:
+        if data is None:
+            continue
+        
+        symbol = data.get("symbol")
+        price = data.get("price", 0)
+        atr = data.get("atr_14", 0)
+        
+        if not symbol or price <= 0 or atr <= 0:
+            continue
+        
+        # 获取支撑阻力位
+        sr = data.get("support_resistance", {})
+        nearest_support = sr.get("nearest_support", price * 0.98)
+        nearest_resistance = sr.get("nearest_resistance", price * 1.02)
+        
+        # 确定方向（根据趋势）
+        trend_4h = data.get("trend_4h", "")
+        side = "long" if "多" in str(trend_4h) or "Bull" in str(trend_4h) else "short"
+        
+        # 计算TP/SL选项
+        try:
+            options = TPSLCalculator.calculate_tpsl_options(
+                entry_price=price,
+                side=side,
+                atr=atr,
+                nearest_support=nearest_support,
+                nearest_resistance=nearest_resistance,
+                atr_tp_mult=atr_tp_mult,
+                atr_sl_mult=atr_sl_mult,
+                signal_type=signal_type
+            )
+            tpsl_options_map[symbol] = options
+        except Exception as e:
+            print(f"⚠️ 计算{symbol} TP/SL选项失败: {e}")
+            continue
+    
+    return tpsl_options_map
+
+
+def parse_ai_decision_v88(
+    ai_response: str,
+    tpsl_options_map: dict,
+    market_data_list: list
+) -> dict:
+    """🆕 V8.8: 解析AI决策（新格式）并应用Python计算的价格
+    
+    Args:
+        ai_response: AI的JSON响应
+        tpsl_options_map: 预计算的TP/SL选项
+        market_data_list: 市场数据列表
+        
+    Returns:
+        解析后的决策（包含实际价格）
+    """
+    
+    import json
+    
+    try:
+        # 解析JSON
+        if "```json" in ai_response:
+            ai_response = ai_response.split("```json")[1].split("```")[0]
+        elif "```" in ai_response:
+            ai_response = ai_response.split("```")[1].split("```")[0]
+        
+        decision = json.loads(ai_response.strip())
+        
+        # 获取基本决策信息
+        action = decision.get("action", "HOLD")
+        symbol = decision.get("symbol", "")
+        confidence = decision.get("confidence", 50)
+        reason = decision.get("reason", "")
+        
+        # 🆕 V8.8: 获取策略选择
+        tpsl_strategy = decision.get("tpsl_strategy", "ATR")
+        sl_adj = decision.get("sl_multiplier_adjustment", 1.0)
+        tp_adj = decision.get("tp_multiplier_adjustment", 1.0)
+        
+        # 如果是开仓操作，应用Python计算的价格
+        if action in ["OPEN_LONG", "OPEN_SHORT"] and symbol:
+            options = tpsl_options_map.get(symbol)
+            
+            if options:
+                # 根据AI选择的策略获取价格
+                if tpsl_strategy == "STRUCTURE" and options["structure"]["rr_ratio"] >= 1.5:
+                    selected = options["structure"]
+                    strategy_used = "STRUCTURE"
+                else:
+                    selected = options["atr"]
+                    strategy_used = "ATR"
+                
+                # 应用微调
+                entry_price = next(
+                    (d["price"] for d in market_data_list if d and d.get("symbol") == symbol),
+                    None
+                )
+                
+                if entry_price:
+                    # 计算调整后的价格
+                    sl_distance = abs(selected["sl_price"] - entry_price)
+                    tp_distance = abs(selected["tp_price"] - entry_price)
+                    
+                    if "LONG" in action:
+                        sl_price = entry_price - (sl_distance * sl_adj)
+                        tp_price = entry_price + (tp_distance * tp_adj)
+                    else:
+                        sl_price = entry_price + (sl_distance * sl_adj)
+                        tp_price = entry_price - (tp_distance * tp_adj)
+                    
+                    # 验证R:R
+                    is_valid, reason_msg, actual_rr = TPSLCalculator.validate_tpsl(
+                        sl_price, tp_price, entry_price,
+                        "long" if "LONG" in action else "short",
+                        min_rr=1.5
+                    )
+                    
+                    if is_valid:
+                        # 添加价格信息到决策
+                        decision["entry_price"] = round(entry_price, 2)
+                        decision["stop_loss_price"] = round(sl_price, 2)
+                        decision["take_profit_price"] = round(tp_price, 2)
+                        decision["actual_rr"] = actual_rr
+                        decision["strategy_used"] = strategy_used
+                        decision["_v88_enhanced"] = True
+                    else:
+                        # R:R不足，拒绝开仓
+                        decision["action"] = "HOLD"
+                        decision["reason"] = f"R:R验证失败: {reason_msg}"
+                        decision["confidence"] = 0
+        
+        return decision
+        
+    except json.JSONDecodeError as e:
+        print(f"⚠️ V8.8: JSON解析失败: {e}")
+        return {
+            "action": "HOLD",
+            "confidence": 0,
+            "reason": f"JSON解析失败: {str(e)}"
+        }
+    except Exception as e:
+        print(f"⚠️ V8.8: 决策解析失败: {e}")
+        return {
+            "action": "HOLD",
+            "confidence": 0,
+            "reason": f"决策解析失败: {str(e)}"
+        }
+
+
 def ai_portfolio_decision(
     market_data_list,
     current_positions,
@@ -21533,11 +21696,49 @@ System has learned from {trades_count} completed trades
             # 如果没有生成反转检查，回退到完整Prompt
             use_simplified_prompt = False
 
+    # 🆕 V8.8: 检查是否使用精简Prompt
+    use_v88_prompt = os.getenv("USE_V88_PROMPT", "false").lower() == "true"
+    tpsl_options_map = {}  # 初始化（V8.8需要）
+    
     if not use_simplified_prompt:
-        # 使用完整Prompt - 扫描Entry机会
-        print("   💡 [V8.9.1] 使用完整Prompt（Entry扫描）")
+        if use_v88_prompt:
+            # 🆕 V8.8: 使用精简Prompt（Python算价格，AI选策略）
+            print("   🚀 [V8.8] 使用精简Prompt（Python算，AI选）")
+            
+            # 1. 预计算TP/SL选项
+            tpsl_options_map = build_tpsl_options_for_symbols(
+                market_data_list,
+                signal_type="swing",
+                atr_tp_mult=swing_params.get("atr_tp_multiplier", 4.0),
+                atr_sl_mult=swing_params.get("atr_stop_multiplier", 1.5)
+            )
+            
+            # 2. 使用PromptBuilderV8构建精简Prompt
+            try:
+                from prompt_builder_v8 import PromptBuilderV8
+                
+                builder = PromptBuilderV8()
+                prompt = builder.build_optimized_prompt(
+                    market_data_list=market_data_list[:5],  # 限制5个币种
+                    current_positions=current_positions,
+                    tpsl_options_map=tpsl_options_map,
+                    balance=available_balance,
+                    signal_type="swing"
+                )
+                
+                token_estimate = len(prompt) // 4
+                print(f"   📊 [V8.8] Prompt Token: ~{token_estimate} (-85% vs 旧版)")
+            except Exception as e:
+                print(f"⚠️ [V8.8] Prompt构建失败，回退到旧版: {e}")
+                use_v88_prompt = False  # 回退
+        
+        if not use_v88_prompt:
+            # 使用完整Prompt - 扫描Entry机会
+            print("   💡 [V8.9.1] 使用完整Prompt（Entry扫描）")
 
-    prompt = f"""
+    if not use_v88_prompt:
+        # 旧版Prompt构建
+        prompt = f"""
 **[Reply in Chinese]** Professional cryptocurrency trading AI | 3-Layer Trend Framework
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -21880,12 +22081,35 @@ The regime recommendation is advisory - final decision depends on specific coin 
                 print(f"已添加 {open_brackets} 个 ] 和 {open_braces} 个 }}")
 
             try:
-                decision = json.loads(json_str)
+                if use_v88_prompt:
+                    # 🆕 V8.8: 使用新解析器（应用Python计算的价格）
+                    decision = parse_ai_decision_v88(
+                        json_str,
+                        tpsl_options_map,
+                        market_data_list
+                    )
+                    
+                    if decision.get("_v88_enhanced"):
+                        strategy = decision.get("strategy_used", "N/A")
+                        rr = decision.get("actual_rr", 0)
+                        print(f"✅ [V8.8] 决策已增强：{strategy}策略，R:R={rr:.2f}")
+                else:
+                    # 旧版解析
+                    decision = json.loads(json_str)
             except json.JSONDecodeError as e:
                 print(f"JSON解析失败: {e}")
                 # 如果修复失败，尝试使用提取函数
                 try:
-                    decision = extract_json_from_ai_response(result)
+                    if use_v88_prompt:
+                        # V8.8尝试备用方法
+                        extracted = extract_json_from_ai_response(result)
+                        decision = parse_ai_decision_v88(
+                            json.dumps(extracted),
+                            tpsl_options_map,
+                            market_data_list
+                        )
+                    else:
+                        decision = extract_json_from_ai_response(result)
                     print("✓ 使用备用方法成功提取JSON")
                 except Exception:
                     raise
