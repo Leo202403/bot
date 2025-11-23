@@ -24372,22 +24372,18 @@ def ai_evaluate_partial_close(position, partial_profit, market_data, entry_conte
     "alternative": "HOLD_ALL / CLOSE_ALL / PARTIAL_50"
 }}"""
 
-        # 调用AI
+        # 调用AI（Qwen专用）
         model_name = os.getenv("MODEL_NAME", "qwen")
-        if model_name == "deepseek":
-            response = deepseek_client.chat.completions.create(
-                model="deepseek-chat",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=300,
-            )
-        else:
+        if model_name == "qwen":
             response = qwen_client.chat.completions.create(
                 model="qwen-plus",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
                 max_tokens=300,
             )
+        else:
+            # Qwen版本不支持其他模型
+            raise ValueError(f"❌ Qwen版本只支持qwen模型，当前MODEL_NAME={model_name}")
 
         ai_content = response.choices[0].message.content.strip()
 
