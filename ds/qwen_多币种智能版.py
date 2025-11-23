@@ -8201,6 +8201,10 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         # 平衡型（各维度均衡）
         {'momentum': 24, 'volume': 29, 'breakout': 24, 'pattern': 14, 'trend_align': 11, 
          'volatility': 19, 'volume_pulse': 14, 'momentum_accel': 14, 'name': '平衡'},
+        # 🆕 V8.7.3交易员建议：高盈亏比探索（配合新维度）
+        {'momentum': 35, 'volume': 20, 'breakout': 20, 'pattern': 10, 'trend_align': 5, 
+         'volatility': 25, 'volume_pulse': 10, 'momentum_accel': 30, 'space_factor': 35, 
+         'position_factor': 25, 'name': '高盈亏比探索'},
     ]
     
     swing_weight_candidates = [
@@ -8214,6 +8218,9 @@ def quick_global_search_v8316(data_summary, current_config, confirmed_opportunit
         {'momentum': 25, 'volume': 40, 'breakout': 20, 'trend_align': 30, 'ema_divergence': 15, 'trend_4h_strength': 20, 'name': '动量放量'},
         # 平衡型
         {'momentum': 22, 'volume': 33, 'breakout': 23, 'trend_align': 33, 'ema_divergence': 15, 'trend_4h_strength': 25, 'name': '平衡'},
+        # 🆕 V8.7.3交易员建议：高盈亏比探索（配合新维度）
+        {'momentum': 15, 'volume': 15, 'breakout': 15, 'trend_align': 10, 'ema_divergence': 5, 
+         'trend_4h_strength': 10, 'space_factor': 35, 'position_factor': 30, 'freshness_factor': 20, 'name': '高盈亏比探索'},
     ]
     
     print(f"     ⚡ 超短线权重候选: {len(scalping_weight_candidates)}组")
