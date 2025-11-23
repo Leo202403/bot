@@ -30,8 +30,19 @@ class PromptBuilderV8:
         
         # 关键位置
         sr = market_data.get("support_resistance", {})
-        nearest_support = sr.get("nearest_support", price * 0.98)
-        nearest_resistance = sr.get("nearest_resistance", price * 1.02)
+        
+        # 处理可能是dict的support/resistance
+        nearest_support_data = sr.get("nearest_support", {})
+        if isinstance(nearest_support_data, dict):
+            nearest_support = nearest_support_data.get("price", price * 0.98)
+        else:
+            nearest_support = nearest_support_data if nearest_support_data else price * 0.98
+        
+        nearest_resistance_data = sr.get("nearest_resistance", {})
+        if isinstance(nearest_resistance_data, dict):
+            nearest_resistance = nearest_resistance_data.get("price", price * 1.02)
+        else:
+            nearest_resistance = nearest_resistance_data if nearest_resistance_data else price * 1.02
         
         # 检测到的形态（Python检测）
         pattern = market_data.get("pattern", "")
