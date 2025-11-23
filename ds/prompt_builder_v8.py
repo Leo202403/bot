@@ -148,16 +148,18 @@ class PromptBuilderV8:
         # 5. 决策规则（简化，无冲突）
         if signal_type == "scalping":
             rules = """# RULES (Scalping)
-1. Only trade if Signal Score > 80
-2. Choose TP/SL strategy with better R:R (min 1.5)
-3. Exit if holding > 2 hours
-4. Leverage: 5-8x"""
+1. ⚠️ Only ONE position per symbol - if already holding, must HOLD or use a different symbol
+2. Only trade if Signal Score > 80
+3. Choose TP/SL strategy with better R:R (min 1.5)
+4. Exit if holding > 2 hours
+5. Leverage: 5-8x"""
         else:  # swing
             rules = """# RULES (Swing)
-1. Only trade if Signal Score > 75
-2. Prefer STRUCTURE strategy if R:R > 2.0
-3. Exit if holding > 24 hours with no profit
-4. Leverage: 3-5x"""
+1. ⚠️ Only ONE position per symbol - if already holding, must HOLD or use a different symbol
+2. Only trade if Signal Score > 75
+3. Prefer STRUCTURE strategy if R:R > 2.0
+4. Exit if holding > 24 hours with no profit
+5. Leverage: 3-5x"""
         
         # 6. 输出格式（删除价格字段）
         output_format = """# OUTPUT FORMAT (JSON only, no markdown)
