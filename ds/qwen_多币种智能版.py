@@ -66,7 +66,12 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class AIDecisionModel(BaseModel):
-    """🆕 V8.8 P1: AI决策输出的标准格式（使用Pydantic验证）
+    """🆕 V8.8: AI决策输出的标准格式（使用Pydantic验证）
+    
+    V8.8核心改进（基于交易员建议）：
+    - ❌ 删除价格字段（AI不擅长算术）
+    - ✅ 新增策略选择（AI做决策，Python算价格）
+    - ✅ 分离意图与计算
 
     优势：
     1. 自动类型验证
@@ -78,12 +83,39 @@ class AIDecisionModel(BaseModel):
     # 核心决策
     action: Literal["OPEN_LONG", "OPEN_SHORT", "CLOSE", "HOLD", "ADD_POSITION"]
     confidence: float = Field(ge=0, le=100, description="置信度 0-100")
-    reason: str = Field(max_length=1000, description="决策理由")
+    reason: str = Field(max_length=200, description="决策理由（简洁）")
 
-    # 价格相关（可选）
-    entry_price: float | None = Field(None, gt=0, description="入场价格")
-    stop_loss_price: float | None = Field(None, gt=0, description="止损价格")
-    take_profit_price: float | None = Field(None, gt=0, description="止盈价格")
+    # 🆕 V8.8: TP/SL策略选择（AI选策略，不算价格）
+    tpsl_strategy: Literal["ATR", "STRUCTURE", "NONE"] = Field(
+        default="ATR",
+        description="止盈止损策略：ATR数学止损 or STRUCTURE结构止损"
+    )
+    
+    # 🆕 V8.8: 可选的策略微调
+    sl_multiplier_adjustment: float = Field(
+        default=1.0,
+        ge=0.8,
+        le=1.5,
+        description="止损倍数微调（0.8-1.5倍，默认1.0）"
+    )
+    
+    tp_multiplier_adjustment: float = Field(
+        default=1.0,
+        ge=0.8,
+        le=2.0,
+        description="止盈倍数微调（0.8-2.0倍，默认1.0）"
+    )
+
+    # ⚠️ DEPRECATED V8.8: 以下字段已废弃（向后兼容）
+    entry_price: float | None = Field(
+        None, gt=0, description="[已废弃] 入场价格（由Python计算）"
+    )
+    stop_loss_price: float | None = Field(
+        None, gt=0, description="[已废弃] 止损价格（由Python计算）"
+    )
+    take_profit_price: float | None = Field(
+        None, gt=0, description="[已废弃] 止盈价格（由Python计算）"
+    )
 
     # 仓位相关（可选）
     position_size: float | None = Field(None, gt=0, description="仓位大小")
@@ -2026,6 +2058,182 @@ class APIRateLimiter:
                 "requests_remaining": self.max_requests - self.request_count,
                 "weight_remaining": self.weight_limit - self.weight_count,
             }
+
+
+# ==================== 【V8.8】TP/SL精确计算器 ====================
+
+
+class TPSLCalculator:
+    """🆕 V8.8: TP/SL精确计算器（Python负责算术，AI负责决策）
+    
+    核心理念：
+    - AI极不擅长浮点数运算，让它计算价格会出错
+    - Python 100%精确计算所有TP/SL选项
+    - AI只做选择题：选ATR还是结构止损
+    
+    解决问题：
+    - 止损价格计算错误（AI算术能力差）
+    - R:R计算不准确
+    - 价格精度问题
+    
+    交易员建议：Python算，AI选
+    """
+    
+    @staticmethod
+    def calculate_tpsl_options(
+        entry_price: float,
+        side: str,
+        atr: float,
+        nearest_support: float,
+        nearest_resistance: float,
+        atr_tp_mult: float,
+        atr_sl_mult: float,
+        signal_type: str = "swing"
+    ) -> dict:
+        """计算所有TP/SL选项（ATR + 结构）
+        
+        Args:
+            entry_price: 入场价格
+            side: "long" or "short"
+            atr: ATR值（通常用1H或4H）
+            nearest_support: 最近支撑位
+            nearest_resistance: 最近阻力位
+            atr_tp_mult: ATR止盈倍数（如4.0）
+            atr_sl_mult: ATR止损倍数（如1.5）
+            signal_type: "scalping" or "swing"
+            
+        Returns:
+            dict with "atr" and "structure" options
+        """
+        
+        if side.lower() == "long":
+            # === Option A: ATR止损 ===
+            atr_sl_price = entry_price - (atr * atr_sl_mult)
+            atr_tp_price = entry_price + (atr * atr_tp_mult)
+            atr_sl_distance = entry_price - atr_sl_price
+            atr_tp_distance = atr_tp_price - entry_price
+            atr_rr = atr_tp_distance / atr_sl_distance if atr_sl_distance > 0 else 0
+            atr_sl_pct = (atr_sl_distance / entry_price) * 100
+            
+            # === Option B: 结构止损 ===
+            # 止损：支撑位下方0.5个ATR（安全缓冲）
+            structure_sl_price = nearest_support - (atr * 0.5)
+            # 止盈：阻力位前0.3个ATR（避免假突破）
+            structure_tp_price = nearest_resistance - (atr * 0.3)
+            structure_sl_distance = entry_price - structure_sl_price
+            structure_tp_distance = structure_tp_price - entry_price
+            structure_rr = (
+                structure_tp_distance / structure_sl_distance
+                if structure_sl_distance > 0
+                else 0
+            )
+            structure_sl_pct = (structure_sl_distance / entry_price) * 100
+            
+        else:  # short
+            # === Option A: ATR止损 ===
+            atr_sl_price = entry_price + (atr * atr_sl_mult)
+            atr_tp_price = entry_price - (atr * atr_tp_mult)
+            atr_sl_distance = atr_sl_price - entry_price
+            atr_tp_distance = entry_price - atr_tp_price
+            atr_rr = atr_tp_distance / atr_sl_distance if atr_sl_distance > 0 else 0
+            atr_sl_pct = (atr_sl_distance / entry_price) * 100
+            
+            # === Option B: 结构止损 ===
+            structure_sl_price = nearest_resistance + (atr * 0.5)
+            structure_tp_price = nearest_support + (atr * 0.3)
+            structure_sl_distance = structure_sl_price - entry_price
+            structure_tp_distance = entry_price - structure_tp_price
+            structure_rr = (
+                structure_tp_distance / structure_sl_distance
+                if structure_sl_distance > 0
+                else 0
+            )
+            structure_sl_pct = (structure_sl_distance / entry_price) * 100
+        
+        # 返回两种选项的完整信息
+        return {
+            "atr": {
+                "sl_price": round(atr_sl_price, 2),
+                "tp_price": round(atr_tp_price, 2),
+                "sl_distance": round(atr_sl_distance, 2),
+                "tp_distance": round(atr_tp_distance, 2),
+                "rr_ratio": round(atr_rr, 2),
+                "sl_pct": round(atr_sl_pct, 2),
+                "method": "ATR",
+                "description": f"数学止损（ATR×{atr_sl_mult}/{atr_tp_mult}）"
+            },
+            "structure": {
+                "sl_price": round(structure_sl_price, 2),
+                "tp_price": round(structure_tp_price, 2),
+                "sl_distance": round(structure_sl_distance, 2),
+                "tp_distance": round(structure_tp_distance, 2),
+                "rr_ratio": round(structure_rr, 2),
+                "sl_pct": round(structure_sl_pct, 2),
+                "method": "STRUCTURE",
+                "description": "结构止损（支撑/阻力位）"
+            }
+        }
+    
+    @staticmethod
+    def validate_tpsl(
+        sl_price: float,
+        tp_price: float,
+        entry_price: float,
+        side: str,
+        min_rr: float = 1.5
+    ) -> tuple:
+        """验证TP/SL是否合理
+        
+        Returns:
+            (is_valid: bool, reason: str, actual_rr: float)
+        """
+        
+        if side.lower() == "long":
+            if sl_price >= entry_price:
+                return False, "止损价格必须低于入场价", 0
+            if tp_price <= entry_price:
+                return False, "止盈价格必须高于入场价", 0
+            
+            sl_distance = entry_price - sl_price
+            tp_distance = tp_price - entry_price
+        else:  # short
+            if sl_price <= entry_price:
+                return False, "止损价格必须高于入场价", 0
+            if tp_price >= entry_price:
+                return False, "止盈价格必须低于入场价", 0
+            
+            sl_distance = sl_price - entry_price
+            tp_distance = entry_price - tp_price
+        
+        actual_rr = tp_distance / sl_distance if sl_distance > 0 else 0
+        
+        if actual_rr < min_rr:
+            return False, f"R:R不足（{actual_rr:.2f} < {min_rr}）", actual_rr
+        
+        return True, "验证通过", actual_rr
+    
+    @staticmethod
+    def format_options_for_prompt(options: dict, entry_price: float) -> str:
+        """格式化选项用于AI Prompt"""
+        
+        atr = options["atr"]
+        struct = options["structure"]
+        
+        return f"""# TP/SL OPTIONS (Python Pre-calculated)
+
+Option A (ATR - Mathematical):
+  - Stop Loss: ${atr['sl_price']} ({atr['sl_pct']:.2f}% from entry)
+  - Take Profit: ${atr['tp_price']}
+  - Risk:Reward: 1:{atr['rr_ratio']}
+  - Description: {atr['description']}
+
+Option B (Structure - Price Action):
+  - Stop Loss: ${struct['sl_price']} ({struct['sl_pct']:.2f}% from entry)
+  - Take Profit: ${struct['tp_price']}
+  - Risk:Reward: 1:{struct['rr_ratio']}
+  - Description: {struct['description']}
+
+Entry Price: ${entry_price}"""
 
 
 # ==================== 【V8.8 P0】投资组合风控管理器 ====================

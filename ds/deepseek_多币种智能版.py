@@ -32,10 +32,10 @@ from scipy.signal import argrelextrema
 
 # 保留AI深度分析功能
 
-# 🔧 明确指定 .env.deepseek 文件路径
-_env_file = Path(__file__).parent / ".env.deepseek"
+# 🔧 明确指定 .env 文件路径
+_env_file = Path(__file__).parent / ".env"
 if not _env_file.exists():
-    raise FileNotFoundError(f"❌ 找不到 .env.deepseek 文件: {_env_file}")
+    raise FileNotFoundError(f"❌ 找不到 .env 文件: {_env_file}")
 load_dotenv(_env_file, override=True)
 
 # 🔧 V8.3.32.13: 模型显示名称（用于Bark推送）
