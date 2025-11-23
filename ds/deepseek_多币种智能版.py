@@ -48,6 +48,15 @@ ENABLE_PER_SYMBOL_OPTIMIZATION = False  # Per-Symbol优化（56-91分钟）
 ENABLE_CONDITIONAL_AI_CALL = True  # 条件AI调用（仅Time Exit>80%时）
 AI_AGGRESSIVENESS_DYNAMIC = True  # 动态AI激进度（根据Time Exit率调整）
 
+# ==================== 【V8.7.4】执行风控配置 ====================
+# 🆕 V8.7.4: 最小名义价值安全缓冲（交易员建议）
+# 目的：防止边缘情况下因价格微变导致订单被拒
+# 原理：计算amount时，不是刚好满足5U，而是确保≥5.5U（10%缓冲）
+NOTIONAL_BUFFER_MULTIPLIER = 1.10  # 10%安全缓冲
+
+# 🆕 V8.7.4: 全局回撤熔断阈值
+MAX_DAILY_DRAWDOWN_PCT = 5.0  # 单日最大回撤5%（超过则强制平仓）
+
 # ==================== 辅助函数 ====================
 
 # 🆕 V8.8 P1: Pydantic数据模型 - 标准化AI输出格式
@@ -1221,12 +1230,18 @@ class OrderExecutor:
     def aggressive_limit_order(
         self, symbol: str, side: str, amount: float, current_price: float
     ) -> dict:
-        """激进限价单：挂在对手盘最优价，几乎立即成交
+        """🆕 V8.7.4: 激进限价单 + Chase Logic（撤单重挂）
+
+        核心改进：
+        - 如果订单未成交，自动撤单并追价重挂
+        - 最多追单3次，每次追价0.1%
+        - 最后兜底：市价单确保成交（止损场景必须成交）
 
         优势：
         - Maker费率（0.02%）
         - 快速成交
         - 有滑点保护
+        - 🆕 追单机制：提高成交率
 
         Args:
             symbol: 交易对
@@ -1238,15 +1253,134 @@ class OrderExecutor:
             订单对象 or None
 
         """
+        max_chases = 3  # 🆕 最大追单次数
+        chase_step_pct = 0.1  # 🆕 每次追价幅度（0.1%）
+        timeout_per_chase = 2  # 🆕 每次等待成交的时间
+
         try:
-            # 获取实时盘口（币安API要求limit>=5）
+            # 获取初始盘口价格
             orderbook = self.exchange.fetch_order_book(symbol, limit=5)
 
             if side == "buy":
-                # 买入：挂在卖一价（吃对手盘的挂单，但我们是Maker）
                 if not orderbook.get("asks") or len(orderbook["asks"]) == 0:
                     print("⚠️ 盘口数据异常，卖盘为空")
                     return None
+                base_price = orderbook["asks"][0][0]
+            else:
+                if not orderbook.get("bids") or len(orderbook["bids"]) == 0:
+                    print("⚠️ 盘口数据异常，买盘为空")
+                    return None
+                base_price = orderbook["bids"][0][0]
+
+            current_order_price = base_price
+
+            # 🆕 开始追单循环
+            for chase_round in range(max_chases):
+                # 计算当前价格（考虑追价和滑点）
+                slippage = self.config.get("aggressive_limit_slippage", 0.05) / 100
+                if side == "buy":
+                    price = current_order_price * (1 + slippage)
+                else:
+                    price = current_order_price * (1 - slippage)
+
+                # 价格精度处理
+                price = float(self.exchange.price_to_precision(symbol, price))
+
+                # 滑点保护
+                max_slippage = self.config.get("market_order_slippage", 0.2) / 100
+                if side == "buy":
+                    if price > current_price * (1 + max_slippage):
+                        msg = f"⚠️ 价格超出滑点保护({price:.4f} > "
+                        msg += f"{current_price * (1 + max_slippage):.4f})"
+                        print(msg)
+                        return None
+                elif price < current_price * (1 - max_slippage):
+                    msg = f"⚠️ 价格超出滑点保护({price:.4f} < "
+                    msg += f"{current_price * (1 - max_slippage):.4f})"
+                    print(msg)
+                    return None
+
+                # 显示追单信息
+                if chase_round == 0:
+                    print(f"📝 激进限价单: {side} {amount:.6f} @ {price:.4f}")
+                else:
+                    chase_pct = chase_step_pct * chase_round
+                    print(
+                        f"   🏃 Chase #{chase_round}: @ {price:.4f} (+{chase_pct:.2f}%)"
+                    )
+
+                # 下单
+                order = self.exchange.create_limit_order(symbol, side, amount, price)
+
+                # 等待成交
+                time.sleep(timeout_per_chase)
+
+                # 检查成交状态
+                try:
+                    order_status = self.exchange.fetch_order(order["id"], symbol)
+                    filled_amount = float(order_status.get("filled", 0))
+
+                    # 95%以上算成交成功
+                    if filled_amount >= amount * 0.95:
+                        avg_price = order_status.get("average", price)
+                        print(
+                            f"✅ 订单成交 @ {avg_price:.4f} (Round {chase_round + 1})"
+                        )
+                        return order_status
+                    if order_status["status"] == "closed":
+                        avg_price = order_status.get("average", price)
+                        print(f"✅ 订单成交 @ {avg_price:.4f}")
+                        return order_status
+
+                    # 未成交：撤单准备追价
+                    if chase_round < max_chases - 1:  # 不是最后一次
+                        try:
+                            self.exchange.cancel_order(order["id"], symbol)
+                            time.sleep(0.3)  # 给交易所反应时间
+                            print("   ⏳ 未成交，撤单并准备追价...")
+                        except Exception as cancel_err:
+                            # 可能已经成交了
+                            recheck = self.exchange.fetch_order(order["id"], symbol)
+                            if recheck["status"] == "closed":
+                                avg_price = recheck.get("average", price)
+                                print(f"✅ 订单在撤单时成交 @ {avg_price:.4f}")
+                                return recheck
+                            print(f"⚠️ 撤单失败: {cancel_err}")
+
+                        # 追价：买单往上追，卖单往下追
+                        if side == "buy":
+                            current_order_price *= 1 + chase_step_pct / 100
+                        else:
+                            current_order_price *= 1 - chase_step_pct / 100
+
+                except Exception as fetch_err:
+                    print(f"⚠️ 查询订单状态失败: {fetch_err}")
+                    # 状态不明，返回原订单
+                    return order
+
+            # 🆕 追单3次仍未成交：最后兜底市价单
+            print(f"   ⚠️ 追单{max_chases}次仍未成交，切换市价单确保成交")
+            try:
+                # 先撤掉最后一次的限价单
+                try:
+                    self.exchange.cancel_order(order["id"], symbol)
+                    time.sleep(0.2)
+                except:
+                    pass
+
+                # 市价单
+                market_order = self.exchange.create_market_order(symbol, side, amount)
+                print("✅ 市价单已提交（兜底）")
+                return market_order
+            except Exception as market_err:
+                print(f"❌ 市价单兜底失败: {market_err}")
+                return order  # 返回最后一次的订单
+
+        except Exception as e:
+            print(f"❌ 激进限价单失败: {e}")
+            return None
+
+
 
                 best_ask = orderbook["asks"][0][0]
                 # 略微上浮0.05%确保成交
@@ -1636,6 +1770,323 @@ class UnifiedOrderExecutor:
 
 
 # ==================== 订单执行优化器结束 ====================
+
+
+# ==================== 【V8.7.4】全局回撤熔断器 ====================
+
+
+class GlobalDrawdownProtector:
+    """🆕 V8.7.4: 全局净值回撤熔断器（专业风控标配）
+    
+    核心功能：
+    1. 每日净值监控：记录日初始净值
+    2. 实时回撤计算：当前净值 vs 日初始净值
+    3. 熔断机制：回撤超阈值→强制平仓→停止交易至明日
+    
+    目的：
+    - 防止单日巨亏（如-10%、-20%）
+    - 保护本金安全
+    - 给策略"冷静期"
+    
+    适用场景：
+    - 黑天鹅事件（闪崩、监管消息）
+    - 策略失效期（市场环境剧变）
+    - 系统异常（AI决策混乱）
+    
+    交易员建议：专业交易团队的标配风控
+    """
+    
+    def __init__(self, max_daily_dd_pct: float = 5.0):
+        """初始化熔断器
+        
+        Args:
+            max_daily_dd_pct: 最大单日回撤百分比（默认5%）
+        """
+        self.max_daily_dd_pct = max_daily_dd_pct
+        self.daily_start_equity = None
+        self.last_reset_date = None
+        self.is_halted = False
+        self.halt_reason = ""
+        
+    def update_daily_start(self, current_equity: float):
+        """每日重置（在交易日开始时调用）"""
+        from datetime import datetime
+        
+        today = datetime.now().date()
+        if self.last_reset_date != today:
+            self.daily_start_equity = current_equity
+            self.last_reset_date = today
+            self.is_halted = False
+            self.halt_reason = ""
+            print(f"📊 [回撤保护器] 日初始净值: ${current_equity:.2f}")
+    
+    def check_drawdown(self, current_equity: float) -> tuple:
+        """检查是否触发熔断
+        
+        Returns:
+            (is_halted: bool, dd_pct: float, message: str)
+        """
+        if self.daily_start_equity is None:
+            self.update_daily_start(current_equity)
+            return False, 0, ""
+        
+        # 计算回撤
+        dd_amount = current_equity - self.daily_start_equity
+        dd_pct = (dd_amount / self.daily_start_equity) * 100
+        
+        # 检查是否触发熔断
+        if dd_pct < -self.max_daily_dd_pct and not self.is_halted:
+            self.is_halted = True
+            self.halt_reason = (
+                f"单日回撤 {dd_pct:.2f}% 超过阈值 {self.max_daily_dd_pct}%"
+            )
+            msg = f"🚨 [全局熔断] {self.halt_reason}\n"
+            msg += f"   日初: ${self.daily_start_equity:.2f}\n"
+            msg += f"   当前: ${current_equity:.2f}\n"
+            msg += f"   亏损: ${dd_amount:.2f}"
+            print(msg)
+            return True, dd_pct, msg
+        
+        return self.is_halted, dd_pct, self.halt_reason
+    
+    def get_status(self) -> dict:
+        """获取当前状态（用于状态持久化）"""
+        return {
+            "max_daily_dd_pct": self.max_daily_dd_pct,
+            "daily_start_equity": self.daily_start_equity,
+            "last_reset_date": (
+                self.last_reset_date.isoformat()
+                if self.last_reset_date
+                else None
+            ),
+            "is_halted": self.is_halted,
+            "halt_reason": self.halt_reason,
+        }
+    
+    def restore_state(self, state: dict):
+        """恢复状态（从持久化数据恢复）"""
+        from datetime import datetime, date
+        
+        self.max_daily_dd_pct = state.get("max_daily_dd_pct", 5.0)
+        self.daily_start_equity = state.get("daily_start_equity")
+        
+        last_reset_str = state.get("last_reset_date")
+        if last_reset_str:
+            self.last_reset_date = date.fromisoformat(last_reset_str)
+        
+        self.is_halted = state.get("is_halted", False)
+        self.halt_reason = state.get("halt_reason", "")
+
+
+# ==================== 【V8.7.4】运行时状态管理器 ====================
+
+
+class RuntimeStateManager:
+    """🆕 V8.7.4: 运行时状态管理器（崩溃恢复能力）
+    
+    核心功能：
+    1. 状态持久化：定期保存关键运行时状态到文件
+    2. 崩溃恢复：程序重启时自动恢复上次的状态
+    3. 避免重复分析：AICallOptimizer的指纹、调用时间等
+    
+    保存的状态：
+    - AICallOptimizer: last_fingerprints, last_call_time
+    - GlobalDrawdownProtector: 日初始净值, 熔断状态
+    - 其他关键状态
+    
+    交易员建议：专业系统必备的鲁棒性设计
+    """
+    
+    STATE_FILE = "runtime_state.json"
+    
+    @staticmethod
+    def save_state(
+        ai_optimizer=None,
+        drawdown_protector=None,
+        extra_state: dict = None
+    ):
+        """保存关键状态到文件"""
+        state = {
+            "timestamp": datetime.now().isoformat(),
+            "version": "V8.7.4",
+        }
+        
+        # AI Optimizer状态
+        if ai_optimizer:
+            try:
+                state["ai_optimizer"] = {
+                    "last_fingerprints": ai_optimizer.last_fingerprints,
+                    "last_call_time": (
+                        ai_optimizer.last_call_time.isoformat()
+                        if hasattr(ai_optimizer, "last_call_time")
+                        and ai_optimizer.last_call_time
+                        else None
+                    ),
+                }
+            except Exception as e:
+                print(f"⚠️ 保存AI Optimizer状态失败: {e}")
+        
+        # Drawdown Protector状态
+        if drawdown_protector:
+            try:
+                state["drawdown_protector"] = drawdown_protector.get_status()
+            except Exception as e:
+                print(f"⚠️ 保存Drawdown Protector状态失败: {e}")
+        
+        # 额外状态
+        if extra_state:
+            state["extra"] = extra_state
+        
+        # 写入文件
+        try:
+            with open(RuntimeStateManager.STATE_FILE, "w") as f:
+                json.dump(state, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"❌ 保存运行时状态失败: {e}")
+    
+    @staticmethod
+    def load_state() -> dict:
+        """启动时恢复状态"""
+        if not os.path.exists(RuntimeStateManager.STATE_FILE):
+            print("📋 未检测到上次运行状态，全新启动")
+            return None
+        
+        try:
+            with open(RuntimeStateManager.STATE_FILE, "r") as f:
+                state = json.load(f)
+            
+            print(f"🔄 检测到上次运行状态（{state.get('timestamp', 'unknown')}），正在恢复...")
+            return state
+        except Exception as e:
+            print(f"⚠️ 加载运行时状态失败: {e}")
+            return None
+    
+    @staticmethod
+    def restore_ai_optimizer(ai_optimizer, saved_state: dict):
+        """恢复AI Optimizer状态"""
+        if not saved_state or "ai_optimizer" not in saved_state:
+            return
+        
+        try:
+            ai_opt_state = saved_state["ai_optimizer"]
+            
+            if "last_fingerprints" in ai_opt_state:
+                ai_optimizer.last_fingerprints = ai_opt_state["last_fingerprints"]
+                print(f"   ✅ 恢复AI指纹记录: {len(ai_optimizer.last_fingerprints)}个")
+            
+            if "last_call_time" in ai_opt_state and ai_opt_state["last_call_time"]:
+                ai_optimizer.last_call_time = datetime.fromisoformat(
+                    ai_opt_state["last_call_time"]
+                )
+                print(f"   ✅ 恢复AI调用时间: {ai_optimizer.last_call_time}")
+        
+        except Exception as e:
+            print(f"⚠️ 恢复AI Optimizer状态失败: {e}")
+    
+    @staticmethod
+    def restore_drawdown_protector(
+        drawdown_protector,
+        saved_state: dict
+    ):
+        """恢复Drawdown Protector状态"""
+        if not saved_state or "drawdown_protector" not in saved_state:
+            return
+        
+        try:
+            drawdown_protector.restore_state(saved_state["drawdown_protector"])
+            print(
+                f"   ✅ 恢复回撤保护器状态: "
+                f"熔断={drawdown_protector.is_halted}"
+            )
+        except Exception as e:
+            print(f"⚠️ 恢复Drawdown Protector状态失败: {e}")
+
+
+# ==================== 【V8.7.4】API限频器 ====================
+
+
+class APIRateLimiter:
+    """🆕 V8.7.4: 全局API请求频率控制器（令牌桶算法）
+    
+    核心功能：
+    1. 请求计数：追踪每分钟的请求次数和权重
+    2. 自动限流：超限时自动阻塞等待
+    3. 权重感知：不同API调用消耗不同权重
+    
+    币安API限制：
+    - 请求频率：1200次/分钟
+    - 权重限制：6000权重/分钟
+    
+    权重示例：
+    - 下单/撤单：1权重
+    - 查询订单：2权重
+    - 查询持仓：5权重
+    
+    交易员建议：避免触发Rate Limit导致封号
+    """
+    
+    def __init__(
+        self,
+        max_requests_per_minute: int = 1200,
+        weight_limit_per_minute: int = 6000
+    ):
+        import threading
+        
+        self.max_requests = max_requests_per_minute
+        self.weight_limit = weight_limit_per_minute
+        
+        self.request_count = 0
+        self.weight_count = 0
+        self.window_start = time.time()
+        self.lock = threading.Lock()
+        
+        print(f"🚦 [API限频器] 已启动: {max_requests_per_minute}次/分, "
+              f"{weight_limit_per_minute}权重/分")
+    
+    def acquire(self, weight: int = 1):
+        """请求许可（阻塞直到获得）"""
+        with self.lock:
+            now = time.time()
+            
+            # 每分钟重置
+            if now - self.window_start >= 60:
+                self.request_count = 0
+                self.weight_count = 0
+                self.window_start = now
+            
+            # 检查是否超限
+            if (self.request_count >= self.max_requests or
+                    self.weight_count + weight > self.weight_limit):
+                # 计算需要等待的时间
+                wait_time = 60 - (now - self.window_start)
+                if wait_time > 0:
+                    req_msg = f"请求{self.request_count}/{self.max_requests}"
+                    weight_msg = f"权重{self.weight_count}/{self.weight_limit}"
+                    print(f"⏳ [API限频] {req_msg}, {weight_msg}, 等待{wait_time:.1f}s")
+                    time.sleep(wait_time)
+                
+                # 重置
+                self.request_count = 0
+                self.weight_count = 0
+                self.window_start = time.time()
+            
+            # 计数
+            self.request_count += 1
+            self.weight_count += weight
+    
+    def get_status(self) -> dict:
+        """获取当前状态"""
+        with self.lock:
+            elapsed = time.time() - self.window_start
+            return {
+                "request_count": self.request_count,
+                "weight_count": self.weight_count,
+                "max_requests": self.max_requests,
+                "weight_limit": self.weight_limit,
+                "elapsed_seconds": elapsed,
+                "requests_remaining": self.max_requests - self.request_count,
+                "weight_remaining": self.weight_limit - self.weight_count,
+            }
 
 
 # ==================== 【V8.8 P0】投资组合风控管理器 ====================
@@ -25792,16 +26243,21 @@ def _execute_single_open_action_v55(
     else:
         MIN_NOTIONAL = 5  # 其他币种标准要求
 
+    # 🆕 V8.7.4: 使用全局缓冲系数（10%安全缓冲，防止边缘情况被拒）
     # 计算调整后的名义价值
     adjusted_notional = planned_position * leverage
-    if adjusted_notional < MIN_NOTIONAL * 1.2:  # 需要120U名义价值（100U + 20%缓冲）
+    buffered_min_notional = MIN_NOTIONAL * NOTIONAL_BUFFER_MULTIPLIER
+    if adjusted_notional < buffered_min_notional:
         # 重新计算需要的最小仓位
-        target_notional = MIN_NOTIONAL * 1.2
+        target_notional = buffered_min_notional
         min_position_required = target_notional / leverage
 
         if min_position_required <= available_balance:
+            buffer_pct = (NOTIONAL_BUFFER_MULTIPLIER - 1) * 100
             print(
-                f"   💡 LWP降低后重新调整: ${planned_position:.2f} → ${min_position_required:.2f} (确保名义价值≥{MIN_NOTIONAL}U)"
+                f"   💡 LWP降低后重新调整: ${planned_position:.2f} → "
+                f"${min_position_required:.2f} "
+                f"(确保名义价值≥{MIN_NOTIONAL}U + {buffer_pct:.0f}%缓冲)"
             )
             planned_position = min_position_required
         else:
