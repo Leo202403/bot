@@ -106,16 +106,27 @@ class PromptBuilderV8:
             atr_opt = options["atr"]
             struct_opt = options["structure"]
             
+            # 提取变量避免f-string中的字典访问问题
+            atr_sl = atr_opt["sl_price"]
+            atr_sl_pct = atr_opt["sl_pct"]
+            atr_tp = atr_opt["tp_price"]
+            atr_rr = atr_opt["rr_ratio"]
+            
+            struct_sl = struct_opt["sl_price"]
+            struct_sl_pct = struct_opt["sl_pct"]
+            struct_tp = struct_opt["tp_price"]
+            struct_rr = struct_opt["rr_ratio"]
+            
             tpsl_section += f"""{coin}:
   Option A (ATR - Mathematical):
-    SL: ${atr_opt['sl_price']} ({atr_opt['sl_pct']}% away)
-    TP: ${atr_opt['tp_price']}
-    R:R: 1:{atr_opt['rr_ratio']}
+    SL: ${atr_sl} ({atr_sl_pct}% away)
+    TP: ${atr_tp}
+    R:R: 1:{atr_rr}
     
   Option B (Structure - Price Action):
-    SL: ${struct_opt['sl_price']} ({struct_opt['sl_pct']}% away)
-    TP: ${struct_opt['tp_price']}
-    R:R: 1:{struct_opt['rr_ratio']}
+    SL: ${struct_sl} ({struct_sl_pct}% away)
+    TP: ${struct_tp}
+    R:R: 1:{struct_rr}
 
 """
         
