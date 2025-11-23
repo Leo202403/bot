@@ -32,10 +32,10 @@ from scipy.signal import argrelextrema
 
 # 保留AI深度分析功能
 
-# 🔧 明确指定 .env 文件路径
-_env_file = Path(__file__).parent / ".env"
+# 🔧 明确指定 .env.deepseek 文件路径
+_env_file = Path(__file__).parent / ".env.deepseek"
 if not _env_file.exists():
-    raise FileNotFoundError(f"❌ 找不到 .env 文件: {_env_file}")
+    raise FileNotFoundError(f"❌ 找不到 .env.deepseek 文件: {_env_file}")
 load_dotenv(_env_file, override=True)
 
 # 🔧 V8.3.32.13: 模型显示名称（用于Bark推送）
@@ -14065,7 +14065,7 @@ def analyze_and_adjust_params():
 
         # ========== 【DEPRECATED - V8.5.2.4.42】旧Phase 4代码已移除 ==========
         # 新Phase 4系统已在quick_explore_profit_opportunities()中集成
-        # 位置：行7460-7487（qwen_多币种智能版.py）
+        # 位置：约行7460-7487（deepseek版本）
         # 新模块：phase4_validator.py
         #
         # 此处代码段（行9779-9949）已废弃，保留注释供参考
@@ -24590,7 +24590,7 @@ def ai_evaluate_partial_close(position, partial_profit, market_data, entry_conte
     "alternative": "HOLD_ALL / CLOSE_ALL / PARTIAL_50"
 }}"""
 
-        # 调用AI
+        # 调用AI（DeepSeek专用）
         model_name = os.getenv("MODEL_NAME", "deepseek")
         if model_name == "deepseek":
             response = deepseek_client.chat.completions.create(
@@ -24600,12 +24600,8 @@ def ai_evaluate_partial_close(position, partial_profit, market_data, entry_conte
                 max_tokens=300,
             )
         else:
-            response = qwen_client.chat.completions.create(
-                model="qwen-plus",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=300,
-            )
+            # DeepSeek版本不支持其他模型
+            raise ValueError(f"❌ DeepSeek版本只支持deepseek模型，当前MODEL_NAME={model_name}")
 
         ai_content = response.choices[0].message.content.strip()
 
@@ -34484,7 +34480,7 @@ def build_decision_context(current_positions=None, deterministic_exit_symbols=No
 
     """
     context = ""
-    model_name = os.getenv("MODEL_NAME", "qwen")
+    model_name = os.getenv("MODEL_NAME", "deepseek")
 
     # 🆕 V8.9.1.1: 告知AI哪些币种已通过Python确定性EXIT处理
     if deterministic_exit_symbols and len(deterministic_exit_symbols) > 0:
