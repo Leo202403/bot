@@ -3275,6 +3275,26 @@ def update_close_position(
 
             if matching_rows.empty:
                 print(f"⚠️ 未找到 {coin_name} {side} 的开仓记录")
+                
+                # 🆕 V8.8.1: 检查是否已经有已平仓记录（可能是重复平仓或被SL/TP触发）
+                closed_mask = (
+                    (df["币种"] == coin_name)
+                    & (df["方向"] == side)
+                    & (df["平仓时间"].notna())
+                )
+                recent_closed = df[closed_mask].tail(3)
+                
+                if not recent_closed.empty:
+                    print(f"   💡 发现最近的已平仓记录:")
+                    for idx, row in recent_closed.iterrows():
+                        open_t = str(row.get('开仓时间', ''))[:16]
+                        close_t = str(row.get('平仓时间', ''))[:16]
+                        reason = str(row.get('平仓理由', ''))[:50]
+                        print(f"      - {open_t} → {close_t}: {reason}")
+                    print(f"   可能原因: 1) 已被止盈/止损自动平仓; 2) 持仓来自其他程序; 3) 重复平仓")
+                else:
+                    print(f"   💡 CSV中无任何 {coin_name} {side} 记录，可能是从其他程序开的仓")
+                
                 # 释放锁
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
                 lock_file.close()
@@ -3371,25 +3391,167 @@ def update_close_position(
             continue
 
 
-def save_positions_snapshot(positions, total_value):
-    """保存当前持仓快照（包含完整交易信息：开仓时间、止盈止损、开仓理由等）"""
+def fetch_tpsl_orders_for_positions(symbol: str) -> dict:
+    """🆕 V8.8.1: 获取指定交易对的止盈止损订单
+    
+    Args:
+        symbol: 交易对符号（如 BTC/USDT:USDT）
+    
+    Returns:
+        {
+            'stop_loss': price or None,
+            'take_profit': price or None
+        }
+    """
     try:
+        import requests
+        import hmac
+        import hashlib
+        from urllib.parse import urlencode
+        
+        # 转换symbol格式
+        binance_symbol = symbol.split("/")[0] + symbol.split(":")[0].split("/")[1]
+        timestamp = int(time.time() * 1000)
+        
+        params = {
+            "symbol": binance_symbol,
+            "timestamp": timestamp,
+        }
+        
+        query_string = urlencode(sorted(params.items()))
+        signature = hmac.new(
+            exchange.secret.encode("utf-8"),
+            query_string.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        
+        url = f"https://papi.binance.com/papi/v1/um/conditional/openOrders?{query_string}&signature={signature}"
+        headers = {"X-MBX-APIKEY": exchange.apiKey}
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            orders = response.json()
+            
+            sl_price = None
+            tp_price = None
+            
+            for order in orders:
+                if order.get('reduceOnly') and order.get('symbol') == binance_symbol:
+                    strategy_type = order.get('strategyType', '')
+                    stop_price = float(order.get('stopPrice', 0))
+                    
+                    if strategy_type == 'STOP_MARKET' and stop_price > 0:
+                        sl_price = stop_price
+                    elif strategy_type == 'TAKE_PROFIT_MARKET' and stop_price > 0:
+                        tp_price = stop_price
+            
+            return {
+                'stop_loss': sl_price,
+                'take_profit': tp_price
+            }
+    except Exception as e:
+        # 静默失败，不打印错误（避免刷屏）
+        pass
+    
+    return {'stop_loss': None, 'take_profit': None}
+
+
+def save_positions_snapshot(positions, total_value):
+    """🔧 V8.8.1: 保存当前持仓快照（从多个数据源组合完整信息）
+    
+    数据源：
+    1. 交易所API（positions参数）：数量、价格、盈亏
+    2. trades_history.csv：开仓时间、开仓理由
+    3. position_contexts.json：止盈止损、盈亏比
+    4. 条件订单API：当前实际的止盈止损
+    """
+    try:
+        # 读取 trades_history.csv
+        trades_dict = {}
+        if TRADES_FILE.exists():
+            try:
+                df_trades = pd.read_csv(TRADES_FILE, encoding="utf-8")
+                df_trades.columns = df_trades.columns.str.strip()
+                open_trades = df_trades[df_trades["平仓时间"].isna()]
+                
+                for _, row in open_trades.iterrows():
+                    coin = str(row.get("币种", "")).strip()
+                    side = str(row.get("方向", "")).strip()
+                    key = f"{coin}_{side}"
+                    trades_dict[key] = row.to_dict()
+            except Exception as e:
+                print(f"  ⚠️ 读取trades_history失败: {e}")
+        
+        # 读取 position_contexts.json
+        model_name = os.getenv("MODEL_NAME", "qwen")
+        context_file = Path("trading_data") / model_name / "position_contexts.json"
+        contexts = {}
+        if context_file.exists():
+            try:
+                with open(context_file, encoding="utf-8") as f:
+                    contexts = json.load(f)
+            except Exception as e:
+                print(f"  ⚠️ 读取position_contexts失败: {e}")
+        
         records = []
         for pos in positions:
+            coin = pos["symbol"].split("/")[0]
+            side_cn = "多" if pos["side"] == "long" else "空"
+            key = f"{coin}_{side_cn}"
+            
+            # 从 trades_history 获取开仓信息
+            trade_info = trades_dict.get(key, {})
+            open_time = trade_info.get("开仓时间", "")
+            open_reason = trade_info.get("开仓理由", "")[:100] if trade_info.get("开仓理由") else ""
+            
+            # 从 position_contexts 获取止盈止损
+            context = contexts.get(coin, {})
+            target_tp = context.get("target_tp", 0) or 0
+            target_sl = context.get("target_sl", 0) or 0
+            
+            # 如果 context 中没有，尝试从条件订单获取
+            if not target_tp and not target_sl:
+                tpsl_orders = fetch_tpsl_orders_for_positions(pos["symbol"])
+                target_tp = tpsl_orders.get('take_profit') or 0
+                target_sl = tpsl_orders.get('stop_loss') or 0
+            
+            # 计算盈亏比
+            entry_price = pos["entry_price"]
+            rr = 0
+            if target_tp and target_sl and entry_price:
+                try:
+                    if pos["side"] == "long":
+                        profit_distance = abs(target_tp - entry_price)
+                        loss_distance = abs(entry_price - target_sl)
+                    else:
+                        profit_distance = abs(entry_price - target_tp)
+                        loss_distance = abs(target_sl - entry_price)
+                    
+                    if loss_distance > 0:
+                        rr = profit_distance / loss_distance
+                except Exception:
+                    rr = 0
+            
+            # 计算保证金
+            notional = abs(pos.get("notional", 0))
+            leverage = pos.get("leverage", 1)
+            margin = notional / leverage if leverage > 0 else 0
+            
             records.append({
                 "更新时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "开仓时间": pos.get("open_time", ""),
-                "币种": pos["symbol"].split("/")[0],
-                "方向": "多" if pos["side"] == "long" else "空",
+                "开仓时间": open_time,
+                "币种": coin,
+                "方向": side_cn,
                 "数量": pos["size"],
                 "开仓价": pos["entry_price"],
                 "当前盈亏(U)": pos["unrealized_pnl"],
-                "杠杆": pos["leverage"],
-                "保证金(U)": pos.get("margin", 0),
-                "止损": pos.get("stop_loss", 0),
-                "止盈": pos.get("take_profit", 0),
-                "盈亏比": pos.get("risk_reward", 0),
-                "开仓理由": pos.get("open_reason", ""),
+                "杠杆": leverage,
+                "保证金(U)": round(margin, 2),
+                "止损": target_sl,
+                "止盈": target_tp,
+                "盈亏比": round(rr, 2) if rr else 0,
+                "开仓理由": open_reason,
             })
 
         if records:
@@ -3399,25 +3561,16 @@ def save_positions_snapshot(positions, total_value):
             # 无持仓时清空文件
             pd.DataFrame(
                 columns=[
-                    "更新时间",
-                    "开仓时间",
-                    "币种",
-                    "方向",
-                    "数量",
-                    "开仓价",
-                    "当前盈亏(U)",
-                    "杠杆",
-                    "保证金(U)",
-                    "止损",
-                    "止盈",
-                    "盈亏比",
-                    "开仓理由",
+                    "更新时间", "开仓时间", "币种", "方向", "数量", "开仓价",
+                    "当前盈亏(U)", "杠杆", "保证金(U)", "止损", "止盈", "盈亏比", "开仓理由",
                 ]
             ).to_csv(POSITIONS_FILE, index=False, encoding="utf-8")
 
         print(f"✓ 持仓快照已更新: {POSITIONS_FILE}")
     except Exception as e:
         print(f"✗ 保存持仓快照失败: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def clear_symbol_orders(symbol, verbose=True):
@@ -21027,7 +21180,7 @@ def build_tpsl_options_for_symbols(
 
         symbol = data.get("symbol")
         price = data.get("price", 0)
-        
+
         # ATR存储在嵌套的atr字典中
         atr_data = data.get("atr", {})
         if isinstance(atr_data, dict):
@@ -25644,11 +25797,9 @@ def _execute_single_close_action(action, current_positions):
             print(f"  🔧 为剩余仓位重设保护: {remaining_amount:.3f}个")
 
             try:
-                # 从position_contexts读取原始止盈止损
+                # 方案1: 从 position_contexts 读取原始止盈止损
                 model_name = os.getenv("MODEL_NAME", "qwen")
-                context_file = (
-                    Path("trading_data") / model_name / "position_contexts.json"
-                )
+                context_file = Path("trading_data") / model_name / "position_contexts.json"
                 original_sl = None
                 original_tp = None
 
@@ -25658,6 +25809,13 @@ def _execute_single_close_action(action, current_positions):
                         if coin_name in contexts:
                             original_sl = contexts[coin_name].get("target_sl")
                             original_tp = contexts[coin_name].get("target_tp")
+                
+                # 🆕 V8.8.1: 方案2: 如果 context 中没有，从条件订单获取
+                if not original_sl and not original_tp:
+                    print(f"   💡 从条件订单获取止盈止损...")
+                    tpsl_orders = fetch_tpsl_orders_for_positions(symbol)
+                    original_sl = tpsl_orders.get('stop_loss')
+                    original_tp = tpsl_orders.get('take_profit')
 
                 # 如果有原始止盈止损，重新设置
                 if original_sl or original_tp:
@@ -25672,7 +25830,10 @@ def _execute_single_close_action(action, current_positions):
                     if not (sl_ok or tp_ok):
                         print("  ⚠️ 剩余仓位保护设置失败，请手动检查")
                 else:
-                    print("  ⚠️ 未找到原始止盈止损，剩余仓位无保护！")
+                    print("  ⚠️ 未找到原始止盈止损")
+                    print(f"     1) position_contexts.json 中无 {coin_name} 记录")
+                    print(f"     2) 交易所无挂单")
+                    print(f"     💡 建议: 手动为 {coin_name} {remaining_amount:.3f}个 设置止盈止损")
             except Exception as e:
                 print(f"  ⚠️ 剩余仓位保护设置异常: {e}")
 
