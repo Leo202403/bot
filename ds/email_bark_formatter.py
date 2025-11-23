@@ -199,7 +199,6 @@ def generate_params_comparison_table(  # noqa: C901
     if learned_features is None:
         learned_features = {}
 
-
     # 直接获取原始数值进行判断，而不是使用safe_get转换后的字符串
     scalping_density_val = learned_features.get("scalping_avg_density")
     swing_density_val = learned_features.get("swing_avg_density")
@@ -345,10 +344,10 @@ def generate_profit_comparison_table(phase_data: dict[str, Any]) -> str:
     # 注意：这里需要实际的总利润数据，如果没有，用占位符
     p1_scalping_total = p1.get("scalping_total_profit", 0)
     p1_swing_total = p1.get("swing_total_profit", 0)
-    
+
     p2_scalping_total = p2.get("scalping_total_profit", 0)
     p2_swing_total = p2.get("swing_total_profit", 0)
-    
+
     p3_scalping_total = p3.get("scalping_total_profit", 0)
     p3_swing_total = p3.get("swing_total_profit", 0)
 

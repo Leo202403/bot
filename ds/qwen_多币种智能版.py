@@ -18661,21 +18661,28 @@ def calculate_realtime_signal_score(market_data, learning_config=None):
         signal_type = signal_classification.get('signal_type', 'swing')
         
         # 2. 获取权重配置（默认权重）
+        # 🆕 V8.7.3: 权重重构（交易员建议：从"确认型"转向"期望型"）
+        # 核心改变：大幅降低趋势对齐权重，引入空间因子、位置因子
         DEFAULT_SCALPING_WEIGHTS = {
-            'momentum': 20,
-            'volume': 35,
-            'breakout': 25,
-            'pattern': 12,  # Pin Bar / 吞没
-            'trend_align': 10
+            'momentum': 15,           # 降低（动能是滞后的）
+            'volume': 20,             # 降低
+            'breakout': 15,           # 降低（震荡市70%是假突破）
+            'pattern': 10,            # Pin Bar / 吞没
+            'trend_align': 5,         # 大幅降低（10→5）
+            'space_factor': 30,       # 🆕 核心：空间因子
+            'position_factor': 20,    # 🆕 位置因子（支撑/阻力）
         }
         
         DEFAULT_SWING_WEIGHTS = {
-            'momentum': 20,
-            'volume': 35,
-            'breakout': 25,
-            'trend_align': 35,
-            'ema_divergence': 15,
-            'trend_4h_strength': 25
+            'momentum': 10,           # 降低
+            'volume': 15,             # 降低
+            'breakout': 15,           # 降低
+            'trend_align': 15,        # 大幅降低（35→15）
+            'ema_divergence': 10,     # 降低
+            'trend_4h_strength': 10,  # 降低
+            'space_factor': 30,       # 🆕 核心：空间因子
+            'position_factor': 25,    # 🆕 位置因子
+            'freshness_factor': 15,   # 🆕 新鲜度因子（趋势年龄）
         }
         
         # 从learning_config读取权重（如果有）
@@ -18763,7 +18770,81 @@ def calculate_realtime_signal_score(market_data, learning_config=None):
             elif "多头" in lt_trend or "空头" in lt_trend:
                 score += weights.get('trend_4h_strength', 25) * 0.6
         
-        # 【减分项：RSI极端】
+        # 🆕 V8.7.3: 空间因子（最重要！）- 距离下一个SR的ATR倍数
+        sr_data = market_data.get("support_resistance", {})
+        current_price = market_data.get("current_price", 0)
+        atr = market_data.get("atr", {}).get("atr_14", 0)
+        
+        if current_price > 0 and atr > 0:
+            # 确定方向（通过趋势或信号类型）
+            trend_15m = market_data.get("trend_15m", "")
+            is_long = "多头" in trend_15m
+            
+            # 计算空间
+            if is_long:
+                resistance = sr_data.get("nearest_resistance", {}).get("price", 0)
+                if resistance > current_price:
+                    space_atr = (resistance - current_price) / atr
+                else:
+                    space_atr = 999  # 突破新高，无阻力
+            else:
+                support = sr_data.get("nearest_support", {}).get("price", 0)
+                if support > 0 and support < current_price:
+                    space_atr = (current_price - support) / atr
+                else:
+                    space_atr = 999  # 突破新低，无支撑
+            
+            # 评分（关键差异点）
+            if space_atr > 6:
+                score += weights.get('space_factor', 30)  # 空间巨大
+            elif space_atr > 4:
+                score += weights.get('space_factor', 30) * 0.67  # 空间良好
+            elif space_atr > 2:
+                score += weights.get('space_factor', 30) * 0.33  # 空间一般
+            else:
+                score -= 50  # 空间被堵死，极大惩罚！
+        
+        # 🆕 V8.7.3: 位置因子 - 买在支撑，卖在阻力
+        position_status = sr_data.get("position_status", "neutral")
+        if signal_type == 'swing':
+            if position_status == "at_support":
+                score += weights.get('position_factor', 25)  # 完美位置
+            elif position_status == "neutral":
+                score += weights.get('position_factor', 25) * 0.4  # 中性
+            elif position_status == "at_resistance":
+                score -= 100  # 绝对禁止在阻力位做多！
+        else:  # scalping
+            if position_status in ["at_support", "at_resistance"]:
+                score += weights.get('position_factor', 20)  # scalping喜欢关键位
+        
+        # 🆕 V8.7.3: 新鲜度因子 - 趋势年龄（swing专用）
+        if signal_type == 'swing':
+            trend_age = market_data.get("mkt_struct_age_candles", 0)
+            if trend_age <= 10:
+                score += weights.get('freshness_factor', 15)  # 趋势刚启动
+            elif trend_age <= 30:
+                score += weights.get('freshness_factor', 15) * 0.6  # 趋势还新鲜
+            elif trend_age > 50:
+                score -= 10  # 趋势太老
+            elif trend_age > 80:
+                score -= 20  # 随时可能反转
+        
+        # 🆕 V8.7.3: 乖离率惩罚 - 防止追高
+        ema20 = market_data.get("moving_averages", {}).get("ema20", 0)
+        if ema20 > 0 and current_price > 0 and atr > 0:
+            extension = abs(current_price - ema20) / atr
+            if extension > 2.5:
+                score -= 20  # 严重乖离
+            elif extension > 2.0:
+                score -= 10  # 中度乖离
+        
+        # 🆕 V8.7.3: 陷阱加成 - 假突破反向突破（猎杀止损）
+        ytc_signal = market_data.get("ytc_signal", {})
+        ytc_type = ytc_signal.get("type", "")
+        if ytc_type == "BOF":  # Break and Failed (假突破)
+            score += 20  # 大幅加分，这是一波流行情
+        
+        # 【原有减分项：RSI极端】
         rsi_data = market_data.get("rsi", {})
         rsi = rsi_data.get("rsi_14", 50)
         if rsi > 80 or rsi < 20:
